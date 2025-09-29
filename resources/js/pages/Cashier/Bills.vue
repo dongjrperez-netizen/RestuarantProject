@@ -6,8 +6,7 @@ import Badge from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Receipt, Eye, Printer, CreditCard, Search, Filter, Banknote, Smartphone, Wallet } from 'lucide-vue-next';
+import { Receipt, Printer, CreditCard, Search, Filter } from 'lucide-vue-next';
 import { ref, computed } from 'vue';
 
 // Props
@@ -20,8 +19,7 @@ defineProps<{
 const searchTerm = ref('');
 const statusFilter = ref('all');
 
-// Payment modal state
-const isPaymentModalOpen = ref(false);
+// Payment handling
 // Define a type for the order object
 type Order = {
     order_id: number;
@@ -37,8 +35,10 @@ type Order = {
     // add other fields as needed
 };
 
-const selectedOrder = ref<Order | null>(null);
-const selectedPaymentMethod = ref('');
+// Redirect to ViewBills for payment processing
+const redirectToPayment = (order: any) => {
+    router.visit(`/cashier/bills/${order.order_id}`);
+};
 
 
 // Status color mapping
@@ -77,119 +77,6 @@ const getPrintBillUrl = (order: any) => {
     return `/cashier/bills/${order.order_id}/print`;
 };
 
-// Payment methods
-const paymentMethods = [
-    {
-        id: 'cash',
-        name: 'Cash',
-        icon: Banknote,
-        description: 'Pay with cash',
-        color: 'text-green-600',
-        bgColor: 'hover:bg-green-50'
-    },
-    {
-        id: 'gcash',
-        name: 'GCash',
-        icon: Smartphone,
-        description: 'Digital wallet payment',
-        color: 'text-blue-600',
-        bgColor: 'hover:bg-blue-50'
-    },
-    {
-        id: 'paypal',
-        name: 'PayPal',
-        icon: Wallet,
-        description: 'Online payment',
-        color: 'text-indigo-600',
-        bgColor: 'hover:bg-indigo-50'
-    },
-    {
-        id: 'debit_card',
-        name: 'Debit Card',
-        icon: CreditCard,
-        description: 'Card payment',
-        color: 'text-purple-600',
-        bgColor: 'hover:bg-purple-50'
-    }
-];
-
-// Payment functions
-const openPaymentModal = (order: any) => {
-    selectedOrder.value = order;
-    selectedPaymentMethod.value = '';
-    isPaymentModalOpen.value = true;
-};
-
-const selectPaymentMethod = (methodId: string) => {
-    selectedPaymentMethod.value = methodId;
-};
-
-const processPayment = async () => {
-    if (!selectedPaymentMethod.value) {
-        alert('Please select a payment method');
-        return;
-    }
-
-    if (!selectedOrder.value) {
-        alert('Order information not available');
-        return;
-    }
-
-    const paymentData = {
-        order_id: selectedOrder.value.order_id,
-        amount: selectedOrder.value.total_amount - (selectedOrder.value.discount_amount || 0),
-        customer_name: selectedOrder.value.customer_name || 'Walk-in Customer',
-        customer_email: selectedOrder.value.customer_email || 'customer@restaurant.com',
-        method: selectedPaymentMethod.value === 'debit_card' ? 'card' : selectedPaymentMethod.value,
-    };
-
-    console.log('Processing payment:', paymentData);
-
-    // Handle different payment methods
-    if (selectedPaymentMethod.value === 'gcash') {
-        try {
-            // Send request to create PayMongo checkout session
-            const response = await fetch('/payment/checkout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                },
-                body: JSON.stringify(paymentData),
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.checkout_url) {
-                // Redirect to PayMongo checkout page
-                window.location.href = result.checkout_url;
-            } else {
-                console.error('Payment error:', result);
-                let errorMessage = result.error || 'Unknown error';
-
-                // If it's an amount mismatch, show detailed information
-                if (result.error === 'Amount mismatch' && result.details) {
-                    errorMessage += `\nReceived: ₱${result.details.received_amount}`;
-                    errorMessage += `\nExpected: ₱${result.details.expected_amount}`;
-                    errorMessage += `\nOrder Total: ₱${result.details.order_total}`;
-                    errorMessage += `\nDiscount: ₱${result.details.discount_amount}`;
-                }
-
-                alert('Payment processing failed: ' + errorMessage);
-            }
-        } catch (error) {
-            console.error('Payment request failed:', error);
-            alert('Payment processing failed. Please try again.');
-        }
-    } else if (selectedPaymentMethod.value === 'cash') {
-        // Handle cash payment - redirect to detailed payment page or process directly
-        window.location.href = `/cashier/bills/${selectedOrder.value.order_id}`;
-    } else {
-        // For PayPal and other methods, we can implement later
-        isPaymentModalOpen.value = false;
-        alert(`${paymentMethods.find(m => m.id === selectedPaymentMethod.value)?.name} payment will be implemented soon!`);
-    }
-};
 </script>
 
 <template>
@@ -288,14 +175,6 @@ const processPayment = async () => {
                                     </TableCell>
                                     <TableCell class="text-right">
                                         <div class="flex items-center justify-end gap-1">
-                                            <!-- View Bill Button -->
-                                            <Button variant="outline" size="sm" asChild>
-                                                <Link :href="`/cashier/bills/${order.order_id}`">
-                                                    <Eye class="w-4 h-4 mr-1" />
-                                                    View
-                                                </Link>
-                                            </Button>
-
                                             <!-- Print Bill Button -->
                                             <Button variant="outline" size="sm" asChild>
                                                 <Link :href="getPrintBillUrl(order)" target="_blank">
@@ -304,12 +183,11 @@ const processPayment = async () => {
                                                 </Link>
                                             </Button>
 
-
                                             <!-- Process Payment Button (only for ready/completed orders) -->
                                             <Button
                                                 v-if="order.status !== 'paid' && order.status !== 'pending'"
                                                 size="sm"
-                                                @click="openPaymentModal(order)"
+                                                @click="redirectToPayment(order)"
                                             >
                                                 <CreditCard class="w-4 h-4 mr-1" />
                                                 Pay
@@ -359,84 +237,5 @@ const processPayment = async () => {
 
         </div>
 
-        <!-- Payment Method Modal -->
-        <Dialog v-model:open="isPaymentModalOpen">
-            <DialogContent class="max-w-md">
-                <DialogHeader>
-                    <DialogTitle class="flex items-center gap-2">
-                        <CreditCard class="w-5 h-5" />
-                        Select Payment Method
-                    </DialogTitle>
-                    <DialogDescription v-if="selectedOrder">
-                        Processing payment for {{ selectedOrder.order_number }}
-                        <br />
-                        <span class="font-semibold">{{ formatCurrency(selectedOrder.total_amount) }}</span>
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div class="space-y-4 py-4">
-                    <!-- Payment Methods Grid -->
-                    <div class="grid grid-cols-2 gap-3">
-                        <button
-                            v-for="method in paymentMethods"
-                            :key="method.id"
-                            @click="selectPaymentMethod(method.id)"
-                            :class="[
-                                'p-4 rounded-lg border-2 transition-all duration-200 flex flex-col items-center gap-2 text-center',
-                                selectedPaymentMethod === method.id
-                                    ? 'border-primary bg-primary/5 shadow-md'
-                                    : 'border-border hover:border-primary/50',
-                                method.bgColor
-                            ]"
-                        >
-                            <component
-                                :is="method.icon"
-                                :class="[
-                                    'w-8 h-8',
-                                    selectedPaymentMethod === method.id ? 'text-primary' : method.color
-                                ]"
-                            />
-                            <div>
-                                <div :class="[
-                                    'font-medium text-sm',
-                                    selectedPaymentMethod === method.id ? 'text-primary' : 'text-foreground'
-                                ]">
-                                    {{ method.name }}
-                                </div>
-                                <div class="text-xs text-muted-foreground">
-                                    {{ method.description }}
-                                </div>
-                            </div>
-                        </button>
-                    </div>
-
-                    <!-- Selected Payment Method Indicator -->
-                    <div v-if="selectedPaymentMethod" class="text-center p-3 bg-muted rounded-lg">
-                        <div class="text-sm text-muted-foreground">Selected payment method:</div>
-                        <div class="font-semibold text-primary">
-                            {{ paymentMethods.find(m => m.id === selectedPaymentMethod)?.name }}
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="flex gap-3 pt-4">
-                        <Button
-                            variant="outline"
-                            class="flex-1"
-                            @click="isPaymentModalOpen = false"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            class="flex-1"
-                            @click="processPayment"
-                            :disabled="!selectedPaymentMethod"
-                        >
-                            Process Payment
-                        </Button>
-                    </div>
-                </div>
-            </DialogContent>
-        </Dialog>
     </CashierLayout>
 </template>

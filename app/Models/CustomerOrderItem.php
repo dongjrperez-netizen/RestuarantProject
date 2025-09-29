@@ -19,6 +19,7 @@ class CustomerOrderItem extends Model
         'order_id',
         'dish_id',
         'quantity',
+        'served_quantity',
         'unit_price',
         'total_price',
         'special_instructions',
@@ -29,6 +30,7 @@ class CustomerOrderItem extends Model
 
     protected $casts = [
         'quantity' => 'integer',
+        'served_quantity' => 'integer',
         'unit_price' => 'decimal:2',
         'total_price' => 'decimal:2',
         'inventory_deducted' => 'boolean',
@@ -38,6 +40,7 @@ class CustomerOrderItem extends Model
     protected $attributes = [
         'status' => 'pending',
         'quantity' => 1,
+        'served_quantity' => 0,
         'inventory_deducted' => false,
     ];
 

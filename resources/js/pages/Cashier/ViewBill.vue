@@ -30,7 +30,11 @@ const tempDiscount = ref<null | { percentage: number; amount: number; reason: st
 
 // Payment modal state
 const isPaymentModalOpen = ref(false);
+const isCashPaymentModalOpen = ref(false);
 const selectedPaymentMethod = ref('');
+const amountReceived = ref('');
+const paymentNotes = ref('');
+const processing = ref(false);
 
 // Status color mapping
 const getStatusColor = (status: string) => {
@@ -221,18 +225,10 @@ const paymentMethods = [
         description: 'Online payment',
         color: 'text-indigo-600',
         bgColor: 'hover:bg-indigo-50'
-    },
-    {
-        id: 'debit_card',
-        name: 'Debit Card',
-        icon: CreditCard,
-        description: 'Card payment',
-        color: 'text-purple-600',
-        bgColor: 'hover:bg-purple-50'
     }
 ];
 
-// Payment functions
+// Payment method selection
 const openPaymentModal = () => {
     selectedPaymentMethod.value = '';
     isPaymentModalOpen.value = true;
@@ -242,12 +238,86 @@ const selectPaymentMethod = (methodId: string) => {
     selectedPaymentMethod.value = methodId;
 };
 
+// Open cash payment modal
+const openCashPaymentModal = () => {
+    amountReceived.value = '';
+    paymentNotes.value = '';
+    processing.value = false;
+    isPaymentModalOpen.value = false;
+    isCashPaymentModalOpen.value = true;
+};
+
+// Quick amount suggestions
+const getQuickAmounts = () => {
+    const amounts = [];
+    const final = getCurrentTotal();
+
+    // Add exact amount
+    amounts.push(final);
+
+    // Add convenient amounts above the final amount
+    const roundedUp = Math.ceil(final / 100) * 100;
+    if (roundedUp > final) amounts.push(roundedUp);
+
+    const nextHundred = Math.ceil(final / 100) * 100 + 100;
+    if (nextHundred !== roundedUp) amounts.push(nextHundred);
+
+    const nextFiveHundred = Math.ceil(final / 500) * 500;
+    if (nextFiveHundred > nextHundred && nextFiveHundred - final <= 1000) {
+        amounts.push(nextFiveHundred);
+    }
+
+    return [...new Set(amounts)].sort((a, b) => a - b);
+};
+
+const setQuickAmount = (amount: number) => {
+    amountReceived.value = amount.toFixed(2);
+};
+
+const getChangeAmount = () => {
+    const received = parseFloat(amountReceived.value || '0');
+    const due = getCurrentTotal();
+    return received - due;
+};
+
+const isPaymentValid = () => {
+    const received = parseFloat(amountReceived.value || '0');
+    const due = getCurrentTotal();
+    return received >= due;
+};
+
+// Process payment based on selected method
 const processPayment = async () => {
     if (!selectedPaymentMethod.value) {
         alert('Please select a payment method');
         return;
     }
 
+    if (selectedPaymentMethod.value === 'cash') {
+        // Open cash payment modal for amount input
+        openCashPaymentModal();
+        return;
+    }
+
+    if (selectedPaymentMethod.value === 'gcash') {
+        // Process GCash payment via PayMongo
+        await processGCashPayment();
+        return;
+    }
+
+    if (selectedPaymentMethod.value === 'paypal') {
+        // Process PayPal payment
+        await processPayPalPayment();
+        return;
+    }
+
+    // For other methods, show not implemented message
+    isPaymentModalOpen.value = false;
+    alert(`${paymentMethods.find(m => m.id === selectedPaymentMethod.value)?.name} payment will be implemented soon!`);
+};
+
+// Process GCash payment via PayMongo
+const processGCashPayment = async () => {
     if (!props.order) {
         alert('Order information not available');
         return;
@@ -259,114 +329,200 @@ const processPayment = async () => {
         order_id: props.order.order_id,
         amount: currentTotal,
         customer_name: props.order.customer_name || 'Walk-in Customer',
-        customer_email: props.order.customer_email || 'customer@restaurant.com', // You might want to collect this from the user
-        method: selectedPaymentMethod.value === 'debit_card' ? 'card' : selectedPaymentMethod.value,
+        customer_email: props.order.customer_email || 'customer@restaurant.com',
+        method: 'gcash',
     };
 
-    console.log('Processing payment:', paymentData);
-    console.log('Order details:', {
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        if (!csrfToken) {
+            console.error('CSRF token not found');
+            alert('Security token not found. Please refresh the page and try again.');
+            return;
+        }
+
+        console.log('Sending GCash payment data:', paymentData);
+
+        const response = await fetch('/payment/checkout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify(paymentData),
+        });
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const textResponse = await response.text();
+            console.error('Non-JSON response:', textResponse);
+            alert('Server error: Expected JSON response but got HTML. Please check server logs.');
+            return;
+        }
+
+        const result = await response.json();
+        console.log('GCash payment response:', result);
+
+        if (response.ok && result.checkout_url) {
+            // Redirect to PayMongo checkout page
+            window.location.href = result.checkout_url;
+        } else {
+            console.error('GCash payment error:', result);
+            let errorMessage = result.error || 'Unknown error';
+
+            if (result.error === 'Amount mismatch' && result.details) {
+                errorMessage += `\\nReceived: ₱${result.details.received_amount}`;
+                errorMessage += `\\nExpected: ₱${result.details.expected_amount}`;
+                errorMessage += `\\nOrder Total: ₱${result.details.order_total}`;
+                errorMessage += `\\nDiscount: ₱${result.details.discount_amount}`;
+            }
+
+            alert('Payment processing failed: ' + errorMessage);
+        }
+    } catch (error) {
+        console.error('GCash payment request failed:', error);
+        alert('Payment processing failed. Please try again.');
+    }
+};
+
+// Process PayPal payment
+const processPayPalPayment = async () => {
+    if (!props.order) {
+        alert('Order information not available');
+        return;
+    }
+
+    const currentTotal = getCurrentTotal();
+
+    const paymentData = {
         order_id: props.order.order_id,
-        total_amount: props.order.total_amount,
-        discount_amount: props.order.discount_amount,
-        calculated_total: currentTotal,
-        temp_discount: tempDiscount.value
-    });
+        amount: currentTotal,
+        payment_method: 'paypal',
+        customer_name: props.order.customer_name || 'Walk-in Customer',
+        customer_email: props.order.customer_email || 'customer@restaurant.com',
+        discount_amount: props.order.discount_amount || null,
+        discount_reason: props.order.discount_reason || null,
+    };
 
-    // Handle different payment methods
-    if (selectedPaymentMethod.value === 'gcash') {
-        try {
-            // Get CSRF token
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-            if (!csrfToken) {
-                console.error('CSRF token not found');
-                alert('Security token not found. Please refresh the page and try again.');
-                return;
+        if (!csrfToken) {
+            console.error('CSRF token not found');
+            alert('Security token not found. Please refresh the page and try again.');
+            return;
+        }
+
+        console.log('Sending PayPal payment data:', paymentData);
+        console.log('CSRF Token:', csrfToken);
+
+        const response = await fetch('/cashier/payment/paypal', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify(paymentData),
+        });
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const textResponse = await response.text();
+            console.error('Non-JSON response:', textResponse);
+            alert('Server error: Expected JSON response but got HTML. Please check server logs.');
+            return;
+        }
+
+        const result = await response.json();
+        console.log('PayPal payment response:', result);
+
+        if (response.ok && result.approval_url) {
+            // Redirect to PayPal approval page
+            window.location.href = result.approval_url;
+        } else {
+            console.error('PayPal payment error:', result);
+            let errorMessage = result.error || 'Unknown error';
+
+            if (result.error === 'Amount mismatch' && result.details) {
+                errorMessage += `\\nReceived: ₱${result.details.received_amount}`;
+                errorMessage += `\\nExpected: ₱${result.details.expected_amount}`;
+                errorMessage += `\\nOrder Total: ₱${result.details.order_total}`;
+                errorMessage += `\\nDiscount: ₱${result.details.discount_amount}`;
             }
 
-            console.log('Sending payment data:', paymentData);
-            console.log('CSRF token:', csrfToken.substring(0, 10) + '...');
+            alert('PayPal payment processing failed: ' + errorMessage);
+        }
+    } catch (error) {
+        console.error('PayPal payment request failed:', error);
+        alert('PayPal payment processing failed. Please try again.');
+    }
+};
 
-            // Send request to create PayMongo checkout session
-            const response = await fetch('/payment/checkout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
-                    'Accept': 'application/json',
-                },
-                body: JSON.stringify(paymentData),
-            });
+// Process cash payment
+const processCashPayment = async () => {
+    if (!props.order || !isPaymentValid()) {
+        return;
+    }
 
-            console.log('Response status:', response.status);
-            console.log('Response headers:', response.headers);
+    processing.value = true;
 
-            // Check if response is JSON
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                const textResponse = await response.text();
-                console.error('Non-JSON response:', textResponse);
-                alert('Server error: Expected JSON response but got HTML. Please check server logs.');
-                return;
-            }
+    try {
+        const paymentData = {
+            payment_method: 'cash',
+            amount_paid: parseFloat(amountReceived.value),
+            discount_amount: props.order.discount_amount || null,
+            discount_reason: props.order.discount_reason || null,
+            notes: paymentNotes.value || null
+        };
 
+        console.log('Processing cash payment:', paymentData);
+
+        const response = await fetch(`/cashier/payment/${props.order.order_id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            },
+            body: JSON.stringify(paymentData),
+        });
+
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+
+        if (response.ok) {
             const result = await response.json();
-            console.log('Payment response:', result);
+            console.log('Payment successful:', result);
 
-            if (response.ok && result.checkout_url) {
-                // Redirect to PayMongo checkout page
-                window.location.href = result.checkout_url;
-            } else {
-                console.error('Payment error:', result);
-                let errorMessage = result.error || 'Unknown error';
+            isCashPaymentModalOpen.value = false;
 
-                // If it's an amount mismatch, show detailed information
-                if (result.error === 'Amount mismatch' && result.details) {
-                    errorMessage += `\nReceived: ₱${result.details.received_amount}`;
-                    errorMessage += `\nExpected: ₱${result.details.expected_amount}`;
-                    errorMessage += `\nOrder Total: ₱${result.details.order_total}`;
-                    errorMessage += `\nDiscount: ₱${result.details.discount_amount}`;
-                }
+            // Redirect to successful payments page
+            window.location.href = '/cashier/successful-payments';
+        } else {
+            console.error('Response not ok. Status:', response.status);
+            const responseText = await response.text();
+            console.error('Raw response:', responseText);
 
-                alert('Payment processing failed: ' + errorMessage);
+            let errorMessage = 'Unknown error';
+            try {
+                const errorData = JSON.parse(responseText);
+                console.error('Parsed error data:', errorData);
+                errorMessage = errorData.message || errorData.error || 'Unknown error';
+            } catch (e) {
+                console.error('Failed to parse error response as JSON');
+                errorMessage = responseText || 'Server error';
             }
-        } catch (error) {
-            console.error('Payment request failed:', error);
-            alert('Payment processing failed. Please try again.');
-        }
-    } else if (selectedPaymentMethod.value === 'cash') {
-        // Handle cash payment - update order status directly
-        try {
-            const response = await fetch(`/cashier/payment/${props.order.order_id}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                },
-                body: JSON.stringify({
-                    payment_method: 'cash',
-                    amount_paid: getCurrentTotal(),
-                    discount_amount: tempDiscount.value?.amount || 0,
-                    discount_reason: tempDiscount.value?.reason || '',
-                }),
-            });
 
-            if (response.ok) {
-                isPaymentModalOpen.value = false;
-                alert('Cash payment processed successfully!');
-                // Refresh the page to show updated order status
-                window.location.reload();
-            } else {
-                alert('Failed to process cash payment');
-            }
-        } catch (error) {
-            console.error('Cash payment error:', error);
-            alert('Payment processing failed. Please try again.');
+            alert('Failed to process payment: ' + errorMessage);
         }
-    } else {
-        // For PayPal and other methods, we can implement later
-        isPaymentModalOpen.value = false;
-        alert(`${paymentMethods.find(m => m.id === selectedPaymentMethod.value)?.name} payment will be implemented soon!`);
+    } catch (error) {
+        console.error('Payment processing error:', error);
+        alert('Payment processing failed. Please try again.');
+    } finally {
+        processing.value = false;
     }
 };
 
@@ -715,7 +871,7 @@ const getCurrentTotal = () => {
             </div>
         </div>
 
-        <!-- Payment Method Modal -->
+        <!-- Payment Method Selection Modal -->
         <Dialog v-model:open="isPaymentModalOpen">
             <DialogContent class="max-w-md">
                 <DialogHeader>
@@ -724,58 +880,60 @@ const getCurrentTotal = () => {
                         Select Payment Method
                     </DialogTitle>
                     <DialogDescription v-if="order">
-                        Processing payment for {{ order.order_number }}
-                        <br />
-                        <span class="font-semibold">{{ formatCurrency(getCurrentTotal()) }}</span>
+                        Choose payment method for {{ order.order_number }}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div class="space-y-4 py-4">
-                    <!-- Payment Methods Grid -->
-                    <div class="grid grid-cols-2 gap-3">
-                        <button
-                            v-for="method in paymentMethods"
-                            :key="method.id"
-                            @click="selectPaymentMethod(method.id)"
-                            :class="[
-                                'p-4 rounded-lg border-2 transition-all duration-200 flex flex-col items-center gap-2 text-center',
-                                selectedPaymentMethod === method.id
-                                    ? 'border-primary bg-primary/5 shadow-md'
-                                    : 'border-border hover:border-primary/50',
-                                method.bgColor
-                            ]"
-                        >
-                            <component
-                                :is="method.icon"
-                                :class="[
-                                    'w-8 h-8',
-                                    selectedPaymentMethod === method.id ? 'text-primary' : method.color
-                                ]"
-                            />
-                            <div>
-                                <div :class="[
-                                    'font-medium text-sm',
-                                    selectedPaymentMethod === method.id ? 'text-primary' : 'text-foreground'
-                                ]">
-                                    {{ method.name }}
-                                </div>
-                                <div class="text-xs text-muted-foreground">
-                                    {{ method.description }}
-                                </div>
-                            </div>
-                        </button>
+                    <!-- Order Summary -->
+                    <div class="bg-muted p-4 rounded-lg space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span>Order Total:</span>
+                            <span>{{ formatCurrency(order?.total_amount || 0) }}</span>
+                        </div>
+                        <div v-if="order?.discount_amount" class="flex justify-between text-sm text-red-600">
+                            <span>Discount:</span>
+                            <span>-{{ formatCurrency(order.discount_amount) }}</span>
+                        </div>
+                        <Separator />
+                        <div class="flex justify-between font-bold text-lg">
+                            <span>Amount Due:</span>
+                            <span class="text-blue-600">{{ formatCurrency(getCurrentTotal()) }}</span>
+                        </div>
                     </div>
 
-                    <!-- Selected Payment Method Indicator -->
-                    <div v-if="selectedPaymentMethod" class="text-center p-3 bg-muted rounded-lg">
-                        <div class="text-sm text-muted-foreground">Selected payment method:</div>
-                        <div class="font-semibold text-primary">
-                            {{ paymentMethods.find(m => m.id === selectedPaymentMethod)?.name }}
+                    <!-- Payment Methods -->
+                    <div class="space-y-3">
+                        <Label class="text-base font-medium">Payment Methods</Label>
+                        <div class="grid gap-3">
+                            <div
+                                v-for="method in paymentMethods"
+                                :key="method.id"
+                                @click="selectPaymentMethod(method.id)"
+                                :class="[
+                                    'p-4 border rounded-lg cursor-pointer transition-all',
+                                    selectedPaymentMethod === method.id
+                                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                        : 'border-border hover:border-primary/50',
+                                    method.bgColor
+                                ]"
+                            >
+                                <div class="flex items-center gap-3">
+                                    <component :is="method.icon" :class="['w-6 h-6', method.color]" />
+                                    <div class="flex-1">
+                                        <h3 class="font-medium">{{ method.name }}</h3>
+                                        <p class="text-sm text-muted-foreground">{{ method.description }}</p>
+                                    </div>
+                                    <div v-if="selectedPaymentMethod === method.id" class="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                                        <div class="w-2 h-2 bg-white rounded-full"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Action Buttons -->
-                    <div class="flex gap-3 pt-4">
+                    <div class="flex gap-3">
                         <Button
                             variant="outline"
                             class="flex-1"
@@ -788,7 +946,131 @@ const getCurrentTotal = () => {
                             @click="processPayment"
                             :disabled="!selectedPaymentMethod"
                         >
-                            Process Payment
+                            Continue
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        <!-- Cash Payment Modal -->
+        <Dialog v-model:open="isCashPaymentModalOpen">
+            <DialogContent class="max-w-md">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2">
+                        <Banknote class="w-5 h-5" />
+                        Cash Payment
+                    </DialogTitle>
+                    <DialogDescription v-if="order">
+                        Processing cash payment for {{ order.order_number }}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div class="space-y-3 py-4">
+                    <!-- Order Summary -->
+                    <div class="bg-muted p-2 rounded-lg space-y-1">
+                        <div class="flex justify-between text-sm">
+                            <span>Order Total:</span>
+                            <span>{{ formatCurrency(order?.total_amount || 0) }}</span>
+                        </div>
+                        <div v-if="order?.discount_amount" class="flex justify-between text-sm text-red-600">
+                            <span>Discount:</span>
+                            <span>-{{ formatCurrency(order.discount_amount) }}</span>
+                        </div>
+                        <Separator />
+                        <div class="flex justify-between font-bold">
+                            <span>Amount Due:</span>
+                            <span class="text-blue-600">{{ formatCurrency(getCurrentTotal()) }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Amount Received Input -->
+                    <div class="space-y-2">
+                        <Label for="amount-received" class="text-base font-medium">Amount Received from Customer</Label>
+
+                        <!-- Quick Amount Buttons -->
+                        <div class="space-y-1">
+                            <Label class="text-sm">Quick Amounts</Label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <Button
+                                    v-for="amount in getQuickAmounts()"
+                                    :key="amount"
+                                    @click="setQuickAmount(amount)"
+                                    variant="outline"
+                                    size="sm"
+                                    class="text-xs py-1"
+                                >
+                                    ₱{{ amount.toFixed(2) }}
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">₱</span>
+                            <Input
+                                id="amount-received"
+                                v-model="amountReceived"
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                class="pl-8 text-lg"
+                                min="0"
+                            />
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            Enter the cash amount received from the customer
+                        </p>
+                    </div>
+
+                    <!-- Payment Calculation -->
+                    <div v-if="amountReceived" class="bg-green-50 p-3 rounded-lg space-y-2">
+                        <h4 class="font-medium">Payment Summary</h4>
+                        <div class="space-y-1 text-sm">
+                            <div class="flex justify-between">
+                                <span>Amount Due:</span>
+                                <span>₱{{ getCurrentTotal().toFixed(2) }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Amount Received:</span>
+                                <span>₱{{ parseFloat(amountReceived || '0').toFixed(2) }}</span>
+                            </div>
+                            <Separator />
+                            <div class="flex justify-between font-bold text-lg" :class="getChangeAmount() >= 0 ? 'text-green-600' : 'text-red-600'">
+                                <span>Change:</span>
+                                <span>₱{{ getChangeAmount().toFixed(2) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Payment Status -->
+                        <div class="pt-1">
+                            <div v-if="isPaymentValid()" class="flex items-center gap-2 text-green-600 text-sm">
+                                <CreditCard class="h-4 w-4" />
+                                <span>Payment Valid</span>
+                            </div>
+                            <div v-else class="flex items-center gap-2 text-red-600 text-sm">
+                                <X class="h-4 w-4" />
+                                <span>Insufficient Payment - Need ₱{{ (getCurrentTotal() - parseFloat(amountReceived || '0')).toFixed(2) }} more</span>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- Action Buttons -->
+                    <div class="flex gap-3 pt-2">
+                        <Button
+                            variant="outline"
+                            class="flex-1"
+                            @click="isCashPaymentModalOpen = false"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            class="flex-1 bg-green-600 hover:bg-green-700"
+                            @click="processCashPayment"
+                            :disabled="!isPaymentValid() || processing"
+                        >
+                            <span v-if="processing">Processing...</span>
+                            <span v-else>Complete Payment</span>
                         </Button>
                     </div>
                 </div>

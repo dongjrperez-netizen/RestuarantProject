@@ -7,6 +7,7 @@ import {
   LogOut,
   Users,
   TableProperties,
+  ChefHat,
   X
 } from 'lucide-vue-next';
 
@@ -31,7 +32,7 @@ const sidebarOpen = ref(false);
 const logoutForm = useForm({});
 
 const logout = () => {
-  logoutForm.post(route('employee.logout'));
+  logoutForm.post(route('logout'));
 };
 </script>
 
@@ -119,6 +120,16 @@ const logout = () => {
             </Link>
 
             <Link
+              :href="route('waiter.current-menu')"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors touch-manipulation"
+              :class="{ 'bg-gray-100': $page.component === 'Waiter/CurrentMenu' }"
+              @click="sidebarOpen = false"
+            >
+              <ChefHat class="h-4 w-4 flex-shrink-0" />
+              <span class="text-sm">Current Menu</span>
+            </Link>
+
+            <Link
               :href="route('waiter.take-order')"
               class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors touch-manipulation"
               :class="{ 'bg-gray-100': $page.component === 'Waiter/TakeOrder' }"
@@ -167,6 +178,15 @@ const logout = () => {
             >
               <TableProperties class="h-4 w-4 flex-shrink-0" />
               <span class="text-sm">Tables</span>
+            </Link>
+
+            <Link
+              :href="route('waiter.current-menu')"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              :class="{ 'bg-gray-100': $page.component === 'Waiter/CurrentMenu' }"
+            >
+              <ChefHat class="h-4 w-4 flex-shrink-0" />
+              <span class="text-sm">Current Menu</span>
             </Link>
 
             <Link

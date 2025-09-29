@@ -84,9 +84,16 @@ class Dish extends Model
 
     public function hasAvailableStock($dishQuantity = 1)
     {
+        // If dish has no ingredients, consider it available
+        if ($this->dishIngredients->isEmpty()) {
+            return true;
+        }
+
         foreach ($this->dishIngredients as $dishIngredient) {
             $requiredQuantity = $dishIngredient->quantity_needed * $dishQuantity;
-            if ($dishIngredient->ingredient->current_stock < $requiredQuantity) {
+            $currentStock = $dishIngredient->ingredient ? $dishIngredient->ingredient->current_stock : 0;
+
+            if (!$dishIngredient->ingredient || $currentStock < $requiredQuantity) {
                 return false;
             }
         }

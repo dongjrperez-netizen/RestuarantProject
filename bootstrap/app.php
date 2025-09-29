@@ -7,6 +7,7 @@ use App\Http\Middleware\EmployeeAuth;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RoleMiddleware;
+use App\Http\Middleware\SupplierAuth;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -38,6 +39,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'check.subscription' => CheckSubscription::class,
             'admin.auth' => AdminAuth::class,
             'employee.auth' => EmployeeAuth::class,
+            'supplier.auth' => SupplierAuth::class,
             'role' => RoleMiddleware::class,
         ]);
     })

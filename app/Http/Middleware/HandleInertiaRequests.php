@@ -60,6 +60,11 @@ class HandleInertiaRequests extends Middleware
             // For waiter routes, get the waiter user
             $user = Auth::guard('waiter')->user();
             $userType = 'waiter';
+        }
+        elseif ($request->is('kitchen/*') || $request->is('kitchen')) {
+            // For waiter routes, get the waiter user
+            $user = Auth::guard('kitchen')->user();
+            $userType = 'kitchen';
         } else {
             // Check if authenticated as employee first
             if (Auth::guard('employee')->check()) {

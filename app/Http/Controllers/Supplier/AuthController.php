@@ -10,38 +10,6 @@ use Inertia\Inertia;
 
 class AuthController extends Controller
 {
-    public function showLoginForm()
-    {
-        return Inertia::render('Supplier/Auth/Login');
-    }
-
-    public function login(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
-
-        if (Auth::guard('supplier')->attempt($request->only('email', 'password'), $request->boolean('remember'))) {
-            $request->session()->regenerate();
-
-            return redirect()->intended('/supplier/dashboard');
-        }
-
-        throw ValidationException::withMessages([
-            'email' => __('The provided credentials do not match our records.'),
-        ]);
-    }
-
-    public function logout(Request $request)
-    {
-        Auth::guard('supplier')->logout();
-
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect('/supplier/login');
-    }
 
     public function showRegisterForm(Request $request)
     {
@@ -124,8 +92,7 @@ class AuthController extends Controller
             ]);
         }
 
-        Auth::guard('supplier')->login($supplier);
-
-        return redirect('/supplier/dashboard');
+        // Redirect to unified login page instead of auto-login
+        return redirect()->route('login')->with('success', 'Registration successful! Please login with your credentials.');
     }
 }

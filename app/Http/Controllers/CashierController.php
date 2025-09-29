@@ -7,8 +7,10 @@ use App\Models\CustomerPayment;
 use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Srmklive\PayPal\Services\PayPal as PayPalClient;
 
 class CashierController extends Controller
 {
@@ -75,7 +77,7 @@ class CashierController extends Controller
         // Get unpaid orders from this restaurant (exclude paid orders)
         $orders = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments'])
             ->where('restaurant_id', $employee->user_id)  // Filter by restaurant
-            ->whereIn('status', ['pending', 'ready', 'completed'])  // Exclude paid orders
+            ->whereIn('status', ['pending', 'ready', 'completed','in_progress'])  // Exclude paid orders
             ->orderBy('updated_at', 'desc')
             ->paginate(15);
 
@@ -215,6 +217,12 @@ class CashierController extends Controller
 
     public function updatePaymentStatus(Request $request, $orderId)
     {
+        \Log::info('Cash payment request received', [
+            'order_id' => $orderId,
+            'request_data' => $request->all(),
+            'user_agent' => $request->userAgent()
+        ]);
+
         // Get the authenticated employee
         $employee = Auth::guard('cashier')->user();
 
@@ -262,7 +270,17 @@ class CashierController extends Controller
             'status' => 'paid',
         ]);
 
-        return redirect()->route('cashier.bills')->with('success', 'Payment processed successfully!');
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment processed successfully!',
+            'payment' => [
+                'payment_id' => $paymentId,
+                'final_amount' => $finalAmount,
+                'amount_paid' => $request->amount_paid,
+                'change_amount' => $changeAmount > 0 ? $changeAmount : 0,
+                'payment_method' => $request->payment_method
+            ]
+        ]);
     }
 
     public function applyDiscount(Request $request, $orderId)
@@ -381,5 +399,278 @@ class CashierController extends Controller
                 'message' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function payWithPaypal(Request $request)
+    {
+        \Log::info('PayPal payment request received', [
+            'request_data' => $request->all(),
+            'user_agent' => $request->userAgent()
+        ]);
+
+        // Get the authenticated employee
+        $employee = Auth::guard('cashier')->user();
+
+        if (!$employee || strtolower($employee->role->role_name) !== 'cashier') {
+            return response()->json(['error' => 'Access denied. Cashiers only.'], 403);
+        }
+
+        $request->validate([
+            'order_id' => 'required|exists:customer_orders,order_id',
+            'amount' => 'required|numeric|min:0.01',
+            'payment_method' => 'required|in:paypal',
+            'customer_name' => 'nullable|string|max:255',
+            'customer_email' => 'nullable|email|max:255',
+            'discount_amount' => 'nullable|numeric|min:0',
+            'discount_reason' => 'nullable|string|max:255',
+        ]);
+
+        // Get the order
+        $order = CustomerOrder::where('restaurant_id', $employee->user_id)
+            ->where('order_id', $request->order_id)
+            ->firstOrFail();
+
+        try {
+            // Check if PayPal is configured
+            $paypalConfig = config('paypal');
+            if (empty($paypalConfig['sandbox']['client_id']) && empty($paypalConfig['live']['client_id'])) {
+                throw new \Exception('PayPal credentials not configured. Please set PAYPAL_SANDBOX_CLIENT_ID and PAYPAL_SANDBOX_CLIENT_SECRET in your .env file.');
+            }
+
+            $provider = new PayPalClient;
+            $provider->setApiCredentials($paypalConfig);
+            $accessToken = $provider->getAccessToken();
+
+            Log::info('PayPal client initialized successfully', [
+                'mode' => $paypalConfig['mode'] ?? 'sandbox',
+                'has_access_token' => !empty($accessToken),
+            ]);
+
+            $returnUrl = route('cashier.payment.paypal.success');
+            $cancelUrl = route('cashier.payment.paypal.cancel');
+
+            $orderData = [
+                'intent' => 'CAPTURE',
+                'purchase_units' => [
+                    [
+                        'amount' => [
+                            'currency_code' => config('paypal.currency', 'USD'),
+                            'value' => number_format($request->amount, 2, '.', ''),
+                        ],
+                        'description' => "Payment for Order #{$order->order_number} - " . ($order->customer_name ?? 'Walk-in Customer'),
+                    ]
+                ],
+                'application_context' => [
+                    'cancel_url' => $cancelUrl,
+                    'return_url' => $returnUrl,
+                    'brand_name' => 'Restaurant Payment',
+                    'locale' => 'en-US',
+                    'landing_page' => 'BILLING',
+                    'shipping_preference' => 'NO_SHIPPING',
+                    'user_action' => 'PAY_NOW',
+                ]
+            ];
+
+            $response = $provider->createOrder($orderData);
+
+            Log::info('PayPal createOrder Response', [
+                'order_id' => $order->order_id,
+                'paypal_order_id' => $response['id'] ?? 'missing',
+                'response_status' => $response['status'] ?? 'missing',
+                'links_count' => isset($response['links']) ? count($response['links']) : 0,
+            ]);
+
+            if (isset($response['id']) && $response['id'] != null) {
+                // Find the approval URL
+                $approvalUrl = null;
+                foreach ($response['links'] as $link) {
+                    if ($link['rel'] === 'approve') {
+                        $approvalUrl = $link['href'];
+                        break;
+                    }
+                }
+
+                // Store payment details in session for processing after approval
+                session([
+                    'paypal_order_payment' => [
+                        'order_id' => $order->order_id,
+                        'paypal_order_id' => $response['id'],
+                        'amount' => $request->amount,
+                        'discount_amount' => $request->discount_amount,
+                        'discount_reason' => $request->discount_reason,
+                        'cashier_id' => $employee->employee_id,
+                    ]
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'approval_url' => $approvalUrl,
+                    'paypal_order_id' => $response['id']
+                ]);
+            } else {
+                Log::error('PayPal createOrder failed', [
+                    'response' => $response,
+                    'order_id' => $order->order_id
+                ]);
+
+                return response()->json([
+                    'error' => 'Failed to create PayPal payment',
+                    'details' => $response['message'] ?? 'Unknown error'
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('PayPal payment error', [
+                'order_id' => $order->order_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'PayPal payment failed',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function paypalSuccess(Request $request)
+    {
+        $paypalOrderId = $request->get('token');
+        $paymentData = session('paypal_order_payment');
+
+        Log::info('PayPal success callback', [
+            'paypal_order_id' => $paypalOrderId,
+            'session_data' => $paymentData,
+            'request_params' => $request->all()
+        ]);
+
+        if (!$paymentData) {
+            Log::error('PayPal success: No payment data in session');
+            return redirect()->route('cashier.bills')->with('error', 'Payment session expired');
+        }
+
+        // Verify the PayPal order ID matches
+        if ($paymentData['paypal_order_id'] !== $paypalOrderId) {
+            Log::error('PayPal success: Order ID mismatch', [
+                'session_id' => $paymentData['paypal_order_id'],
+                'callback_id' => $paypalOrderId
+            ]);
+            return redirect()->route('cashier.bills')->with('error', 'Payment verification failed');
+        }
+
+        try {
+            $provider = new PayPalClient;
+            $provider->setApiCredentials(config('paypal'));
+            $provider->getAccessToken();
+
+            Log::info('PayPal Payment Capture', [
+                'order_id' => $paymentData['order_id'],
+                'paypal_order_id' => $paypalOrderId,
+                'amount' => $paymentData['amount'],
+                'currency' => config('paypal.currency'),
+                'mode' => config('paypal.mode'),
+            ]);
+
+            // Capture the payment
+            $response = $provider->capturePaymentOrder($paypalOrderId);
+
+            Log::info('PayPal capture response', [
+                'response_status' => $response['status'] ?? 'missing',
+                'capture_status' => $response['purchase_units'][0]['payments']['captures'][0]['status'] ?? 'missing',
+                'capture_id' => $response['purchase_units'][0]['payments']['captures'][0]['id'] ?? 'missing',
+            ]);
+
+            if (isset($response['status']) && $response['status'] === 'COMPLETED') {
+                // Get the order
+                $order = CustomerOrder::findOrFail($paymentData['order_id']);
+
+                // Calculate final amount
+                $finalAmount = $paymentData['amount'];
+                $discountAmount = $paymentData['discount_amount'] ?? 0;
+
+                // Extract PayPal transaction details
+                $captureDetails = $response['purchase_units'][0]['payments']['captures'][0] ?? null;
+                $transactionId = $captureDetails['id'] ?? $response['id'];
+                $payerInfo = $response['payer'] ?? null;
+
+                // Create payment record with PayPal transaction details
+                $paymentId = 'PAY_' . $paymentData['order_id'] . '_' . time();
+
+                CustomerPayment::create([
+                    'payment_id' => $paymentId,
+                    'order_id' => $paymentData['order_id'],
+                    'payment_method' => 'paypal',
+                    'original_amount' => $order->total_amount,
+                    'discount_amount' => $discountAmount,
+                    'final_amount' => $finalAmount,
+                    'amount_paid' => $finalAmount,
+                    'status' => 'completed',
+                    'transaction_id' => $transactionId,
+                    'checkout_session_id' => $paypalOrderId, // Store PayPal Order ID as checkout session
+                    'payment_details' => json_encode([
+                        'paypal_order_id' => $paypalOrderId,
+                        'transaction_id' => $transactionId,
+                        'capture_status' => $captureDetails['status'] ?? 'unknown',
+                        'capture_amount' => $captureDetails['amount'] ?? null,
+                        'payer_email' => $payerInfo['email_address'] ?? null,
+                        'payer_name' => $payerInfo['name'] ?? null,
+                        'create_time' => $captureDetails['create_time'] ?? null,
+                        'update_time' => $captureDetails['update_time'] ?? null,
+                        'full_response' => $response, // Store complete PayPal response for reference
+                    ]),
+                    'notes' => 'PayPal Payment - Transaction ID: ' . $transactionId,
+                    'cashier_id' => $paymentData['cashier_id'],
+                    'paid_at' => now(),
+                ]);
+
+                // Update order status to paid
+                $order->update(['status' => 'paid']);
+
+                // Clear session data
+                session()->forget('paypal_order_payment');
+
+                return redirect()->route('cashier.successful-payments')
+                    ->with('success', 'Payment completed successfully via PayPal');
+
+            } else {
+                Log::error('PayPal capture failed', [
+                    'response' => $response,
+                    'order_id' => $paymentData['order_id']
+                ]);
+
+                return redirect()->route('cashier.bills')->with('error', 'PayPal payment capture failed');
+            }
+
+        } catch (\Exception $e) {
+            Log::error('PayPal success processing error', [
+                'order_id' => $paymentData['order_id'],
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->route('cashier.bills')->with('error', 'PayPal payment processing failed: ' . $e->getMessage());
+        }
+    }
+
+    public function paypalCancel(Request $request)
+    {
+        $paymentData = session('paypal_order_payment');
+
+        Log::info('PayPal payment cancelled', [
+            'session_data' => $paymentData,
+            'request_params' => $request->all()
+        ]);
+
+        // Clear session data
+        session()->forget('paypal_order_payment');
+
+        $orderId = $paymentData['order_id'] ?? null;
+        if ($orderId) {
+            return redirect()->route('cashier.bills.view', $orderId)
+                ->with('info', 'PayPal payment was cancelled');
+        }
+
+        return redirect()->route('cashier.bills')
+            ->with('info', 'PayPal payment was cancelled');
     }
 }

@@ -43,27 +43,6 @@ Route::get('/admin/login', [AdministratorController::class, 'showLogin'])->name(
 Route::post('/admin/login', [AdministratorController::class, 'login'])->name('admin.login.submit');
 Route::post('/admin/logout', [AdministratorController::class, 'logout'])->name('admin.logout');
 
-// Employee Authentication Routes - Redirected to unified login
-Route::prefix('employee')->name('employee.')->group(function () {
-    // Redirect employee login to unified login page
-    Route::get('/login', function () {
-        return redirect()->route('login');
-    })->middleware('guest:employee')->name('login');
-
-    // Redirect employee login POST to unified login (backup for forms still posting here)
-    Route::post('/login', function () {
-        return redirect()->route('login');
-    })->middleware('guest:employee')->name('login.submit');
-
-    // Employee logout - handled by unified logout
-    Route::post('/logout', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'destroy'])
-        ->middleware('auth:employee')
-        ->name('logout');
-
-    Route::get('/forgot-password', [\App\Http\Controllers\Auth\EmployeeLoginController::class, 'showForgotPasswordForm'])
-        ->middleware('guest:employee')
-        ->name('password.request');
-});
 
 // Employee-accessible routes (authenticated with employee guard)
 Route::middleware('auth:employee')->group(function () {
@@ -74,10 +53,13 @@ Route::middleware('auth:employee')->group(function () {
 // Waiter-specific routes (restricted to waiters only)
 Route::middleware(['auth:waiter', 'role:waiter'])->prefix('waiter')->name('waiter.')->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\WaiterController::class, 'dashboard'])->name('dashboard');
+    Route::get('/current-menu', [App\Http\Controllers\WaiterController::class, 'currentMenu'])->name('current-menu');
     Route::patch('/tables/{table}/status', [App\Http\Controllers\WaiterController::class, 'updateTableStatus'])->name('tables.update-status');
     Route::get('/take-order', [App\Http\Controllers\WaiterController::class, 'takeOrder'])->name('take-order');
     Route::get('/orders/create/{tableId}', [App\Http\Controllers\WaiterController::class, 'createOrder'])->name('orders.create');
     Route::post('/orders', [App\Http\Controllers\WaiterController::class, 'storeOrder'])->name('orders.store');
+    Route::get('/tables/{table}/orders', [App\Http\Controllers\WaiterController::class, 'getTableOrders'])->name('tables.orders');
+    Route::post('/orders/{orderId}/items/{itemId}/served', [App\Http\Controllers\WaiterController::class, 'updateItemServedStatus'])->name('orders.items.served');
 
     // Debug route to check recent orders
     Route::get('/debug/orders', function () {
@@ -138,6 +120,12 @@ Route::middleware(['auth:cashier', 'role:cashier'])->prefix('cashier')->name('ca
     Route::get('/bills/{orderId}/print', [CashierController::class, 'printBill'])->name('bills.print');
     Route::post('/bills/{orderId}/discount', [CashierController::class, 'applyDiscount'])->name('bills.discount');
     Route::delete('/bills/{orderId}/discount', [CashierController::class, 'removeDiscount'])->name('bills.discount.remove');
+    // PayPal routes must come before generic {orderId} routes
+    Route::post('/payment/paypal', [CashierController::class, 'payWithPaypal'])->name('payment.paypal');
+    Route::get('/payment/paypal/success', [CashierController::class, 'paypalSuccess'])->name('payment.paypal.success');
+    Route::get('/payment/paypal/cancel', [CashierController::class, 'paypalCancel'])->name('payment.paypal.cancel');
+
+    // Generic payment routes with orderId parameter
     Route::get('/payment/{orderId}', [CashierController::class, 'processPayment'])->name('process-payment');
     Route::post('/payment/{orderId}', [CashierController::class, 'updatePaymentStatus'])->name('update-payment');
 });
@@ -330,7 +318,15 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
 
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
     Route::get('/kitchen', [KitchenController::class, 'Index'])->name('kitchen.index');
+});
 
+// Kitchen Staff Routes
+Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->name('kitchen.')->group(function () {
+    Route::get('/dashboard', [KitchenController::class, 'dashboard'])->name('dashboard');
+    Route::post('/preparation-orders/{id}/start', [KitchenController::class, 'startPreparationOrder'])->name('preparation-orders.start');
+    Route::post('/preparation-orders/{orderId}/items/{itemId}/start', [KitchenController::class, 'startPreparationItem'])->name('preparation-items.start');
+    Route::post('/preparation-orders/{orderId}/items/{itemId}/complete', [KitchenController::class, 'completePreparationItem'])->name('preparation-items.complete');
+    Route::post('/orders/{orderId}/status', [KitchenController::class, 'updateOrderStatus'])->name('orders.update-status');
 });
 
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {

@@ -20,6 +20,7 @@ class RoleMiddleware
         $guard = match(strtolower($role)) {
             'waiter' => 'waiter',
             'cashier' => 'cashier',
+            'kitchen' => 'kitchen',
             default => 'employee'
         };
 

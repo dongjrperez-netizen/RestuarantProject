@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, router } from '@inertiajs/vue3';
 import WaiterLayout from '@/layouts/WaiterLayout.vue';
 import Button from '@/components/ui/button/Button.vue';
 import Badge from '@/components/ui/badge/Badge.vue';
@@ -60,6 +60,12 @@ interface OrderItem {
   special_instructions: string;
 }
 
+interface OrderFormData {
+  dish_id: number;
+  quantity: number;
+  special_instructions: string;
+}
+
 interface ExistingOrderItem {
   dish_id: number;
   quantity: number;
@@ -93,7 +99,7 @@ const orderForm = useForm({
   table_id: props.table.id,
   customer_name: props.existingOrder?.customer_name || '',
   notes: '',
-  order_items: [] as OrderItem[],
+  order_items: [] as any[],
 });
 
 const orderItems = ref<OrderItem[]>([]);
@@ -199,7 +205,7 @@ const addDishToOrder = () => {
   showQuantityModal.value = false;
 
   // Show a brief cart animation for new items (on mobile)
-  if (isNewItem && window.innerWidth < 1024) {
+  if (isNewItem && typeof window !== 'undefined' && window.innerWidth < 1024) {
     // Optional: Could add a subtle animation or toast notification here
   }
 };
@@ -234,7 +240,12 @@ const updateQuantity = (dishId: number, quantity: number) => {
 };
 
 const submitOrder = () => {
-  orderForm.order_items = orderItems.value;
+  // Transform order items to form-compatible format
+  orderForm.order_items = orderItems.value.map(item => ({
+    dish_id: item.dish_id,
+    quantity: item.quantity,
+    special_instructions: item.special_instructions,
+  }));
 
   orderForm.post(route('waiter.orders.store'), {
     onSuccess: () => {
@@ -325,7 +336,7 @@ const getAllergenBadgeColor = (allergen: string) => {
           <p class="text-muted-foreground mb-4">
             There are no dishes available for this restaurant. Please contact the manager to add menu items.
           </p>
-          <Button @click="() => window.history.back()" variant="outline">
+          <Button @click="() => router.visit('/waiter/dashboard')" variant="outline">
             Back to Tables
           </Button>
         </div>
@@ -448,7 +459,7 @@ const getAllergenBadgeColor = (allergen: string) => {
 
             <!-- Cancel Button -->
             <Button
-              @click="() => window.history.back()"
+              @click="() => router.visit('/waiter/dashboard')"
               variant="outline"
               class="w-full"
             >
@@ -683,7 +694,7 @@ const getAllergenBadgeColor = (allergen: string) => {
 
                       <Input
                         :model-value="item.quantity"
-                        @update:model-value="(value) => updateQuantity(item.dish_id, parseInt(value) || 0)"
+                        @update:model-value="(value) => updateQuantity(item.dish_id, parseInt(String(value)) || 0)"
                         type="number"
                         min="0"
                         class="w-14 h-8 text-center text-xs"

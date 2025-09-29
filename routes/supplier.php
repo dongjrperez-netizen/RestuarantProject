@@ -19,15 +19,15 @@ use Illuminate\Support\Facades\Route;
 
 // Guest Supplier Routes
 Route::middleware('guest:supplier')->group(function () {
-    Route::get('/login', [AuthController::class, 'showLoginForm'])->name('supplier.login');
-    Route::post('/login', [AuthController::class, 'login'])->name('supplier.login.post');
+    // Registration routes only - no login routes needed (uses unified login)
     Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('supplier.register');
     Route::post('/register', [AuthController::class, 'register'])->name('supplier.register.post');
 });
 
 // Authenticated Supplier Routes
-Route::middleware('auth:supplier')->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout'])->name('supplier.logout');
+Route::middleware(['auth:supplier', 'supplier.auth'])->group(function () {
+    // Supplier logout - handled by unified logout
+    Route::post('/logout', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'destroy'])->name('supplier.logout');
 
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('supplier.dashboard');
