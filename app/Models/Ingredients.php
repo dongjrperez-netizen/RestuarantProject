@@ -19,6 +19,7 @@ class Ingredients extends Model
         'restaurant_id',
         'ingredient_name',
         'base_unit',
+        'cost_per_unit',
         'current_stock',
         'packages',
         'reorder_level',

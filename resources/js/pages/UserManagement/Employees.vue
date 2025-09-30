@@ -148,32 +148,20 @@ const formatDate = (dateString: string) => {
                 </Link>
             </div>
 
-            <!-- Filters -->
+            <!-- Employee Table -->
             <Card>
-                <CardContent class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
+                <CardHeader>
+                    <div class="flex items-center justify-between gap-4">
+                        <CardTitle>Employees List</CardTitle>
+                        <div class="flex items-center gap-2">
                             <Input
                                 v-model="searchQuery"
                                 placeholder="Search employees..."
                                 @keyup.enter="search"
+                                class="w-48"
                             />
-                        </div>
-                        <div>
-                            <Select v-model="selectedStatus">
-                                <SelectTrigger>
-                                    <SelectValue placeholder="All Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Status</SelectItem>
-                                    <SelectItem value="active">Active</SelectItem>
-                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
                             <Select v-model="selectedRole">
-                                <SelectTrigger>
+                                <SelectTrigger class="w-40">
                                     <SelectValue placeholder="All Roles" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -187,19 +175,10 @@ const formatDate = (dateString: string) => {
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
-                        </div>
-                        <div class="flex gap-2">
-                            <Button @click="search" variant="outline">Search</Button>
-                            <Button @click="clearFilters" variant="ghost">Clear</Button>
+                            <Button @click="search" variant="outline" size="sm">Search</Button>
+                            <Button @click="clearFilters" variant="ghost" size="sm">Clear</Button>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
-
-            <!-- Employee Table -->
-            <Card class="mt-6">
-                <CardHeader>
-                    <CardTitle>Employees List</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <Table>

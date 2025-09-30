@@ -47,7 +47,7 @@ interface Stats {
   low_stock_count: number;
 }
 
-defineProps<{
+const props = defineProps<{
   ingredients: Ingredient[];
   stats: Stats;
 }>();
@@ -55,6 +55,26 @@ defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Inventory', href: '/inventory' },
 ];
+
+// Pagination
+const currentPage = ref(1);
+const itemsPerPage = 6;
+
+const paginatedIngredients = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  return props.ingredients.slice(start, end);
+});
+
+const totalPages = computed(() => {
+  return Math.ceil(props.ingredients.length / itemsPerPage);
+});
+
+const goToPage = (page: number) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page;
+  }
+};
 
 const formatNumber = (num: number): string => {
   return new Intl.NumberFormat().format(num);
@@ -168,7 +188,7 @@ const saveEdit = () => {
             </TableHeader>
             <TableBody>
               <TableRow
-                v-for="ingredient in ingredients"
+                v-for="ingredient in paginatedIngredients"
                 :key="ingredient.ingredient_id"
                 :class="{ 'bg-yellow-50 border-l-4 border-yellow-400': ingredient.is_low_stock }"
               >
@@ -213,6 +233,43 @@ const saveEdit = () => {
             </TableBody>
           </Table>
         </CardContent>
+
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="flex items-center justify-between px-6 py-4 border-t">
+          <div class="text-sm text-muted-foreground">
+            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, ingredients.length) }} of {{ ingredients.length }} ingredients
+          </div>
+          <div class="flex items-center gap-2">
+            <Button
+              @click="goToPage(currentPage - 1)"
+              :disabled="currentPage === 1"
+              variant="outline"
+              size="sm"
+            >
+              Previous
+            </Button>
+            <div class="flex items-center gap-1">
+              <Button
+                v-for="page in totalPages"
+                :key="page"
+                @click="goToPage(page)"
+                :variant="currentPage === page ? 'default' : 'outline'"
+                size="sm"
+                class="w-10"
+              >
+                {{ page }}
+              </Button>
+            </div>
+            <Button
+              @click="goToPage(currentPage + 1)"
+              :disabled="currentPage === totalPages"
+              variant="outline"
+              size="sm"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
       </Card>
     </div>
 

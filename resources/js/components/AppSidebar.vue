@@ -4,7 +4,7 @@ import { Link } from '@inertiajs/vue3'
 import {
   Users, UserRound, Box, ClipboardList,
   UtensilsCrossed, ShoppingCart, Truck, Receipt,
-  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar
+  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar, BarChart3
 } from "lucide-vue-next"
 
 import {
@@ -60,6 +60,7 @@ const navItems = [
     ]
   },
   { title: "Tables", href: "/pos/tables", icon: Box },
+  { title: "Reports", href: "/reports", icon: BarChart3 },
 ]
 
 

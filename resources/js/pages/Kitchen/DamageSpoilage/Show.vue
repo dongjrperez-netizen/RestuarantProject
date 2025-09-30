@@ -3,7 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import Badge from '@/components/ui/badge/Badge.vue';
 import { Separator } from '@/components/ui/separator';
 import { type BreadcrumbItem } from '@/types';
 import { AlertTriangle, ArrowLeft, Edit, Calendar, Package, User, DollarSign, FileText, Clock, Restaurant } from 'lucide-vue-next';

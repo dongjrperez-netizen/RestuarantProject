@@ -49,6 +49,11 @@ class CustomerOrderItem extends Model
         return $this->belongsTo(CustomerOrder::class, 'order_id', 'order_id');
     }
 
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(CustomerOrder::class, 'order_id', 'order_id');
+    }
+
     public function dish(): BelongsTo
     {
         return $this->belongsTo(Dish::class, 'dish_id', 'dish_id');

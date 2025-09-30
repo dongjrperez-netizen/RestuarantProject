@@ -9,6 +9,7 @@ use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CashierController;
 use App\Http\Controllers\DamageSpoilageController;
+use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ImageUploadController;
@@ -334,6 +335,16 @@ Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->name('ki
 // Damage and Spoilage Management Routes (accessible by kitchen staff via modal)
 Route::middleware(['auth:kitchen', 'role:kitchen'])->group(function () {
     Route::post('/damage-spoilage', [DamageSpoilageController::class, 'store'])->name('damage-spoilage.store');
+});
+
+// Reports and Analytics Routes (accessible by restaurant owners/managers)
+Route::middleware(['auth', 'verified', 'check.subscription'])->prefix('reports')->name('reports.')->group(function () {
+    Route::get('/', [ReportsController::class, 'index'])->name('index');
+    Route::get('/sales', [ReportsController::class, 'sales'])->name('sales');
+    Route::get('/inventory', [ReportsController::class, 'inventory'])->name('inventory');
+    Route::get('/purchase-orders', [ReportsController::class, 'purchaseOrders'])->name('purchase-orders');
+    Route::get('/financial', [ReportsController::class, 'financial'])->name('financial');
+    Route::get('/wastage', [ReportsController::class, 'wastage'])->name('wastage');
 });
 
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {

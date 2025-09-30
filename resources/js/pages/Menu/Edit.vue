@@ -167,7 +167,11 @@ const convertQuantity = (quantity: number, fromUnit: string, toUnit: string): nu
 };
 
 // Get compatible units for a given ingredient
-const getCompatibleUnits = (ingredient: Ingredient): string[] => {
+const getCompatibleUnits = (ingredient: Ingredient | undefined): string[] => {
+  if (!ingredient || !ingredient.base_unit) {
+    return allUnits.value;
+  }
+
   const baseUnit = ingredient.base_unit.toLowerCase();
 
   if (props.availableUnits.weight.includes(baseUnit)) {
@@ -178,16 +182,31 @@ const getCompatibleUnits = (ingredient: Ingredient): string[] => {
     return props.availableUnits.count;
   }
 
-  // Default to weight units if we can't determine
-  return props.availableUnits.weight;
+  // Default to all units if we can't determine
+  return allUnits.value;
+};
+
+// Get units by ingredient ID - optimized for rendering
+const getUnitsByIngredientId = (ingredientId: number | undefined): string[] => {
+  if (!ingredientId) return allUnits.value;
+  const ingredient = props.ingredients.find(i => i.ingredient_id === ingredientId);
+  return getCompatibleUnits(ingredient);
 };
 
 // Watch for ingredient selection
 watch(selectedIngredientId, (newId) => {
   if (newId) {
     const ingredient = props.ingredients.find(i => i.ingredient_id.toString() === newId);
-    if (ingredient) {
-      form.ingredients.push({
+    if (ingredient && ingredient.base_unit) {
+      // Check if ingredient already exists
+      const exists = form.ingredients.some(i => i.ingredient_id === ingredient.ingredient_id);
+      if (exists) {
+        alert('This ingredient is already added to the dish');
+        selectedIngredientId.value = '';
+        return;
+      }
+
+      const newIngredient = {
         unique_key: `${ingredient.ingredient_id}_${Date.now()}_${Math.random()}`,
         ingredient_id: ingredient.ingredient_id,
         ingredient_name: ingredient.ingredient_name,
@@ -195,9 +214,13 @@ watch(selectedIngredientId, (newId) => {
         unit: ingredient.base_unit,
         is_optional: false,
         preparation_note: '',
-      });
+      };
+      form.ingredients = [...form.ingredients, newIngredient];
     }
-    selectedIngredientId.value = ''; // Reset selection
+    // Reset with nextTick to avoid race condition
+    setTimeout(() => {
+      selectedIngredientId.value = '';
+    }, 0);
   }
 });
 
@@ -602,10 +625,10 @@ const submit = () => {
                           <SelectTrigger class="w-20">
                             <SelectValue :placeholder="ingredient.unit || 'Unit'" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent :side-offset="5" :disable-portal="true">
                             <SelectItem
-                              v-for="unit in ingredient.ingredient_id ? getCompatibleUnits(props.ingredients.find(i => i.ingredient_id === ingredient.ingredient_id)!) : allUnits"
-                              :key="unit"
+                              v-for="unit in getUnitsByIngredientId(ingredient.ingredient_id)"
+                              :key="`${ingredient.unique_key}-${unit}`"
                               :value="unit"
                             >
                               {{ unit }}

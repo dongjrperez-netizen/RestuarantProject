@@ -102,55 +102,12 @@ const allUnits = computed(() => [
   ...props.availableUnits.count
 ]);
 
-// Unit conversion utility functions
-const convertQuantity = (quantity: number, fromUnit: string, toUnit: string): number => {
-  // Simple conversion logic - in a real app you might want to make an API call
-  // or implement the full conversion logic client-side
-
-  // Weight conversions (to grams)
-  const weightConversions: Record<string, number> = {
-    'g': 1, 'gram': 1, 'grams': 1,
-    'kg': 1000, 'kilogram': 1000, 'kilograms': 1000,
-    'lb': 453.592, 'pound': 453.592, 'pounds': 453.592,
-    'oz': 28.3495, 'ounce': 28.3495, 'ounces': 28.3495,
-  };
-
-  // Volume conversions (to ml)
-  const volumeConversions: Record<string, number> = {
-    'ml': 1, 'milliliter': 1, 'milliliters': 1,
-    'l': 1000, 'liter': 1000, 'liters': 1000,
-    'cup': 236.588, 'cups': 236.588,
-    'tbsp': 14.7868, 'tablespoon': 14.7868, 'tablespoons': 14.7868,
-    'tsp': 4.92892, 'teaspoon': 4.92892, 'teaspoons': 4.92892,
-  };
-
-  // Count units (no conversion)
-  const countConversions: Record<string, number> = {
-    'pcs': 1, 'piece': 1, 'pieces': 1,
-    'item': 1, 'items': 1,
-    'unit': 1, 'units': 1,
-  };
-
-  if (fromUnit === toUnit) return quantity;
-
-  let conversions: Record<string, number> | null = null;
-
-  if (weightConversions[fromUnit] && weightConversions[toUnit]) {
-    conversions = weightConversions;
-  } else if (volumeConversions[fromUnit] && volumeConversions[toUnit]) {
-    conversions = volumeConversions;
-  } else if (countConversions[fromUnit] && countConversions[toUnit]) {
-    conversions = countConversions;
+// Get compatible units for a given ingredient
+const getCompatibleUnits = (ingredient: Ingredient | undefined): string[] => {
+  if (!ingredient || !ingredient.base_unit) {
+    return allUnits.value;
   }
 
-  if (!conversions) return quantity; // Can't convert
-
-  const baseQuantity = quantity * conversions[fromUnit];
-  return baseQuantity / conversions[toUnit];
-};
-
-// Get compatible units for a given ingredient
-const getCompatibleUnits = (ingredient: Ingredient): string[] => {
   const baseUnit = ingredient.base_unit.toLowerCase();
 
   if (props.availableUnits.weight.includes(baseUnit)) {
@@ -161,8 +118,15 @@ const getCompatibleUnits = (ingredient: Ingredient): string[] => {
     return props.availableUnits.count;
   }
 
-  // Default to weight units if we can't determine
-  return props.availableUnits.weight;
+  // Default to all units if we can't determine
+  return allUnits.value;
+};
+
+// Get units by ingredient ID - optimized for rendering
+const getUnitsByIngredientId = (ingredientId: number | undefined): string[] => {
+  if (!ingredientId) return allUnits.value;
+  const ingredient = props.ingredients.find(i => i.ingredient_id === ingredientId);
+  return getCompatibleUnits(ingredient);
 };
 
 // Watch for ingredient selection
@@ -213,9 +177,7 @@ const stockRequirements = computed(() => {
           base_unit: ingredient.base_unit
         };
       }
-      // Convert dish ingredient quantity to ingredient's base unit for comparison
-      const quantityInBaseUnit = convertQuantity(dishIngredient.quantity, dishIngredient.unit, ingredient.base_unit);
-      requirements[ingredientId].total_needed += quantityInBaseUnit;
+      requirements[ingredientId].total_needed += dishIngredient.quantity;
     }
   });
 
@@ -225,33 +187,19 @@ const stockRequirements = computed(() => {
 // Check if individual ingredient has sufficient stock
 const getIngredientStockStatus = (dishIngredient: DishIngredient) => {
   if (!dishIngredient.ingredient_id || dishIngredient.is_optional) {
-    return { sufficient: true, available: 0, needed: 0, availableInDisplayUnit: 0, neededInDisplayUnit: dishIngredient.quantity };
+    return { sufficient: true, available: 0, needed: 0 };
   }
 
   const ingredient = props.ingredients.find(i => i.ingredient_id === dishIngredient.ingredient_id);
-  if (!ingredient) return {
-    sufficient: false,
-    available: 0,
-    needed: dishIngredient.quantity,
-    availableInDisplayUnit: 0,
-    neededInDisplayUnit: dishIngredient.quantity
-  };
+  if (!ingredient) return { sufficient: false, available: 0, needed: dishIngredient.quantity };
 
   const requirements = stockRequirements.value[dishIngredient.ingredient_id];
-  const totalNeededInBaseUnit = requirements?.total_needed || convertQuantity(dishIngredient.quantity, dishIngredient.unit, ingredient.base_unit);
-
-  // Convert available stock to display unit
-  const availableInDisplayUnit = convertQuantity(ingredient.current_stock, ingredient.base_unit, dishIngredient.unit);
-
-  // The needed amount is just the dish ingredient quantity in its own unit
-  const neededInDisplayUnit = dishIngredient.quantity;
+  const totalNeeded = requirements?.total_needed || dishIngredient.quantity;
 
   return {
-    sufficient: ingredient.current_stock >= totalNeededInBaseUnit,
+    sufficient: ingredient.current_stock >= totalNeeded,
     available: ingredient.current_stock,
-    needed: totalNeededInBaseUnit,
-    availableInDisplayUnit: availableInDisplayUnit,
-    neededInDisplayUnit: neededInDisplayUnit
+    needed: totalNeeded
   };
 };
 
@@ -566,10 +514,10 @@ const submit = () => {
                           <SelectTrigger class="w-20">
                             <SelectValue :placeholder="ingredient.unit || 'Unit'" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent :side-offset="5" :disable-portal="true">
                             <SelectItem
-                              v-for="unit in ingredient.ingredient_id ? getCompatibleUnits(props.ingredients.find(i => i.ingredient_id === ingredient.ingredient_id)!) : allUnits"
-                              :key="unit"
+                              v-for="unit in getUnitsByIngredientId(ingredient.ingredient_id)"
+                              :key="`${ingredient.unique_key}-${unit}`"
                               :value="unit"
                             >
                               {{ unit }}
@@ -593,11 +541,11 @@ const submit = () => {
                               {{ getIngredientStockStatus(ingredient).sufficient ? '✓' : '⚠' }}
                             </Badge>
                             <span :class="getIngredientStockStatus(ingredient).sufficient ? 'text-green-600' : 'text-red-600'">
-                              {{ Math.round(getIngredientStockStatus(ingredient).availableInDisplayUnit * 100) / 100 }} {{ ingredient.unit }}
+                              {{ getIngredientStockStatus(ingredient).available }} {{ ingredient.unit }}
                             </span>
                           </div>
                           <div class="text-muted-foreground">
-                            Need: {{ getIngredientStockStatus(ingredient).neededInDisplayUnit }} {{ ingredient.unit }}
+                            Need: {{ getIngredientStockStatus(ingredient).needed }} {{ ingredient.unit }}
                           </div>
                         </div>
                         <div v-else class="text-xs text-muted-foreground">

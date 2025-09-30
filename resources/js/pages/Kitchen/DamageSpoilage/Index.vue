@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import Badge from '@/components/ui/badge/Badge.vue';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed } from 'vue';
 import { AlertTriangle, Plus, Search, Calendar, Package, Eye, Edit, Trash2, Filter } from 'lucide-vue-next';

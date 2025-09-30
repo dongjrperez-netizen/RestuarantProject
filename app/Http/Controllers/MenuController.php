@@ -65,14 +65,21 @@ class MenuController extends Controller
             ->get([
                 'ingredient_id',
                 'ingredient_name',
-                'base_unit as unit_of_measure',
+                'base_unit',
                 'current_stock',
                 'cost_per_unit'
             ]);
 
+        $availableUnits = [
+            'weight' => ['g', 'kg', 'lb', 'oz'],
+            'volume' => ['ml', 'l', 'cup', 'tbsp', 'tsp'],
+            'count' => ['pcs', 'item', 'unit'],
+        ];
+
         return Inertia::render('Menu/Create', [
             'categories' => $categories,
             'ingredients' => $ingredients,
+            'availableUnits' => $availableUnits,
         ]);
     }
 
@@ -170,15 +177,22 @@ class MenuController extends Controller
             ->get([
                 'ingredient_id',
                 'ingredient_name',
-                'base_unit as unit_of_measure',
+                'base_unit',
                 'current_stock',
                 'cost_per_unit'
             ]);
+
+        $availableUnits = [
+            'weight' => ['g', 'kg', 'lb', 'oz'],
+            'volume' => ['ml', 'l', 'cup', 'tbsp', 'tsp'],
+            'count' => ['pcs', 'item', 'unit'],
+        ];
 
         return Inertia::render('Menu/Edit', [
             'dish' => $dish,
             'categories' => $categories,
             'ingredients' => $ingredients,
+            'availableUnits' => $availableUnits,
         ]);
     }
 
