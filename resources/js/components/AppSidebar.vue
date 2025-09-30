@@ -53,21 +53,13 @@ const navItems = [
     ]
   },
   {
-    title: "POS Management",
-    icon: ShoppingCart,
-    children: [
-      { title: "Tables", href: "/pos/tables", icon: Box },
-      { title: "Customer Order", href: "/pos/customer-order", icon: FileText },
-    ]
-  },
-    {
     title: "Inventory",
     icon: Warehouse,
     children: [
       { title: "Ingredients", href: "/inventory", icon: ChefHat },
-      { title: "Stock-List", href: "/stock-list", icon: Users },
     ]
   },
+  { title: "Tables", href: "/pos/tables", icon: Box },
 ]
 
 

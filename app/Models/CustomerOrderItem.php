@@ -99,14 +99,34 @@ class CustomerOrderItem extends Model
                 continue;
             }
 
-            $requiredQuantity = $dishIngredient->quantity_needed * $this->quantity;
+            // Calculate required quantity using unit conversion
+            // The DishIngredient model now has getQuantityInBaseUnit() method that handles conversion
+            $requiredQuantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit() * $this->quantity;
 
             try {
-                // Use the existing decreaseStock method from Ingredients model
-                $ingredient->decreaseStock($requiredQuantity);
+                // Use the updated decreaseStock method that handles unit conversion
+                // Since we already converted to base unit, we pass the base unit
+                $ingredient->decreaseStock($requiredQuantityInBaseUnit, $ingredient->base_unit);
+
+                \Log::info("Inventory deducted successfully", [
+                    'order_item_id' => $this->item_id,
+                    'ingredient_name' => $ingredient->ingredient_name,
+                    'dish_ingredient_quantity' => $dishIngredient->quantity_needed,
+                    'dish_ingredient_unit' => $dishIngredient->unit_of_measure,
+                    'required_in_base_unit' => $requiredQuantityInBaseUnit,
+                    'ingredient_base_unit' => $ingredient->base_unit,
+                    'order_quantity' => $this->quantity,
+                ]);
             } catch (\Exception $e) {
                 // Log the error but don't fail the order
-                \Log::warning("Failed to deduct ingredient {$ingredient->ingredient_name} for order item {$this->item_id}: " . $e->getMessage());
+                \Log::warning("Failed to deduct ingredient {$ingredient->ingredient_name} for order item {$this->item_id}: " . $e->getMessage(), [
+                    'dish_ingredient_quantity' => $dishIngredient->quantity_needed,
+                    'dish_ingredient_unit' => $dishIngredient->unit_of_measure,
+                    'required_in_base_unit' => $requiredQuantityInBaseUnit,
+                    'ingredient_base_unit' => $ingredient->base_unit,
+                    'current_stock' => $ingredient->current_stock,
+                    'order_quantity' => $this->quantity,
+                ]);
             }
         }
 

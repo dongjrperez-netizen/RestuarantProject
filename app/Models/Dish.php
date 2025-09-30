@@ -76,8 +76,10 @@ class Dish extends Model
     public function calculateIngredientQuantities($dishQuantity = 1)
     {
         return $this->dishIngredients->mapWithKeys(function ($dishIngredient) use ($dishQuantity) {
+            // Use the unit-converted quantity for accurate inventory calculation
+            $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
             return [
-                $dishIngredient->ingredient_id => $dishIngredient->quantity_needed * $dishQuantity,
+                $dishIngredient->ingredient_id => $quantityInBaseUnit * $dishQuantity,
             ];
         });
     }
@@ -90,10 +92,8 @@ class Dish extends Model
         }
 
         foreach ($this->dishIngredients as $dishIngredient) {
-            $requiredQuantity = $dishIngredient->quantity_needed * $dishQuantity;
-            $currentStock = $dishIngredient->ingredient ? $dishIngredient->ingredient->current_stock : 0;
-
-            if (!$dishIngredient->ingredient || $currentStock < $requiredQuantity) {
+            // Use the unit-converted method for accurate stock checking
+            if (!$dishIngredient->hasSufficientStock($dishQuantity)) {
                 return false;
             }
         }
@@ -104,8 +104,8 @@ class Dish extends Model
     public function calculateIngredientCost()
     {
         return $this->dishIngredients->sum(function ($dishIngredient) {
-            $costPerUnit = $dishIngredient->cost_per_unit ?? $dishIngredient->ingredient->cost_per_unit ?? 0;
-            return $dishIngredient->quantity_needed * $costPerUnit;
+            // Use the unit-converted cost calculation method
+            return $dishIngredient->calculateCost();
         });
     }
 

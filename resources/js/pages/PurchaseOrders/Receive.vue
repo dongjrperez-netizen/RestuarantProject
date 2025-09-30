@@ -159,7 +159,7 @@ const submit = () => {
   <Head :title="`Receive Delivery - PO ${purchaseOrder.po_number}`" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="space-y-6">
+      <div class="space-y-6 mx-6">
       <!-- Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Receive Delivery</h1>

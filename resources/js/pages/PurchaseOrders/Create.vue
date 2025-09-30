@@ -188,7 +188,7 @@ const submit = () => {
   <Head title="Create Purchase Order" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-     <div class="mx-6 space-y-6">
+      <div class="space-y-6 mx-6">
       <!-- Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Create Purchase Order</h1>

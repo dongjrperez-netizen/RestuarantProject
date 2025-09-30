@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('order_id')->constrained('customer_orders', 'order_id')->onDelete('cascade');
             $table->foreignId('dish_id')->constrained('dishes', 'dish_id')->onDelete('cascade');
             $table->integer('quantity')->default(1);
+             $table->integer('served_quantity')->default(0);
             $table->decimal('unit_price', 10, 2);
             $table->decimal('total_price', 10, 2);
             $table->text('special_instructions')->nullable();

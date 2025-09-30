@@ -194,66 +194,58 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
         </Card>
       </div>
 
-      <!-- Filters -->
-      <Card>
-        <CardHeader>
-          <CardTitle>Filter Dishes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex flex-wrap gap-4">
-            <div class="flex-1 min-w-[200px]">
-              <Input
-                v-model="searchQuery"
-                placeholder="Search dishes..."
-                @keyup.enter="applyFilters"
-              />
-            </div>
-            
-            <div class="min-w-[150px]">
-              <Select v-model="selectedCategory">
-                <SelectTrigger>
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem 
-                    v-for="category in (categories || [])" 
-                    :key="category.category_id"
-                    :value="category.category_id.toString()"
-                  >
-                    {{ category.category_name }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div class="min-w-[150px]">
-              <Select v-model="selectedStatus">
-                <SelectTrigger>
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem 
-                    v-for="option in statusOptions" 
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button @click="applyFilters">Apply Filters</Button>
-            <Button variant="outline" @click="clearFilters">Clear</Button>
-          </div>
-        </CardContent>
-      </Card>
-
       <!-- Dishes Table -->
       <Card>
         <CardHeader>
-          <CardTitle>Menu Items</CardTitle>
+          <div class="flex items-center justify-between">
+            <CardTitle>Menu Items</CardTitle>
+            <div class="flex items-center gap-4">
+              <div class="w-[200px]">
+                <Input
+                  v-model="searchQuery"
+                  placeholder="Search dishes..."
+                  @keyup.enter="applyFilters"
+                />
+              </div>
+
+              <div class="w-[150px]">
+                <Select v-model="selectedCategory" @update:model-value="applyFilters">
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem
+                      v-for="category in (categories || [])"
+                      :key="category.category_id"
+                      :value="category.category_id.toString()"
+                    >
+                      {{ category.category_name }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div class="w-[150px]">
+                <Select v-model="selectedStatus" @update:model-value="applyFilters">
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      v-for="option in statusOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button variant="outline" size="sm" @click="clearFilters">Clear</Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>

@@ -20,6 +20,9 @@ return new class extends Migration
             $table->date('order_date');
             $table->date('expected_delivery_date')->nullable();
             $table->date('actual_delivery_date')->nullable();
+            $table->enum('delivery_condition', ['excellent', 'good', 'fair', 'poor'])->nullable();
+            $table->string('received_by', 100)->nullable();
+             $table->text('receiving_notes')->nullable();
             $table->decimal('subtotal', 12, 2);
             $table->decimal('tax_amount', 10, 2)->default(0);
             $table->decimal('shipping_amount', 10, 2)->default(0);

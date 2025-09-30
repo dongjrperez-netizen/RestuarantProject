@@ -18,7 +18,7 @@ return new class extends Migration
             $table->foreignId('restaurant_id')->constrained('users')->onDelete('cascade');
             $table->string('order_number')->unique();
             $table->string('customer_name')->nullable();
-            $table->enum('status', ['pending', 'in_progress', 'ready', 'served', 'completed', 'cancelled'])->default('pending');
+            $table->enum('status', ['pending', 'in_progress', 'ready', 'served', 'completed', 'cancelled', 'paid'])->default('pending');
             $table->decimal('subtotal', 10, 2)->default(0.00);
             $table->decimal('tax_amount', 10, 2)->default(0.00);
             $table->decimal('total_amount', 10, 2)->default(0.00);

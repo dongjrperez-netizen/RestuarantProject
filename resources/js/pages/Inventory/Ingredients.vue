@@ -70,11 +70,13 @@ const showEditModal = ref(false);
 const currentIngredient = ref<Ingredient | null>(null);
 const editForm = useForm({
   reorder_level: 0,
+  base_unit: '',
 });
 
 const startEdit = (ingredient: Ingredient) => {
   currentIngredient.value = ingredient;
   editForm.reorder_level = ingredient.reorder_level;
+  editForm.base_unit = ingredient.base_unit;
   showEditModal.value = true;
 };
 
@@ -214,14 +216,14 @@ const saveEdit = () => {
       </Card>
     </div>
 
-    <!-- Edit Reorder Level Modal -->
+    <!-- Edit Ingredient Details Modal -->
     <Dialog v-model:open="showEditModal">
       <DialogContent class="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Edit Reorder Level</DialogTitle>
+          <DialogTitle>Edit Ingredient Details</DialogTitle>
           <DialogDescription>
-            Update the reorder level for <strong>{{ currentIngredient?.ingredient_name }}</strong>.
-            This determines when you'll be notified to restock this ingredient.
+            Update the reorder level and unit for <strong>{{ currentIngredient?.ingredient_name }}</strong>.
+            The reorder level determines when you'll be notified to restock this ingredient.
           </DialogDescription>
         </DialogHeader>
 
@@ -246,15 +248,52 @@ const saveEdit = () => {
                 type="number"
                 min="0"
                 step="0.01"
-                :placeholder="`Enter reorder level in ${currentIngredient?.base_unit}`"
+                :placeholder="`Enter reorder level`"
                 :class="{ 'border-red-500': editForm.errors.reorder_level }"
                 required
               />
               <p v-if="editForm.errors.reorder_level" class="text-red-500 text-xs mt-1">
                 {{ editForm.errors.reorder_level }}
               </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 items-center gap-4">
+            <Label for="base-unit" class="text-right">
+              Unit
+            </Label>
+            <div class="col-span-3">
+              <Input
+                id="base-unit"
+                v-model="editForm.base_unit"
+                type="text"
+                placeholder="e.g., kg, lbs, pcs, ml, etc."
+                list="unit-options"
+                :class="{ 'border-red-500': editForm.errors.base_unit }"
+                required
+              />
+              <datalist id="unit-options">
+                <option value="kg">kg - Kilogram</option>
+                <option value="g">g - Gram</option>
+                <option value="lbs">lbs - Pounds</option>
+                <option value="oz">oz - Ounces</option>
+                <option value="pcs">pcs - Pieces</option>
+                <option value="ml">ml - Milliliter</option>
+                <option value="L">L - Liter</option>
+                <option value="cups">cups - Cups</option>
+                <option value="tbsp">tbsp - Tablespoon</option>
+                <option value="tsp">tsp - Teaspoon</option>
+                <option value="boxes">boxes - Boxes</option>
+                <option value="bottles">bottles - Bottles</option>
+                <option value="cans">cans - Cans</option>
+                <option value="bags">bags - Bags</option>
+                <option value="packets">packets - Packets</option>
+              </datalist>
+              <p v-if="editForm.errors.base_unit" class="text-red-500 text-xs mt-1">
+                {{ editForm.errors.base_unit }}
+              </p>
               <p class="text-xs text-muted-foreground mt-1">
-                Unit: {{ currentIngredient?.base_unit }}
+                Common units: kg, g, lbs, oz, pcs, ml, L, etc.
               </p>
             </div>
           </div>

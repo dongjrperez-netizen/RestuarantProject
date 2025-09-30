@@ -202,6 +202,20 @@ class KitchenController extends Controller
         }
 
 
+        // Get ingredients for damage/spoilage modal
+        $ingredients = [];
+        $types = [];
+        try {
+            $ingredients = \App\Models\Ingredients::where('restaurant_id', $restaurantId)
+                ->orderBy('ingredient_name')
+                ->get(['ingredient_id', 'ingredient_name', 'base_unit']);
+            $types = \App\Models\DamageSpoilageLog::getTypes();
+        } catch (\Exception $e) {
+            // Fallback if tables don't exist yet
+            $ingredients = collect([]);
+            $types = ['damage' => 'Damage', 'spoilage' => 'Spoilage'];
+        }
+
         return Inertia::render('Kitchen/Dashboard', [
             'unpaidOrders' => $unpaidOrders,
             'todayStats' => $todayStats,
@@ -210,6 +224,8 @@ class KitchenController extends Controller
                 'name' => 'Kitchen Staff Demo',
                 'email' => 'kitchen@demo.com'
             ],
+            'ingredients' => $ingredients,
+            'damageTypes' => $types,
         ]);
     }
 

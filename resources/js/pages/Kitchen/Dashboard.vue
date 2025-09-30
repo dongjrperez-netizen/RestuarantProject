@@ -4,6 +4,7 @@ import  Badge  from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import DamageSpoilageModal from '@/components/DamageSpoilageModal.vue';
 import {
   ChefHat,
   Clock,
@@ -16,7 +17,8 @@ import {
   Eye,
   User,
   DollarSign,
-  CalendarClock
+  CalendarClock,
+  AlertTriangle
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import axios from 'axios';
@@ -70,10 +72,18 @@ interface TodayStats {
   ready_orders: number;
 }
 
+interface Ingredient {
+  ingredient_id: number;
+  ingredient_name: string;
+  base_unit: string;
+}
+
 interface Props {
   unpaidOrders: CustomerOrder[];
   todayStats: TodayStats;
   employee: Employee;
+  ingredients: Ingredient[];
+  damageTypes: Record<string, string>;
 }
 
 const props = defineProps<Props>();
@@ -103,6 +113,7 @@ const getOrderAge = (dateString: string) => {
 };
 
 const loading = ref(false);
+const showDamageModal = ref(false);
 
 const updateOrderStatus = async (orderId: number, newStatus: string) => {
   if (loading.value) return;
@@ -154,6 +165,19 @@ const getStatusButtonClass = (status: string) => {
 const canUpdateStatus = (status: string) => {
   return ['pending', 'confirmed', 'in_progress'].includes(status);
 };
+
+const openDamageModal = () => {
+  showDamageModal.value = true;
+};
+
+const closeDamageModal = () => {
+  showDamageModal.value = false;
+};
+
+const onDamageReportSuccess = () => {
+  // Optional: You could reload data or show a success message here
+  console.log('Damage/spoilage report submitted successfully');
+};
 </script>
 
 <template>
@@ -171,9 +195,15 @@ const canUpdateStatus = (status: string) => {
               <p class="text-sm text-gray-600">Active orders and kitchen operations</p>
             </div>
           </div>
-          <div class="text-right">
-            <p class="text-sm text-gray-500">{{ new Date().toLocaleDateString() }}</p>
-            <p class="text-xs text-gray-400">{{ new Date().toLocaleTimeString() }}</p>
+          <div class="flex items-center space-x-4">
+            <Button @click="openDamageModal" class="bg-red-600 hover:bg-red-700 text-white">
+              <AlertTriangle class="w-4 h-4 mr-2" />
+              Report Damage/Spoilage
+            </Button>
+            <div class="text-right">
+              <p class="text-sm text-gray-500">{{ new Date().toLocaleDateString() }}</p>
+              <p class="text-xs text-gray-400">{{ new Date().toLocaleTimeString() }}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -273,5 +303,14 @@ const canUpdateStatus = (status: string) => {
         </div>
       </div>
     </div>
+
+    <!-- Damage/Spoilage Modal -->
+    <DamageSpoilageModal
+      :is-open="showDamageModal"
+      :ingredients="ingredients"
+      :types="damageTypes"
+      @close="closeDamageModal"
+      @success="onDamageReportSuccess"
+    />
   </div>
 </template>

@@ -8,6 +8,7 @@ use App\Http\Controllers\AdminSubscriptionController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CashierController;
+use App\Http\Controllers\DamageSpoilageController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ImageUploadController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SupplierPaymentController;
 use App\Http\Controllers\SuppliersController;
 use App\Http\Controllers\UsersubscriptionController;
+use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -35,9 +37,9 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 })->name('home');
 
-Route::get('dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified', 'check.subscription'])->name('dashboard');
+Route::get('dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified', 'check.subscription'])
+    ->name('dashboard');
 
 Route::get('/admin/login', [AdministratorController::class, 'showLogin'])->name('admin.login');
 Route::post('/admin/login', [AdministratorController::class, 'login'])->name('admin.login.submit');
@@ -327,6 +329,11 @@ Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->name('ki
     Route::post('/preparation-orders/{orderId}/items/{itemId}/start', [KitchenController::class, 'startPreparationItem'])->name('preparation-items.start');
     Route::post('/preparation-orders/{orderId}/items/{itemId}/complete', [KitchenController::class, 'completePreparationItem'])->name('preparation-items.complete');
     Route::post('/orders/{orderId}/status', [KitchenController::class, 'updateOrderStatus'])->name('orders.update-status');
+});
+
+// Damage and Spoilage Management Routes (accessible by kitchen staff via modal)
+Route::middleware(['auth:kitchen', 'role:kitchen'])->group(function () {
+    Route::post('/damage-spoilage', [DamageSpoilageController::class, 'store'])->name('damage-spoilage.store');
 });
 
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
