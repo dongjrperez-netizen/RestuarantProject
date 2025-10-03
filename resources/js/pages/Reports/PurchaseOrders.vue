@@ -100,7 +100,7 @@ const formatDate = (dateString: string) => {
 const applyFilters = () => {
   const params = new URLSearchParams();
   Object.entries(filterForm.value).forEach(([key, value]) => {
-    if (value && value !== 'all') params.append(key, value);
+    if (value && value !== 'all') params.append(key, String(value));
   });
 
   router.get(`/reports/purchase-orders?${params.toString()}`, {}, {
@@ -109,12 +109,14 @@ const applyFilters = () => {
   });
 };
 
-const exportReport = (format: string) => {
+const exportReport = (format: string | number | bigint | null) => {
+  if (!format || (typeof format !== 'string' && typeof format !== 'number')) return;
+
   const params = new URLSearchParams();
   Object.entries(filterForm.value).forEach(([key, value]) => {
-    if (value && value !== 'all') params.append(key, value);
+    if (value && value !== 'all') params.append(key, String(value));
   });
-  params.append('export', format);
+  params.append('export', String(format));
 
   window.open(`/reports/purchase-orders?${params.toString()}`);
 };
@@ -196,7 +198,7 @@ const statusOptions = [
   <Head title="Purchase Orders Report" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="max-w-7xl mx-auto space-y-6 px-6">
+     <div class="space-y-6 mx-6">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
@@ -214,7 +216,7 @@ const statusOptions = [
             <Filter class="w-4 h-4 mr-2" />
             Filters
           </Button>
-          <Select @update:model-value="(format) => exportReport(format)">
+          <Select @update:model-value="(value: string | number | bigint | null) => exportReport(value)">
             <SelectTrigger class="w-32">
               <SelectValue placeholder="Export" />
             </SelectTrigger>
@@ -362,7 +364,7 @@ const statusOptions = [
               class="flex items-center justify-between"
             >
               <div class="flex items-center space-x-2">
-                <component :is="getStatusIcon(status)" :class="['w-4 h-4', getStatusColor(status)]" />
+                <component :is="getStatusIcon(String(status))" :class="['w-4 h-4', getStatusColor(String(status))]" />
                 <span class="text-sm font-medium capitalize">{{ status }}</span>
               </div>
               <div class="flex items-center space-x-2">

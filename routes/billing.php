@@ -25,6 +25,16 @@ Route::middleware(['auth:web', 'verified', 'check.subscription'])->prefix('billi
     Route::post('/bills/{bill}/quick-payment', [SupplierBillController::class, 'quickPayment'])
         ->name('bills.quick-payment');
 
+    // GCash Payment Routes (PayMongo)
+    Route::post('/bills/gcash/checkout', [SupplierPaymentController::class, 'createGCashCheckout'])
+        ->name('bills.gcash.checkout');
+
+    Route::get('/bills/gcash/success', [SupplierPaymentController::class, 'gcashSuccess'])
+        ->name('bills.gcash.success');
+
+    Route::get('/bills/gcash/failed', [SupplierPaymentController::class, 'gcashFailed'])
+        ->name('bills.gcash.failed');
+
     // Enhanced Payment Routes with BillingService integration
     Route::post('/payments/record-payment', [SupplierPaymentController::class, 'recordPayment'])
         ->name('payments.record-payment');

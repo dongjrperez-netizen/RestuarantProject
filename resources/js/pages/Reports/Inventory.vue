@@ -15,7 +15,8 @@ import {
   TrendingDown,
   DollarSign,
   BarChart3,
-  Search
+  Search,
+  XCircle
 } from 'lucide-vue-next';
 
 interface InventoryItem {
@@ -27,6 +28,7 @@ interface InventoryItem {
   cost_per_unit: number;
   total_value: number;
   stock_status: 'low' | 'normal';
+  exclusion_count: number;
 }
 
 interface Summary {
@@ -34,6 +36,7 @@ interface Summary {
   low_stock_items: number;
   total_value: number;
   avg_value_per_item: number;
+  total_exclusions: number;
 }
 
 interface StockLevels {
@@ -97,7 +100,7 @@ const highValueItems = [...props.inventoryData.items]
   <Head title="Inventory Analysis Report" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="max-w-7xl mx-auto space-y-6 px-6">
+     <div class="space-y-6 mx-6">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
@@ -184,12 +187,12 @@ const highValueItems = [...props.inventoryData.items]
           <CardContent class="p-6">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-sm font-medium text-muted-foreground">Avg Item Value</p>
-                <p class="text-2xl font-bold">{{ formatCurrency(inventoryData.summary.avg_value_per_item) }}</p>
-                <p class="text-xs text-muted-foreground mt-1">Per item</p>
+                <p class="text-sm font-medium text-muted-foreground">Customer Exclusions</p>
+                <p class="text-2xl font-bold text-amber-600">{{ formatNumber(inventoryData.summary.total_exclusions) }}</p>
+                <p class="text-xs text-muted-foreground mt-1">Ingredients not deducted</p>
               </div>
-              <div class="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center">
-                <BarChart3 class="h-4 w-4 text-purple-600" />
+              <div class="h-8 w-8 bg-amber-100 rounded-full flex items-center justify-center">
+                <XCircle class="h-4 w-4 text-amber-600" />
               </div>
             </div>
           </CardContent>
@@ -313,6 +316,7 @@ const highValueItems = [...props.inventoryData.items]
                   <th class="text-left p-4 font-semibold">Reorder Level</th>
                   <th class="text-left p-4 font-semibold">Unit Cost</th>
                   <th class="text-left p-4 font-semibold">Total Value</th>
+                  <th class="text-left p-4 font-semibold">Exclusions</th>
                   <th class="text-left p-4 font-semibold">Status</th>
                   <th class="text-left p-4 font-semibold">Stock Level</th>
                 </tr>
@@ -337,6 +341,12 @@ const highValueItems = [...props.inventoryData.items]
                   <td class="p-4">{{ formatNumber(item.reorder_level) }} {{ item.base_unit }}</td>
                   <td class="p-4">{{ formatCurrency(item.cost_per_unit) }}</td>
                   <td class="p-4 font-medium">{{ formatCurrency(item.total_value) }}</td>
+                  <td class="p-4">
+                    <span v-if="item.exclusion_count > 0" class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800">
+                      {{ item.exclusion_count }}x excluded
+                    </span>
+                    <span v-else class="text-sm text-muted-foreground">-</span>
+                  </td>
                   <td class="p-4">
                     <Badge :variant="getStockBadgeVariant(item.stock_status)">
                       {{ item.stock_status === 'low' ? 'Low Stock' : 'In Stock' }}

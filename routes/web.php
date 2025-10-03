@@ -343,7 +343,6 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->prefix('reports')
     Route::get('/sales', [ReportsController::class, 'sales'])->name('sales');
     Route::get('/inventory', [ReportsController::class, 'inventory'])->name('inventory');
     Route::get('/purchase-orders', [ReportsController::class, 'purchaseOrders'])->name('purchase-orders');
-    Route::get('/financial', [ReportsController::class, 'financial'])->name('financial');
     Route::get('/wastage', [ReportsController::class, 'wastage'])->name('wastage');
 });
 

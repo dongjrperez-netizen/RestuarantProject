@@ -146,6 +146,12 @@ const recordPayment = async () => {
       throw new Error('Payment amount cannot exceed outstanding amount');
     }
 
+    // If payment method is GCash, redirect to PayMongo checkout
+    if (paymentForm.payment_method === 'gcash') {
+      await processGCashPayment();
+      return;
+    }
+
     // Get fresh CSRF token to ensure it's not stale
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
@@ -222,6 +228,48 @@ const recordPayment = async () => {
   }
 };
 
+// Process GCash payment via PayMongo
+const processGCashPayment = async () => {
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    if (!csrfToken) {
+      throw new Error('CSRF token not found. Please refresh the page and try again.');
+    }
+
+    const response = await fetch(route('bills.gcash.checkout'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        bill_id: bill.bill_id,
+        payment_amount: paymentForm.payment_amount,
+        notes: paymentForm.notes,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'GCash payment processing failed');
+    }
+
+    const data = await response.json();
+
+    if (data.checkout_url) {
+      // Redirect to PayMongo checkout page
+      window.location.href = data.checkout_url;
+    } else {
+      throw new Error('No checkout URL received');
+    }
+  } catch (error) {
+    console.error('GCash payment error:', error);
+    alert('GCash payment failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  }
+};
+
 // Set payment amount to full outstanding amount
 const payFullAmount = () => {
   paymentForm.payment_amount = bill?.outstanding_amount || 0;
@@ -230,8 +278,9 @@ const payFullAmount = () => {
 const getPaymentMethodDisplay = (method: string) => {
   const methods: Record<string, string> = {
     'cash': 'Cash',
-    'bank_transfer': 'Bank Transfer',
+    'gcash': 'GCash',
     'check': 'Check',
+    'bank_transfer': 'Bank Transfer',
     'credit_card': 'Credit Card',
     'paypal': 'PayPal',
     'online': 'Online Payment',
@@ -313,53 +362,13 @@ const payWithPaypal = async () => {
 const payFullAmountPaypal = () => {
   paypalForm.value.payment_amount = bill?.outstanding_amount || 0;
 };
-
-// Debug function to test bill update
-const testBillUpdate = () => {
-  console.log('Current bill data:', {
-    bill_id: bill.bill_id,
-    status: bill.status,
-    paid_amount: bill.paid_amount,
-    outstanding_amount: bill.outstanding_amount,
-    total_amount: bill.total_amount
-  });
-
-  // Test updating bill data
-  const mockUpdatedBill = {
-    status: 'paid',
-    paid_amount: bill.total_amount,
-    outstanding_amount: 0,
-    payments: [...(bill.payments || []), {
-      payment_id: Date.now(),
-      payment_reference: `TEST-${Date.now()}`,
-      payment_amount: bill.outstanding_amount,
-      payment_method: 'test',
-      payment_date: new Date().toISOString(),
-      status: 'completed'
-    }]
-  };
-
-  // Update each property individually
-  bill.status = mockUpdatedBill.status;
-  bill.paid_amount = mockUpdatedBill.paid_amount;
-  bill.outstanding_amount = mockUpdatedBill.outstanding_amount;
-  bill.payments = mockUpdatedBill.payments;
-
-  console.log('Updated bill data:', {
-    bill_id: bill.bill_id,
-    status: bill.status,
-    paid_amount: bill.paid_amount,
-    outstanding_amount: bill.outstanding_amount,
-    total_amount: bill.total_amount
-  });
-};
 </script>
 
 <template>
   <Head :title="`Bill ${bill.bill_number}`" />
 
   <AppLayout title="Bill Details" :breadcrumbs="breadcrumbs">
-    <div class="space-y-6">
+    <div class="mx-6 space-y-6">
       <!-- Bill Header -->
       <div class="flex items-center justify-between">
         <div>
@@ -378,16 +387,6 @@ const testBillUpdate = () => {
 
           <!-- Payment Buttons -->
           <div v-if="bill.outstanding_amount > 0" class="flex space-x-2">
-            <!-- Debug button (remove in production) -->
-            <Button
-              @click="testBillUpdate"
-              variant="outline"
-              size="sm"
-              class="bg-yellow-50 border-yellow-300 text-yellow-700 hover:bg-yellow-100"
-            >
-              Test Update
-            </Button>
-
             <!-- Manual Payment Dialog -->
             <Dialog v-model:open="showPaymentDialog">
               <DialogTrigger as-child>
@@ -432,11 +431,8 @@ const testBillUpdate = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="gcash">GCash</SelectItem>
                         <SelectItem value="check">Check</SelectItem>
-                        <SelectItem value="credit_card">Credit Card</SelectItem>
-                        <SelectItem value="online">Online Payment</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

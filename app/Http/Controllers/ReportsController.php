@@ -126,7 +126,7 @@ class ReportsController extends Controller
             return redirect()->route('dashboard')->with('error', 'No restaurant data found.');
         }
 
-        $dateFrom = $request->get('date_from', Carbon::now()->startOfMonth()->toDateString());
+        $dateFrom = $request->get('date_from', Carbon::now()->subMonths(3)->startOfMonth()->toDateString());
         $dateTo = $request->get('date_to', Carbon::now()->toDateString());
         $status = $request->get('status', 'all');
 
@@ -146,31 +146,6 @@ class ReportsController extends Controller
         ]);
     }
 
-    public function financial(Request $request)
-    {
-        $restaurantId = $this->getRestaurantId();
-
-        if (!$restaurantId) {
-            return redirect()->route('dashboard')->with('error', 'No restaurant data found.');
-        }
-
-        $dateFrom = $request->get('date_from', Carbon::now()->startOfMonth()->toDateString());
-        $dateTo = $request->get('date_to', Carbon::now()->toDateString());
-
-        $financialData = $this->getFinancialData($restaurantId, $dateFrom, $dateTo);
-
-        if ($request->get('export')) {
-            return $this->exportFinancialReport($financialData, $request->get('export'), $dateFrom, $dateTo);
-        }
-
-        return Inertia::render('Reports/Financial', [
-            'financialData' => $financialData,
-            'filters' => [
-                'date_from' => $dateFrom,
-                'date_to' => $dateTo,
-            ],
-        ]);
-    }
 
     public function wastage(Request $request)
     {
@@ -180,7 +155,7 @@ class ReportsController extends Controller
             return redirect()->route('dashboard')->with('error', 'No restaurant data found.');
         }
 
-        $dateFrom = $request->get('date_from', Carbon::now()->startOfMonth()->toDateString());
+        $dateFrom = $request->get('date_from', Carbon::now()->subMonths(3)->startOfMonth()->toDateString());
         $dateTo = $request->get('date_to', Carbon::now()->toDateString());
         $type = $request->get('type', 'all');
 
@@ -247,7 +222,7 @@ class ReportsController extends Controller
     {
         $query = CustomerOrder::where('restaurant_id', $restaurantId)
             ->whereBetween('created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
-            ->where('status', '!=', 'cancelled');
+            ->where('status', 'paid');
 
         \Log::info('Sales Query Debug', [
             'restaurant_id' => $restaurantId,
@@ -277,7 +252,7 @@ class ReportsController extends Controller
         $topItems = CustomerOrderItem::whereHas('order', function($q) use ($restaurantId, $dateFrom, $dateTo) {
                 $q->where('restaurant_id', $restaurantId)
                   ->whereBetween('created_at', [$dateFrom, $dateTo])
-                  ->where('status', '!=', 'cancelled');
+                  ->where('status', 'paid');
             })
             ->with('dish')
             ->selectRaw('dish_id, SUM(quantity) as total_quantity, SUM(quantity * unit_price) as total_revenue')
@@ -294,7 +269,7 @@ class ReportsController extends Controller
             'total_items_sold' => CustomerOrderItem::whereHas('order', function($q) use ($restaurantId, $dateFrom, $dateTo) {
                 $q->where('restaurant_id', $restaurantId)
                   ->whereBetween('created_at', [$dateFrom, $dateTo])
-                  ->where('status', '!=', 'cancelled');
+                  ->where('status', 'paid');
             })->sum('quantity') ?? 0,
         ];
 
@@ -314,11 +289,25 @@ class ReportsController extends Controller
             ->orderBy('ingredient_name')
             ->get();
 
+        // Get customer request exclusions count for each ingredient
+        $exclusions = \App\Models\CustomerRequest::where('restaurant_id', $restaurantId)
+            ->where('request_type', 'exclude')
+            ->selectRaw('ingredient_id, COUNT(*) as exclusion_count')
+            ->groupBy('ingredient_id')
+            ->pluck('exclusion_count', 'ingredient_id');
+
+        // Add exclusion count to each ingredient
+        $ingredients = $ingredients->map(function($ingredient) use ($exclusions) {
+            $ingredient->exclusion_count = $exclusions[$ingredient->ingredient_id] ?? 0;
+            return $ingredient;
+        });
+
         $summary = [
             'total_items' => $ingredients->count(),
             'low_stock_items' => $ingredients->where('stock_status', 'low')->count(),
             'total_value' => $ingredients->sum('total_value'),
             'avg_value_per_item' => $ingredients->avg('total_value') ?? 0,
+            'total_exclusions' => $exclusions->sum(),
         ];
 
         $stockLevels = $ingredients->groupBy('stock_status')->map->count();
@@ -333,7 +322,7 @@ class ReportsController extends Controller
     private function getPurchaseOrdersData($restaurantId, $dateFrom, $dateTo, $status)
     {
         $query = PurchaseOrder::where('restaurant_id', $restaurantId)
-            ->whereBetween('created_at', [$dateFrom, $dateTo])
+            ->whereBetween('created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
             ->with(['supplier', 'items.ingredient']);
 
         if ($status !== 'all') {
@@ -342,11 +331,19 @@ class ReportsController extends Controller
 
         $orders = $query->orderBy('created_at', 'desc')->get();
 
+        // Map delivered status to received for compatibility
+        $orders = $orders->map(function($order) {
+            if ($order->status === 'delivered') {
+                $order->status = 'received';
+            }
+            return $order;
+        });
+
         $summary = [
             'total_orders' => $orders->count(),
             'total_amount' => $orders->sum('total_amount'),
             'pending_orders' => $orders->where('status', 'pending')->count(),
-            'completed_orders' => $orders->where('status', 'received')->count(),
+            'completed_orders' => $orders->whereIn('status', ['received', 'delivered'])->count(),
         ];
 
         $ordersByStatus = $orders->groupBy('status')->map->count();
@@ -358,49 +355,6 @@ class ReportsController extends Controller
         ];
     }
 
-    private function getFinancialData($restaurantId, $dateFrom, $dateTo)
-    {
-        // Revenue from customer orders
-        $revenue = CustomerOrder::where('restaurant_id', $restaurantId)
-            ->whereBetween('created_at', [$dateFrom, $dateTo])
-            ->where('status', '!=', 'cancelled')
-            ->sum('total_amount') ?? 0;
-
-        // Expenses from supplier bills
-        $expenses = SupplierBill::where('restaurant_id', $restaurantId)
-            ->whereBetween('created_at', [$dateFrom, $dateTo])
-            ->sum('total_amount') ?? 0;
-
-        // Wastage costs
-        $wastageCost = DamageSpoilageLog::where('restaurant_id', $restaurantId)
-            ->whereBetween('incident_date', [$dateFrom, $dateTo])
-            ->sum('estimated_cost') ?? 0;
-
-        $netProfit = $revenue - $expenses - $wastageCost;
-        $profitMargin = $revenue > 0 ? ($netProfit / $revenue) * 100 : 0;
-
-        // Daily breakdown
-        $dailyBreakdown = CustomerOrder::where('restaurant_id', $restaurantId)
-            ->whereBetween('created_at', [$dateFrom, $dateTo])
-            ->where('status', '!=', 'cancelled')
-            ->selectRaw('DATE(created_at) as date')
-            ->selectRaw('SUM(total_amount) as daily_revenue')
-            ->selectRaw('COUNT(*) as daily_orders')
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get();
-
-        return [
-            'summary' => [
-                'revenue' => $revenue,
-                'expenses' => $expenses,
-                'wastage_cost' => $wastageCost,
-                'net_profit' => $netProfit,
-                'profit_margin' => $profitMargin,
-            ],
-            'daily_breakdown' => $dailyBreakdown,
-        ];
-    }
 
     private function getWastageData($restaurantId, $dateFrom, $dateTo, $type)
     {
@@ -520,29 +474,6 @@ class ReportsController extends Controller
         }
     }
 
-    private function exportFinancialReport($data, $format, $dateFrom, $dateTo)
-    {
-        $filename = "financial_report_{$dateFrom}_to_{$dateTo}";
-
-        switch ($format) {
-            case 'pdf':
-                return $this->generatePDF('reports.financial_pdf', [
-                    'data' => $data,
-                    'dateFrom' => $dateFrom,
-                    'dateTo' => $dateTo,
-                    'title' => 'Financial Summary Report'
-                ], $filename);
-
-            case 'csv':
-                return $this->generateCSV($this->prepareFinancialCSVData($data), $filename);
-
-            case 'excel':
-                return $this->generateCSV($this->prepareFinancialCSVData($data), $filename, 'xlsx');
-
-            default:
-                return response()->json(['error' => 'Invalid format'], 400);
-        }
-    }
 
     private function exportWastageReport($data, $format, $dateFrom, $dateTo)
     {
@@ -658,6 +589,7 @@ class ReportsController extends Controller
                 'Reorder Level' => $item->reorder_level . ' ' . $item->base_unit,
                 'Unit Cost' => '₱' . number_format($item->cost_per_unit, 2),
                 'Total Value' => '₱' . number_format($item->total_value, 2),
+                'Customer Exclusions' => $item->exclusion_count . 'x',
                 'Status' => $item->stock_status === 'low' ? 'Low Stock' : 'In Stock'
             ];
         }
@@ -683,34 +615,6 @@ class ReportsController extends Controller
         return $csvData;
     }
 
-    private function prepareFinancialCSVData($data)
-    {
-        $csvData = [];
-
-        // Summary
-        $csvData[] = [
-            'Financial Summary',
-            'Revenue' => '₱' . number_format($data['summary']['revenue'], 2),
-            'Expenses' => '₱' . number_format($data['summary']['expenses'], 2),
-            'Wastage Cost' => '₱' . number_format($data['summary']['wastage_cost'], 2),
-            'Net Profit' => '₱' . number_format($data['summary']['net_profit'], 2),
-            'Profit Margin' => number_format($data['summary']['profit_margin'], 2) . '%'
-        ];
-
-        // Add empty row
-        $csvData[] = [];
-
-        // Daily breakdown
-        foreach ($data['daily_breakdown'] as $day) {
-            $csvData[] = [
-                'Date' => $day->date,
-                'Revenue' => '₱' . number_format($day->daily_revenue, 2),
-                'Orders' => $day->daily_orders
-            ];
-        }
-
-        return $csvData;
-    }
 
     private function prepareWastageCSVData($data)
     {

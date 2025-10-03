@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { LoaderCircle } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { LoaderCircle, XCircle } from 'lucide-vue-next';
+import { ref, computed } from 'vue';
 
 const step = ref(1);
 
@@ -25,6 +25,14 @@ const form = useForm({
   address: '',
   postal_code:'',
   contact_number: '',
+});
+
+const hasErrors = computed(() => {
+  return Object.keys(form.errors).length > 0;
+});
+
+const errorMessages = computed(() => {
+  return Object.values(form.errors);
 });
 
 const nextStep = () => {
@@ -49,11 +57,24 @@ const submit = () => {
   <AuthBase title="Create Your Account" description="Join ServeWise to manage your restaurant like a pro">
     <Head title="Register - ServeWise" />
 
+    <!-- Error Alert -->
+    <Alert v-if="hasErrors" variant="destructive" class="mb-6">
+      <XCircle class="h-4 w-4" />
+      <AlertTitle>Registration Error</AlertTitle>
+      <AlertDescription>
+        <ul class="list-disc list-inside space-y-1 mt-2">
+          <li v-for="(error, index) in errorMessages" :key="index" class="text-sm">
+            {{ error }}
+          </li>
+        </ul>
+      </AlertDescription>
+    </Alert>
+
     <!-- Step Progress Indicator -->
     <div class="mb-8">
       <div class="flex items-center justify-center space-x-4">
         <div class="flex items-center">
-          <div :class="['w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold', 
+          <div :class="['w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold',
                        step >= 1 ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-600']">
             1
           </div>
@@ -61,7 +82,7 @@ const submit = () => {
         </div>
         <div class="w-8 h-px bg-gray-300"></div>
         <div class="flex items-center">
-          <div :class="['w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold', 
+          <div :class="['w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold',
                        step >= 2 ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-600']">
             2
           </div>
@@ -69,7 +90,7 @@ const submit = () => {
         </div>
         <div class="w-8 h-px bg-gray-300"></div>
         <div class="flex items-center">
-          <div :class="['w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold', 
+          <div :class="['w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold',
                        step >= 3 ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-600']">
             3
           </div>
@@ -91,19 +112,16 @@ const submit = () => {
             <div class="space-y-2">
               <Label for="first_name">First Name</Label>
               <Input id="first_name" type="text" required autofocus autocomplete="given-name" v-model="form.first_name" placeholder="John" />
-              <InputError :message="form.errors.first_name" />
             </div>
             <div class="space-y-2">
               <Label for="last_name">Last Name</Label>
               <Input id="last_name" type="text" required autocomplete="family-name" v-model="form.last_name" placeholder="Doe" />
-              <InputError :message="form.errors.last_name" />
             </div>
           </div>
 
           <div class="space-y-2">
             <Label for="middle_name">Middle Name <span class="text-gray-400 text-sm">(Optional)</span></Label>
             <Input id="middle_name" type="text" autocomplete="additional-name" v-model="form.middle_name" placeholder="Middle name" />
-            <InputError :message="form.errors.middle_name" />
           </div>
 
           <div class="space-y-2">
@@ -115,7 +133,6 @@ const submit = () => {
               autocomplete="bday"
               placeholder="Select your birth date"
             />
-            <InputError :message="form.errors.date_of_birth" />
           </div>
 
           <div class="space-y-2">
@@ -155,13 +172,11 @@ const submit = () => {
                 <span class="text-sm text-gray-700">Other</span>
               </label>
             </div>
-            <InputError :message="form.errors.gender" />
           </div>
 
           <div class="space-y-2">
             <Label for="email">Email Address</Label>
             <Input id="email" type="email" required autocomplete="email" v-model="form.email" placeholder="john@example.com" />
-            <InputError :message="form.errors.email" />
           </div>
 
         </div>
@@ -182,25 +197,21 @@ const submit = () => {
           <div class="space-y-2">
             <Label for="restaurant_name">Restaurant Name</Label>
             <Input id="restaurant_name" type="text" required autocomplete="organization" v-model="form.restaurant_name" placeholder="Bella Vista Restaurant" />
-            <InputError :message="form.errors.restaurant_name" />
           </div>
 
           <div class="space-y-2">
             <Label for="address">Restaurant Address</Label>
             <Input id="address" type="text" required autocomplete="street-address" v-model="form.address" placeholder="123 Main Street, City" />
-            <InputError :message="form.errors.address" />
           </div>
 
           <div class="space-y-2">
-            <Label for="postal_code">Postal Code</Label>
-            <Input id="postal_code" type="text" required autocomplete="postal-code" v-model="form.postal_code" placeholder="12345" />
-            <InputError :message="form.errors.postal_code" />
+            <Label for="postal_code">Postal Code <span class="text-gray-400 text-sm">(Optional)</span></Label>
+            <Input id="postal_code" type="text" autocomplete="postal-code" v-model="form.postal_code" placeholder="12345" />
           </div>
 
           <div class="space-y-2">
             <Label for="contact_number">Restaurant Phone</Label>
             <Input id="contact_number" type="tel" required autocomplete="tel" v-model="form.contact_number" placeholder="+1 (555) 987-6543" />
-            <InputError :message="form.errors.contact_number" />
           </div>
         </div>
 
@@ -232,7 +243,6 @@ const submit = () => {
               v-model="form.password"
               placeholder="Create a strong password"
             />
-            <InputError :message="form.errors.password" />
             <p class="text-xs text-gray-500 mt-1">Password must be at least 8 characters long</p>
           </div>
 
@@ -246,7 +256,6 @@ const submit = () => {
               v-model="form.password_confirmation"
               placeholder="Confirm your password"
             />
-            <InputError :message="form.errors.password_confirmation" />
           </div>
         </div>
 

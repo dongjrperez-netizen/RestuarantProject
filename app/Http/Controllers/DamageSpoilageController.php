@@ -110,6 +110,14 @@ class DamageSpoilageController extends Controller
             'estimated_cost' => ['nullable', 'numeric', 'min:0'],
         ]);
 
+        // Auto-calculate estimated cost if not provided
+        if (empty($validated['estimated_cost'])) {
+            $ingredient = Ingredients::find($validated['ingredient_id']);
+            if ($ingredient && $ingredient->cost_per_unit > 0) {
+                $validated['estimated_cost'] = $validated['quantity'] * $ingredient->cost_per_unit;
+            }
+        }
+
         DamageSpoilageLog::create([
             'restaurant_id' => $restaurantId,
             'user_id' => $employee->employee_id,
@@ -195,6 +203,14 @@ class DamageSpoilageController extends Controller
             'incident_date' => ['required', 'date', 'before_or_equal:today'],
             'estimated_cost' => ['nullable', 'numeric', 'min:0'],
         ]);
+
+        // Auto-calculate estimated cost if not provided
+        if (empty($validated['estimated_cost'])) {
+            $ingredient = Ingredients::find($validated['ingredient_id']);
+            if ($ingredient && $ingredient->cost_per_unit > 0) {
+                $validated['estimated_cost'] = $validated['quantity'] * $ingredient->cost_per_unit;
+            }
+        }
 
         $log->update($validated);
 

@@ -32,52 +32,69 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        try {
-            $validated = $request->validate([
-                'last_name' => 'required|string|max:255',
-                'first_name' => 'required|string|max:255',
-                'middle_name' => 'required|string|max:255',
-                'date_of_birth' => 'required|date',
-                'gender' => 'required|string|max:255',
-                'email' => 'required|string|lowercase|email|max:255|unique:users,email',
-                // 'phonenumber' => 'required|string|max:20|unique:users,phonenumber',
-                'password' => ['required', 'confirmed', Rules\Password::defaults()],
+        $validated = $request->validate([
+            'last_name' => 'required|string|max:255',
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'required|string|max:255',
+            'date_of_birth' => 'required|date',
+            'gender' => 'required|string|max:255',
+            'email' => 'required|string|lowercase|email|max:255|unique:users,email',
+            // 'phonenumber' => 'required|string|max:20|unique:users,phonenumber',
+            'password' => ['required', 'confirmed', Rules\Password::defaults()],
 
-                'restaurant_name' => 'required|string|max:255',
-                'address' => 'required|string|max:255',
-                'postal_code' => 'required|string|max:20',
-                'contact_number' => 'required|string|max:20|unique:restaurant_data,contact_number',
+            'restaurant_name' => 'required|string|max:255',
+            'address' => 'required|string|max:255',
+            'postal_code' => 'nullable|string|max:20',
+            'contact_number' => 'required|string|max:20|unique:restaurant_data,contact_number',
+        ], [
+            // Personal Information
+            'last_name.required' => 'Last name is required.',
+            'first_name.required' => 'First name is required.',
+            'middle_name.required' => 'Middle name is required.',
+            'date_of_birth.required' => 'Date of birth is required.',
+            'date_of_birth.date' => 'Please provide a valid date of birth.',
+            'gender.required' => 'Gender is required.',
+
+            // Email & Password
+            'email.required' => 'Email address is required.',
+            'email.email' => 'Please provide a valid email address.',
+            'email.unique' => 'This email address is already registered.',
+            'password.required' => 'Password is required.',
+            'password.confirmed' => 'Password confirmation does not match.',
+
+            // Restaurant Information
+            'restaurant_name.required' => 'Restaurant name is required.',
+            'address.required' => 'Restaurant address is required.',
+            'contact_number.required' => 'Contact number is required.',
+            'contact_number.unique' => 'This contact number is already registered.',
+        ]);
+
+        DB::transaction(function () use ($validated) {
+
+            $user = User::create([
+                'last_name' => $validated['last_name'],
+                'first_name' => $validated['first_name'],
+                'middle_name' => $validated['middle_name'],
+                'date_of_birth' => $validated['date_of_birth'],
+                'gender' => $validated['gender'],
+                'email' => $validated['email'],
+                'password' => Hash::make($validated['password']),
             ]);
 
-            DB::transaction(function () use ($validated) {
+            Restaurant_Data::create([
+                'user_id' => $user->id,
+                'restaurant_name' => $validated['restaurant_name'],
+                'address' => $validated['address'],
+                'postal_code' => $validated['postal_code'],
+                'contact_number' => $validated['contact_number'],
+            ]);
+        });
 
-                $user = User::create([
-                    'last_name' => $validated['last_name'],
-                    'first_name' => $validated['first_name'],
-                    'middle_name' => $validated['middle_name'],
-                    'date_of_birth' => $validated['date_of_birth'],
-                    'gender' => $validated['gender'],
-                    'email' => $validated['email'],
-                    'password' => Hash::make($validated['password']),
-                ]);
+        $user = User::where('email', $validated['email'])->first();
+        event(new Registered($user));
+        Auth::login($user);
 
-                Restaurant_Data::create([
-                    'user_id' => $user->id,
-                    'restaurant_name' => $validated['restaurant_name'],
-                    'address' => $validated['address'],
-                    'postal_code' => $validated['postal_code'],
-                    'contact_number' => $validated['contact_number'],
-                ]);
-            });
-
-            $user = User::where('email', $validated['email'])->first();
-            event(new Registered($user));
-            Auth::login($user);
-
-            return redirect()->route('register.documents');
-        } catch (\Exception $e) {
-            dd($e->getMessage());
-        }
+        return redirect()->route('register.documents');
     }
 
     public function showDocumentUpload(): Response

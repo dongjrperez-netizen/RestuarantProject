@@ -104,12 +104,20 @@
             background-color: #d1fae5;
             color: #059669;
         }
+        .badge-warning {
+            background-color: #fef3c7;
+            color: #d97706;
+        }
         .text-red {
             color: #dc2626;
             font-weight: 600;
         }
         .text-green {
             color: #059669;
+            font-weight: 600;
+        }
+        .text-amber {
+            color: #d97706;
             font-weight: 600;
         }
         .footer {
@@ -142,8 +150,8 @@
             <div class="value">₱{{ number_format($data['summary']['total_value'], 2) }}</div>
         </div>
         <div class="summary-card">
-            <h3>Average Item Value</h3>
-            <div class="value">₱{{ number_format($data['summary']['avg_value_per_item'], 2) }}</div>
+            <h3>Customer Exclusions</h3>
+            <div class="value text-amber">{{ number_format($data['summary']['total_exclusions']) }}</div>
         </div>
     </div>
 
@@ -184,6 +192,7 @@
                     <th class="text-right">Reorder Level</th>
                     <th class="text-right">Unit Cost</th>
                     <th class="text-right">Total Value</th>
+                    <th class="text-right">Exclusions</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -197,6 +206,13 @@
                     <td class="text-right">{{ number_format($item->reorder_level) }} {{ $item->base_unit }}</td>
                     <td class="text-right">₱{{ number_format($item->cost_per_unit, 2) }}</td>
                     <td class="text-right">₱{{ number_format($item->total_value, 2) }}</td>
+                    <td class="text-right">
+                        @if($item->exclusion_count > 0)
+                            <span class="badge badge-warning">{{ $item->exclusion_count }}x</span>
+                        @else
+                            -
+                        @endif
+                    </td>
                     <td>
                         <span class="badge {{ $item->stock_status === 'low' ? 'badge-danger' : 'badge-success' }}">
                             {{ $item->stock_status === 'low' ? 'Low Stock' : 'In Stock' }}

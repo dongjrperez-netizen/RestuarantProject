@@ -6,6 +6,7 @@ use App\Models\Table;
 use App\Models\Employee;
 use App\Models\CustomerOrder;
 use App\Models\CustomerOrderItem;
+use App\Models\CustomerRequest;
 use App\Models\Dish;
 use App\Models\MenuPlan;
 use Illuminate\Http\Request;
@@ -486,6 +487,8 @@ class WaiterController extends Controller
             'order_items.*.dish_id' => 'required|exists:dishes,dish_id',
             'order_items.*.quantity' => 'required|integer|min:1',
             'order_items.*.special_instructions' => 'nullable|string',
+            'order_items.*.excluded_ingredients' => 'nullable|array',
+            'order_items.*.excluded_ingredients.*' => 'exists:ingredients,ingredient_id',
         ]);
 
         // Verify table belongs to the same restaurant
@@ -533,6 +536,21 @@ class WaiterController extends Controller
             foreach ($validated['order_items'] as $item) {
                 $dish = Dish::find($item['dish_id']);
 
+                // Save customer requests for excluded ingredients FIRST (before creating order item)
+                // This ensures the exclusions are already in the database when inventory deduction happens
+                if (!empty($item['excluded_ingredients'])) {
+                    foreach ($item['excluded_ingredients'] as $ingredientId) {
+                        CustomerRequest::create([
+                            'order_id' => $order->order_id,
+                            'dish_id' => $item['dish_id'],
+                            'ingredient_id' => $ingredientId,
+                            'restaurant_id' => $restaurantId,
+                            'request_type' => 'exclude',
+                            'notes' => 'Customer requested to exclude this ingredient',
+                        ]);
+                    }
+                }
+
                 // Check if this dish already exists in the order
                 $existingItem = CustomerOrderItem::where('order_id', $order->order_id)
                     ->where('dish_id', $item['dish_id'])
@@ -544,7 +562,7 @@ class WaiterController extends Controller
                     $existingItem->quantity += $item['quantity'];
                     $existingItem->save();
                 } else {
-                    // Create new order item
+                    // Create new order item (this triggers inventory deduction)
                     CustomerOrderItem::create([
                         'order_id' => $order->order_id,
                         'dish_id' => $item['dish_id'],

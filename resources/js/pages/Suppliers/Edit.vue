@@ -100,7 +100,7 @@ const submit = () => {
   <Head title="Edit Supplier" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="p-6">
+    <div class="space-y-6 mx-6">
       <!-- Header -->
       <div class="flex justify-between items-center mb-6">
         <div>

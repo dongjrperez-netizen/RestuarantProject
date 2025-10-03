@@ -132,7 +132,7 @@ const totalOrders = computed(() => {
   <Head title="Financial Summary Report" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="max-w-7xl mx-auto space-y-6 px-6">
+     <div class="space-y-6 mx-6">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">

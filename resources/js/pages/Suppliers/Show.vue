@@ -67,7 +67,7 @@ const formatDate = (dateString: string) => {
   <Head :title="`Supplier - ${supplier.supplier_name}`" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="space-y-6">
+    <div class="space-y-6 mx-6">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
@@ -197,17 +197,26 @@ const formatDate = (dateString: string) => {
             <TableHeader>
               <TableRow>
                 <TableHead>Ingredient Name</TableHead>
-                <TableHead>Unit</TableHead>
+                <TableHead>Package Unit</TableHead>
+                <TableHead>Package Quantity</TableHead>
+                <TableHead class="text-right">Package Price</TableHead>
                 <TableHead class="text-right">Price per Unit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               <TableRow v-for="ingredient in supplier.ingredients" :key="ingredient.ingredient_id">
                 <TableCell class="font-medium">{{ ingredient.ingredient_name }}</TableCell>
-                <TableCell>{{ ingredient.unit_of_measurement }}</TableCell>
+                <TableCell>{{ ingredient.pivot?.package_unit || '-' }}</TableCell>
+                <TableCell>{{ ingredient.pivot?.package_quantity || '-' }}</TableCell>
                 <TableCell class="text-right">
-                  <span v-if="ingredient.pivot?.price_per_unit">
-                    {{ formatCurrency(Number(ingredient.pivot.price_per_unit)) }}
+                  <span v-if="ingredient.pivot?.package_price">
+                    {{ formatCurrency(Number(ingredient.pivot.package_price)) }}
+                  </span>
+                  <span v-else class="text-muted-foreground">-</span>
+                </TableCell>
+                <TableCell class="text-right">
+                  <span v-if="ingredient.pivot?.package_price && ingredient.pivot?.package_quantity">
+                    {{ formatCurrency(Number(ingredient.pivot.package_price) / Number(ingredient.pivot.package_quantity)) }}
                   </span>
                   <span v-else class="text-muted-foreground">-</span>
                 </TableCell>

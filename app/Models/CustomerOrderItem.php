@@ -96,11 +96,29 @@ class CustomerOrderItem extends Model
             return;
         }
 
+        // Get excluded ingredients for this order item
+        $excludedIngredientIds = CustomerRequest::where('order_id', $this->order_id)
+            ->where('dish_id', $this->dish_id)
+            ->where('request_type', 'exclude')
+            ->pluck('ingredient_id')
+            ->toArray();
+
         // Deduct each ingredient based on the order quantity
         foreach ($dishIngredients as $dishIngredient) {
             $ingredient = $dishIngredient->ingredient;
             if (!$ingredient) {
                 \Log::warning("Ingredient not found for dish ingredient ID {$dishIngredient->id}");
+                continue;
+            }
+
+            // Skip this ingredient if customer requested exclusion
+            if (in_array($ingredient->ingredient_id, $excludedIngredientIds)) {
+                \Log::info("Ingredient excluded from inventory deduction", [
+                    'order_item_id' => $this->item_id,
+                    'ingredient_id' => $ingredient->ingredient_id,
+                    'ingredient_name' => $ingredient->ingredient_name,
+                    'reason' => 'Customer requested exclusion',
+                ]);
                 continue;
             }
 

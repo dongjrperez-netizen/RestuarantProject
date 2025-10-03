@@ -18,7 +18,8 @@ import DialogDescription from '@/components/ui/dialog/DialogDescription.vue';
 import DialogFooter from '@/components/ui/dialog/DialogFooter.vue';
 import DialogHeader from '@/components/ui/dialog/DialogHeader.vue';
 import DialogTitle from '@/components/ui/dialog/DialogTitle.vue';
-import { Plus, Minus, Users, Clock, AlertTriangle, ChefHat, ShoppingCart } from 'lucide-vue-next';
+import { Plus, Minus, Users, Clock, AlertTriangle, ChefHat, ShoppingCart, ChevronDown, ChevronUp } from 'lucide-vue-next';
+import Checkbox from '@/components/ui/checkbox/Checkbox.vue';
 
 interface Table {
   id: number;
@@ -26,6 +27,18 @@ interface Table {
   table_name: string;
   seats: number;
   status: string;
+}
+
+interface Ingredient {
+  ingredient_id: number;
+  ingredient_name: string;
+  unit: string;
+}
+
+interface DishIngredient {
+  dish_ingredient_id: number;
+  quantity_required: number;
+  ingredient: Ingredient;
 }
 
 interface Dish {
@@ -41,6 +54,7 @@ interface Dish {
     category_id: number;
     category_name: string;
   };
+  dish_ingredients?: DishIngredient[];
 }
 
 interface Employee {
@@ -58,6 +72,7 @@ interface OrderItem {
   dish: Dish;
   quantity: number;
   special_instructions: string;
+  excluded_ingredients?: number[];
 }
 
 interface OrderFormData {
@@ -111,6 +126,8 @@ const showQuantityModal = ref(false);
 const showCartModal = ref(false);
 const modalQuantity = ref(1);
 const modalSpecialInstructions = ref('');
+const showIngredients = ref(false);
+const excludedIngredients = ref<number[]>([]);
 
 const categories = computed(() => {
   if (!props.dishes || !Array.isArray(props.dishes)) {
@@ -171,12 +188,22 @@ const openQuantityModal = (dish: Dish) => {
   selectedDish.value = dish;
   modalQuantity.value = 1;
   modalSpecialInstructions.value = '';
+  showIngredients.value = false;
+  excludedIngredients.value = [];
 
   // Check if dish already exists in order to pre-fill quantity and instructions
   const existingItem = orderItems.value.find(item => item.dish_id === dish.dish_id);
   if (existingItem) {
     modalQuantity.value = existingItem.quantity;
     modalSpecialInstructions.value = existingItem.special_instructions;
+    excludedIngredients.value = existingItem.excluded_ingredients || [];
+    console.log('Opening modal for existing item:', {
+      dish_id: dish.dish_id,
+      excluded_ingredients: excludedIngredients.value,
+      existing_excluded: existingItem.excluded_ingredients
+    });
+  } else {
+    console.log('Opening modal for new dish:', dish.dish_id);
   }
 
   showQuantityModal.value = true;
@@ -188,10 +215,19 @@ const addDishToOrder = () => {
   const existingItemIndex = orderItems.value.findIndex(item => item.dish_id === selectedDish.value!.dish_id);
   const isNewItem = existingItemIndex === -1;
 
+  console.log('Adding dish to order:', {
+    dish_id: selectedDish.value.dish_id,
+    excluded_ingredients: excludedIngredients.value,
+    is_new: isNewItem
+  });
+
   if (existingItemIndex > -1) {
     // Update existing item
     orderItems.value[existingItemIndex].quantity = modalQuantity.value;
     orderItems.value[existingItemIndex].special_instructions = modalSpecialInstructions.value;
+    orderItems.value[existingItemIndex].excluded_ingredients = excludedIngredients.value.length > 0 ? [...excludedIngredients.value] : [];
+
+    console.log('Updated item:', orderItems.value[existingItemIndex]);
   } else {
     // Add new item
     orderItems.value.push({
@@ -199,7 +235,10 @@ const addDishToOrder = () => {
       dish: selectedDish.value,
       quantity: modalQuantity.value,
       special_instructions: modalSpecialInstructions.value,
+      excluded_ingredients: excludedIngredients.value.length > 0 ? [...excludedIngredients.value] : [],
     });
+
+    console.log('Added new item:', orderItems.value[orderItems.value.length - 1]);
   }
 
   showQuantityModal.value = false;
@@ -215,6 +254,19 @@ const closeQuantityModal = () => {
   selectedDish.value = null;
   modalQuantity.value = 1;
   modalSpecialInstructions.value = '';
+  showIngredients.value = false;
+  excludedIngredients.value = [];
+};
+
+const toggleIngredientExclusion = (ingredientId: number) => {
+  const index = excludedIngredients.value.indexOf(ingredientId);
+  if (index > -1) {
+    excludedIngredients.value.splice(index, 1);
+    console.log('Removed ingredient:', ingredientId, 'Current excluded:', excludedIngredients.value);
+  } else {
+    excludedIngredients.value.push(ingredientId);
+    console.log('Added ingredient:', ingredientId, 'Current excluded:', excludedIngredients.value);
+  }
 };
 
 const removeDishFromOrder = (dishId: number) => {
@@ -245,10 +297,14 @@ const submitOrder = () => {
     dish_id: item.dish_id,
     quantity: item.quantity,
     special_instructions: item.special_instructions,
+    excluded_ingredients: item.excluded_ingredients || [],
   }));
+
+  console.log('Submitting order with items:', orderForm.order_items);
 
   orderForm.post(route('waiter.orders.store'), {
     onSuccess: () => {
+      console.log('Order submitted successfully!');
       showCartModal.value = false;
       // Clear the cart after successful submission
       orderItems.value = [];
@@ -558,6 +614,59 @@ const getAllergenBadgeColor = (allergen: string) => {
             </div>
           </div>
 
+          <!-- Ingredients Section -->
+          <div v-if="selectedDish.dish_ingredients && selectedDish.dish_ingredients.length > 0" class="space-y-2">
+            <div class="flex items-center justify-between">
+              <Label class="text-sm font-medium">Ingredients</Label>
+              <Button
+                @click="showIngredients = !showIngredients"
+                variant="ghost"
+                size="sm"
+                type="button"
+                class="h-8"
+              >
+                <component :is="showIngredients ? ChevronUp : ChevronDown" class="h-4 w-4 mr-1" />
+                {{ showIngredients ? 'Hide' : 'Show' }}
+              </Button>
+            </div>
+
+            <div v-if="showIngredients" class="space-y-2 p-3 bg-muted/50 rounded-lg border max-h-48 overflow-y-auto">
+              <p class="text-xs text-muted-foreground mb-2">
+                Select ingredients to exclude (for allergies or preferences):
+              </p>
+              <div
+                v-for="dishIngredient in selectedDish.dish_ingredients"
+                :key="dishIngredient.dish_ingredient_id"
+                class="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
+                @click="toggleIngredientExclusion(dishIngredient.ingredient.ingredient_id)"
+              >
+                <input
+                  type="checkbox"
+                  :id="`ingredient-${dishIngredient.ingredient.ingredient_id}`"
+                  :checked="excludedIngredients.includes(dishIngredient.ingredient.ingredient_id)"
+                  class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  @click.stop
+                  @change="toggleIngredientExclusion(dishIngredient.ingredient.ingredient_id)"
+                />
+                <label
+                  :for="`ingredient-${dishIngredient.ingredient.ingredient_id}`"
+                  class="flex-1 text-sm cursor-pointer"
+                >
+                  {{ dishIngredient.ingredient.ingredient_name }}
+                  <span class="text-xs text-muted-foreground ml-1">
+                    ({{ dishIngredient.quantity_required }} {{ dishIngredient.ingredient.unit }})
+                  </span>
+                </label>
+              </div>
+
+              <div v-if="excludedIngredients.length > 0" class="mt-2 pt-2 border-t">
+                <p class="text-xs font-medium text-amber-600">
+                  ⚠️ {{ excludedIngredients.length }} ingredient(s) will be excluded
+                </p>
+              </div>
+            </div>
+          </div>
+
           <!-- Special Instructions -->
           <div class="space-y-2">
             <Label for="special-instructions">Special Instructions (Optional)</Label>
@@ -679,6 +788,9 @@ const getAllergenBadgeColor = (allergen: string) => {
                       <p class="text-xs text-muted-foreground">₱{{ item.dish.price }} each</p>
                       <p v-if="item.special_instructions" class="text-xs text-muted-foreground mt-1 italic">
                         Special: {{ item.special_instructions }}
+                      </p>
+                      <p v-if="item.excluded_ingredients && item.excluded_ingredients.length > 0" class="text-xs text-amber-600 mt-1 font-medium">
+                        ⚠️ {{ item.excluded_ingredients.length }} ingredient(s) excluded
                       </p>
                     </div>
 

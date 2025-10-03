@@ -94,16 +94,6 @@ const reportModules = [
     count: 'Supplier insights'
   },
   {
-    id: 'financial',
-    title: 'Financial Summary',
-    description: 'Review revenue, expenses, profit margins, and financial health',
-    icon: DollarSign,
-    href: '/reports/financial',
-    color: 'bg-yellow-500',
-    stats: 'P&L analysis',
-    count: 'Cost breakdown'
-  },
-  {
     id: 'wastage',
     title: 'Wastage & Spoilage',
     description: 'Monitor waste, spoilage costs, and identify areas for improvement',
@@ -120,7 +110,7 @@ const reportModules = [
   <Head title="Reports & Analytics" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="max-w-7xl mx-auto space-y-6 px-6">
+    <div class="space-y-6 mx-6">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div>
@@ -132,77 +122,7 @@ const reportModules = [
             <Download class="w-4 h-4 mr-2" />
             Export All
           </Button>
-          <Button>
-            <Calendar class="w-4 h-4 mr-2" />
-            Schedule Reports
-          </Button>
         </div>
-      </div>
-
-      <!-- Key Metrics Overview -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardContent class="p-6">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Today's Sales</p>
-                <p class="text-2xl font-bold">{{ formatCurrency(overview.sales.today) }}</p>
-                <p class="text-xs text-muted-foreground mt-1">{{ overview.orders.today }} orders</p>
-              </div>
-              <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <TrendingUp class="h-4 w-4 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent class="p-6">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Monthly Revenue</p>
-                <p class="text-2xl font-bold">{{ formatCurrency(overview.sales.this_month) }}</p>
-                <p class="text-xs text-muted-foreground mt-1">{{ overview.orders.this_month }} total orders</p>
-              </div>
-              <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                <DollarSign class="h-4 w-4 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent class="p-6">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Inventory Value</p>
-                <p class="text-2xl font-bold">{{ formatCurrency(overview.inventory.total_value) }}</p>
-                <p class="text-xs text-red-500 mt-1" v-if="overview.inventory.low_stock_items > 0">
-                  {{ overview.inventory.low_stock_items }} items low stock
-                </p>
-                <p class="text-xs text-green-500 mt-1" v-else>All items in stock</p>
-              </div>
-              <div class="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center">
-                <Package class="h-4 w-4 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent class="p-6">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Monthly Wastage</p>
-                <p class="text-2xl font-bold">{{ formatCurrency(overview.wastage.this_month_cost) }}</p>
-                <p class="text-xs text-muted-foreground mt-1">{{ overview.wastage.this_month_count }} incidents</p>
-              </div>
-              <div class="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
-                <TrendingDown class="h-4 w-4 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <!-- Report Modules -->
@@ -247,95 +167,6 @@ const reportModules = [
           </CardContent>
         </Card>
       </div>
-
-      <!-- Quick Actions -->
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Frequently used reporting features</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button variant="outline" class="h-auto p-4 flex flex-col items-center space-y-2">
-              <BarChart3 class="h-6 w-6" />
-              <span>Daily Sales Summary</span>
-            </Button>
-            <Button variant="outline" class="h-auto p-4 flex flex-col items-center space-y-2">
-              <Package class="h-6 w-6" />
-              <span>Low Stock Alert</span>
-            </Button>
-            <Button variant="outline" class="h-auto p-4 flex flex-col items-center space-y-2">
-              <DollarSign class="h-6 w-6" />
-              <span>Weekly P&L</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <!-- Recent Reports -->
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Reports</CardTitle>
-          <CardDescription>Your recently generated reports</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div class="space-y-4">
-            <div class="flex items-center justify-between p-4 border rounded-lg">
-              <div class="flex items-center space-x-3">
-                <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <BarChart3 class="h-4 w-4 text-blue-600" />
-                </div>
-                <div>
-                  <p class="font-medium">Sales Performance - September 2025</p>
-                  <p class="text-sm text-muted-foreground">Generated 2 hours ago</p>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2">
-                <Badge variant="secondary">PDF</Badge>
-                <Button variant="ghost" size="sm">
-                  <Download class="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div class="flex items-center justify-between p-4 border rounded-lg">
-              <div class="flex items-center space-x-3">
-                <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                  <Package class="h-4 w-4 text-green-600" />
-                </div>
-                <div>
-                  <p class="font-medium">Inventory Analysis - Current Stock</p>
-                  <p class="text-sm text-muted-foreground">Generated yesterday</p>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2">
-                <Badge variant="secondary">Excel</Badge>
-                <Button variant="ghost" size="sm">
-                  <Download class="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div class="flex items-center justify-between p-4 border rounded-lg">
-              <div class="flex items-center space-x-3">
-                <div class="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
-                  <AlertTriangle class="h-4 w-4 text-red-600" />
-                </div>
-                <div>
-                  <p class="font-medium">Wastage Report - September 2025</p>
-                  <p class="text-sm text-muted-foreground">Generated 3 days ago</p>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2">
-                <Badge variant="secondary">CSV</Badge>
-                <Button variant="ghost" size="sm">
-                  <Download class="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   </AppLayout>
 </template>

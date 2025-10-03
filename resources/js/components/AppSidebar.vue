@@ -4,7 +4,7 @@ import { Link } from '@inertiajs/vue3'
 import {
   Users, UserRound, Box, ClipboardList,
   UtensilsCrossed, ShoppingCart, Truck, Receipt,
-  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar, BarChart3
+  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar, BarChart3, ChevronRight
 } from "lucide-vue-next"
 
 import {
@@ -60,7 +60,7 @@ const navItems = [
     ]
   },
   { title: "Tables", href: "/pos/tables", icon: Box },
-  { title: "Reports", href: "/reports", icon: BarChart3 },
+  { title: "Generate reports", href: "/reports", icon: BarChart3 },
 ]
 
 
@@ -117,6 +117,10 @@ watch(openCollapsibles, (val) => {
                     <SidebarMenuButton>
                       <component :is="item.icon" class="mr-2 h-4 w-4" />
                       <span>{{ item.title }}</span>
+                      <ChevronRight
+                        class="ml-auto h-4 w-4 transition-transform duration-200"
+                        :class="{ 'rotate-90': openCollapsibles[item.title] }"
+                      />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
 

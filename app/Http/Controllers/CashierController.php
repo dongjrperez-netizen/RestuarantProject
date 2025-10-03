@@ -270,6 +270,13 @@ class CashierController extends Controller
             'status' => 'paid',
         ]);
 
+        // Update table status to available
+        if ($order->table) {
+            $order->table->update([
+                'status' => 'available'
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Payment processed successfully!',
@@ -625,6 +632,13 @@ class CashierController extends Controller
 
                 // Update order status to paid
                 $order->update(['status' => 'paid']);
+
+                // Update table status to available
+                if ($order->table) {
+                    $order->table->update([
+                        'status' => 'available'
+                    ]);
+                }
 
                 // Clear session data
                 session()->forget('paypal_order_payment');

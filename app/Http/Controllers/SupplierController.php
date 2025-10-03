@@ -24,7 +24,7 @@ class SupplierController extends Controller
 
     public function show($id)
     {
-        $supplier = Supplier::with(['ingredients.pivot', 'purchaseOrders', 'bills.payments'])
+        $supplier = Supplier::with(['ingredients', 'purchaseOrders', 'bills.payments'])
             ->findOrFail($id);
 
         return Inertia::render('Suppliers/Show', [
@@ -92,7 +92,7 @@ class SupplierController extends Controller
 
     public function edit($id)
     {
-        $supplier = Supplier::with(['ingredients.pivot'])->findOrFail($id);
+        $supplier = Supplier::with(['ingredients'])->findOrFail($id);
         $allIngredients = Ingredients::where('restaurant_id', auth()->user()->restaurantData->id)
             ->orderBy('ingredient_name')
             ->get();
