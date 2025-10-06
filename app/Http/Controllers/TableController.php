@@ -6,9 +6,11 @@ use App\Models\Table;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class TableController extends Controller
 {
+    use AuthorizesRequests;
     public function index()
     {
         $tables = Table::where('user_id', Auth::id())

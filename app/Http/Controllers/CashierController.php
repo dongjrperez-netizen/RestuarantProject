@@ -75,7 +75,7 @@ class CashierController extends Controller
         }
 
         // Get unpaid orders from this restaurant (exclude paid orders)
-        $orders = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments'])
+        $orders = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments', 'reservation'])
             ->where('restaurant_id', $employee->user_id)  // Filter by restaurant
             ->whereIn('status', ['pending', 'ready', 'completed','in_progress'])  // Exclude paid orders
             ->orderBy('updated_at', 'desc')
@@ -111,7 +111,7 @@ class CashierController extends Controller
         }
 
         // Get the specific order with all details
-        $order = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments'])
+        $order = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments', 'reservation'])
             ->where('restaurant_id', $employee->user_id)  // Filter by restaurant
             ->where('order_id', $orderId)
             ->firstOrFail();
@@ -149,8 +149,8 @@ class CashierController extends Controller
             abort(403, 'Access denied. Cashiers only.');
         }
 
-        // Get the specific order with all details including payments
-        $order = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments'])
+        // Get the specific order with all details including payments and reservation
+        $order = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments', 'reservation'])
             ->where('restaurant_id', $employee->user_id)  // Filter by restaurant
             ->where('order_id', $orderId)
             ->firstOrFail();
@@ -238,8 +238,9 @@ class CashierController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
 
-        // Get the order
-        $order = CustomerOrder::where('restaurant_id', $employee->user_id)
+        // Get the order with reservation
+        $order = CustomerOrder::with('reservation')
+            ->where('restaurant_id', $employee->user_id)
             ->where('order_id', $orderId)
             ->firstOrFail();
 
@@ -277,6 +278,20 @@ class CashierController extends Controller
             ]);
         }
 
+        // Update reservation status to completed if order has reservation
+        if ($order->reservation) {
+            $order->reservation->update([
+                'status' => 'completed'
+            ]);
+
+            \Log::info('Reservation marked as completed after payment', [
+                'reservation_id' => $order->reservation->id,
+                'order_id' => $orderId,
+                'customer' => $order->reservation->customer_name,
+            ]);
+        }
+
+        // Return JSON response for frontend to handle redirect
         return response()->json([
             'success' => true,
             'message' => 'Payment processed successfully!',
@@ -286,7 +301,8 @@ class CashierController extends Controller
                 'amount_paid' => $request->amount_paid,
                 'change_amount' => $changeAmount > 0 ? $changeAmount : 0,
                 'payment_method' => $request->payment_method
-            ]
+            ],
+            'redirect_url' => route('cashier.successful-payments')
         ]);
     }
 
@@ -686,5 +702,40 @@ class CashierController extends Controller
 
         return redirect()->route('cashier.bills')
             ->with('info', 'PayPal payment was cancelled');
+    }
+
+    public function paymentSuccess(Request $request)
+    {
+        // Get the authenticated employee
+        $employee = Auth::guard('cashier')->user();
+
+        if (!$employee || strtolower($employee->role->role_name) !== 'cashier') {
+            abort(403, 'Access denied. Cashiers only.');
+        }
+
+        $orderId = $request->get('order_id');
+
+        if (!$orderId) {
+            return redirect()->route('cashier.bills')->with('error', 'Order ID is required');
+        }
+
+        // Get the specific order with all details
+        $order = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments', 'reservation'])
+            ->where('restaurant_id', $employee->user_id)
+            ->where('order_id', $orderId)
+            ->firstOrFail();
+
+        // Get the most recent completed payment for this order
+        $payment = $order->payments()->where('status', 'completed')->latest()->first();
+
+        if (!$payment) {
+            return redirect()->route('cashier.bills')->with('error', 'Payment not found');
+        }
+
+        return Inertia::render('Cashier/PaymentSuccess', [
+            'employee' => $employee->load('role'),
+            'order' => $order,
+            'payment' => $payment,
+        ]);
     }
 }

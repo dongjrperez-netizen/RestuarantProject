@@ -24,7 +24,11 @@ class KitchenController extends Controller
 
         try {
             // Get customer orders that need kitchen attention
-            $unpaidOrders = CustomerOrder::with(['table', 'orderItems.dish', 'employee'])
+            $unpaidOrders = CustomerOrder::with([
+                'table',
+                'orderItems.dish',
+                'employee'
+            ])
             ->where('restaurant_id', $restaurantId)
             ->whereIn('status', ['pending', 'ready', 'completed', 'in_progress'])
             ->whereHas('orderItems', function ($query) {
@@ -34,6 +38,17 @@ class KitchenController extends Controller
             ->orderBy('created_at', 'desc')
             ->limit(20)
             ->get();
+
+            // Load excluded ingredients for each order item
+            foreach ($unpaidOrders as $order) {
+                foreach ($order->orderItems as $item) {
+                    $item->excluded_ingredients = \App\Models\CustomerRequest::where('order_id', $order->order_id)
+                        ->where('dish_id', $item->dish_id)
+                        ->where('request_type', 'exclude')
+                        ->with('ingredient')
+                        ->get();
+                }
+            }
 
             // Relationship should be loaded via with() clause above
 

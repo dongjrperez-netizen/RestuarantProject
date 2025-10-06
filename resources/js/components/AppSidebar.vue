@@ -32,6 +32,7 @@ const navItems = [
     icon: Users,
     children: [
       { title: "Employees", href: '/employees', icon: UserRound },
+      { title: "Regular Employees", href: '/regular-employees', icon: Users },
       { title: "My Subscriptions", href: '/user-management/subscriptions', icon: CreditCard },
     ]
   },

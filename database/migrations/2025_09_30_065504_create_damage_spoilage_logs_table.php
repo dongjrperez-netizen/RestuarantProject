@@ -28,7 +28,7 @@ return new class extends Migration
             // Foreign key constraints
             $table->foreign('restaurant_id')->references('id')->on('restaurant_data')->onDelete('cascade');
             $table->foreign('ingredient_id')->references('ingredient_id')->on('ingredients')->onDelete('cascade');
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+            $table->foreign('user_id')->references('employee_id')->on('employees')->onDelete('cascade');
 
             // Indexes for better performance
             $table->index(['restaurant_id', 'incident_date']);

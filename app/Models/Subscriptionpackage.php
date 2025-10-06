@@ -18,6 +18,8 @@ class Subscriptionpackage extends Model
         'plan_name',
         'plan_price',
         'plan_duration',
-        'paypal_plan_id', // ← ADD THIS LINE
+        'paypal_plan_id',
+        'employee_limit',
+        'supplier_limit',
     ];
 }

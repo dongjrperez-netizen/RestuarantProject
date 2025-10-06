@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Models\Role;
+use App\Services\SubscriptionLimitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -48,15 +49,29 @@ class EmployeeController extends Controller
 
     public function create()
     {
+        $limitService = new SubscriptionLimitService();
+        $limitCheck = $limitService->canAddEmployee(Auth::user());
+
         $roles = Role::all();
 
         return Inertia::render('UserManagement/CreateEmployee', [
             'roles' => $roles,
+            'subscriptionLimits' => $limitCheck,
         ]);
     }
 
     public function store(Request $request)
     {
+        // Check subscription limits
+        $limitService = new SubscriptionLimitService();
+        $limitCheck = $limitService->canAddEmployee(Auth::user());
+
+        if (! $limitCheck['allowed']) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['subscription' => $limitCheck['message']]);
+        }
+
         $validated = $request->validate([
             'firstname' => 'required|string|max:255',
             'lastname' => 'required|string|max:255',

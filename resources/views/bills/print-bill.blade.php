@@ -329,6 +329,12 @@
                 <td>Tax (12% VAT):</td>
                 <td class="text-right">₱{{ number_format($tax, 2) }}</td>
             </tr>
+            @if($order->reservation_fee && $order->reservation_fee > 0)
+            <tr>
+                <td>Reservation Fee:</td>
+                <td class="text-right" style="color: #007bff;">₱{{ number_format($order->reservation_fee, 2) }}</td>
+            </tr>
+            @endif
             @if($discountAmount > 0)
             <tr>
                 <td>Discount ({{ $discountReason }}):</td>

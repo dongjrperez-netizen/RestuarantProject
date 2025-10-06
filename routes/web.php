@@ -12,6 +12,7 @@ use App\Http\Controllers\DamageSpoilageController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\RegularEmployeeController;
 use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\KitchenController;
 use App\Http\Controllers\MenuController;
@@ -128,6 +129,9 @@ Route::middleware(['auth:cashier', 'role:cashier'])->prefix('cashier')->name('ca
     Route::get('/payment/paypal/success', [CashierController::class, 'paypalSuccess'])->name('payment.paypal.success');
     Route::get('/payment/paypal/cancel', [CashierController::class, 'paypalCancel'])->name('payment.paypal.cancel');
 
+    // Payment success page (for cash/card payments)
+    Route::get('/payment-success', [CashierController::class, 'paymentSuccess'])->name('payment-success');
+
     // Generic payment routes with orderId parameter
     Route::get('/payment/{orderId}', [CashierController::class, 'processPayment'])->name('process-payment');
     Route::post('/payment/{orderId}', [CashierController::class, 'updatePaymentStatus'])->name('update-payment');
@@ -164,6 +168,12 @@ Route::middleware('admin.auth')->group(function () {
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
     Route::resource('employees', EmployeeController::class);
     Route::post('/employees/{employee}/toggle-status', [EmployeeController::class, 'toggleStatus'])->name('employees.toggle-status');
+
+    // Regular employees routes (non-account employees)
+    Route::resource('regular-employees', RegularEmployeeController::class);
+    Route::post('/regular-employees/{regularEmployee}/toggle-status', [RegularEmployeeController::class, 'toggleStatus'])->name('regular-employees.toggle-status');
+    Route::post('/regular-employees/{regularEmployee}/activate', [RegularEmployeeController::class, 'activate'])->name('regular-employees.activate');
+    Route::post('/regular-employees/{regularEmployee}/deactivate', [RegularEmployeeController::class, 'deactivate'])->name('regular-employees.deactivate');
 });
 
 Route::get('/register/documents', [RegisteredUserController::class, 'showDocumentUpload'])->middleware('auth')->name('register.documents');

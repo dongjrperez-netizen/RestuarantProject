@@ -296,28 +296,6 @@ const maintenanceTables = computed(() =>
               <div class="pt-3 border-t space-y-2">
                 <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Quick Actions</p>
                 <div class="flex flex-wrap gap-1">
-                  <!-- Occupied Button -->
-                  <Button
-                    @click="updateTableStatus(table, 'occupied')"
-                    :disabled="updateTableStatusForm.processing"
-                    size="sm"
-                    variant="outline"
-                    class="text-xs px-2 py-1 h-auto bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
-                  >
-                    Set Occupied
-                  </Button>
-
-                  <!-- Reserved Button -->
-                  <Button
-                    @click="updateTableStatus(table, 'reserved')"
-                    :disabled="updateTableStatusForm.processing"
-                    size="sm"
-                    variant="outline"
-                    class="text-xs px-2 py-1 h-auto bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-200"
-                  >
-                    Reserve
-                  </Button>
-
                   <!-- View Order Button -->
                   <Button
                     @click="viewTableOrders(table)"
@@ -388,17 +366,6 @@ const maintenanceTables = computed(() =>
                     Set Available
                   </Button>
 
-                  <!-- Reserved Button -->
-                  <Button
-                    @click="updateTableStatus(table, 'reserved')"
-                    :disabled="updateTableStatusForm.processing"
-                    size="sm"
-                    variant="outline"
-                    class="text-xs px-2 py-1 h-auto bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-200"
-                  >
-                    Reserve
-                  </Button>
-
                   <!-- View Order Button -->
                   <Button
                     @click="viewTableOrders(table)"
@@ -467,17 +434,6 @@ const maintenanceTables = computed(() =>
                     class="text-xs px-2 py-1 h-auto bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
                   >
                     Set Available
-                  </Button>
-
-                  <!-- Occupied Button -->
-                  <Button
-                    @click="updateTableStatus(table, 'occupied')"
-                    :disabled="updateTableStatusForm.processing"
-                    size="sm"
-                    variant="outline"
-                    class="text-xs px-2 py-1 h-auto bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
-                  >
-                    Set Occupied
                   </Button>
 
                   <!-- View Order Button -->

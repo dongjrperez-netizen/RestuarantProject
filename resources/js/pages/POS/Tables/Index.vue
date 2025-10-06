@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed } from 'vue';
-import { Plus, Search, MoreVertical, Users, Edit, Trash2, Eye, Calendar, Clock, UserCheck, UserPlus } from 'lucide-vue-next';
+import { Plus, Search, MoreVertical, Users, Edit, Eye, Calendar, Clock, UserCheck, UserPlus } from 'lucide-vue-next';
 
 interface TableReservation {
   id: number;
@@ -100,15 +100,6 @@ const tableStats = computed(() => {
   return stats;
 });
 
-const deleteTable = (table: Table) => {
-  if (confirm(`Are you sure you want to delete table ${table.table_number}? This action cannot be undone.`)) {
-    router.delete(`/pos/tables/${table.id}`, {
-      onSuccess: () => {
-        // Table deleted successfully
-      },
-    });
-  }
-};
 
 const markArrived = (reservation: TableReservation) => {
   if (confirm(`Mark ${reservation.customer_name} as arrived?`)) {
@@ -472,13 +463,6 @@ const formatNextReservation = (dateString: string | null | undefined, timeString
                           <Edit class="w-4 h-4 mr-2" />
                           Edit
                         </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        class="text-destructive"
-                        @click="deleteTable(table)"
-                      >
-                        <Trash2 class="w-4 h-4 mr-2" />
-                        Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

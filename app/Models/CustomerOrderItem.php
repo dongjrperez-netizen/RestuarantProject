@@ -59,6 +59,14 @@ class CustomerOrderItem extends Model
         return $this->belongsTo(Dish::class, 'dish_id', 'dish_id');
     }
 
+    public function excludedIngredients()
+    {
+        return $this->hasMany(CustomerRequest::class, 'order_id', 'order_id')
+            ->where('dish_id', $this->dish_id)
+            ->where('request_type', 'exclude')
+            ->with('ingredient');
+    }
+
     protected static function boot()
     {
         parent::boot();

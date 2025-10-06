@@ -2,8 +2,7 @@
 import { ref, watch, onBeforeMount } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import {
-  LayoutGrid, Receipt, ShoppingCart, Clock,
-  DollarSign, Users, FileText, Calculator
+  Receipt, DollarSign
 } from "lucide-vue-next"
 
 import {
@@ -27,24 +26,6 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 const navItems = [
   { title: "Customer Bills", href: "/cashier/bills", icon: Receipt },
   { title: "Successful Payments", href: "/cashier/successful-payments", icon: DollarSign },
-  {
-    title: "Orders & Payments",
-    icon: ShoppingCart,
-    children: [
-      { title: "Process Payments", href: '/cashier/process-payment', icon: Calculator },
-      { title: "Order History", href: '/cashier/orders', icon: FileText },
-      { title: "Pending Orders", href: '/cashier/pending-orders', icon: Clock },
-    ]
-  },
-  {
-    title: "Reports",
-    icon: Receipt,
-    children: [
-      { title: "Daily Sales", href: "/cashier/reports/daily", icon: DollarSign },
-      { title: "Payment Methods", href: "/cashier/reports/payments", icon: Receipt },
-    ]
-  },
-  { title: "Table Status", href: "/cashier/tables", icon: Users },
 ]
 
 // Controlled state for collapsibles

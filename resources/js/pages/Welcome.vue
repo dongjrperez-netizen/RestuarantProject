@@ -1,6 +1,70 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+
+const pricingPlans = [
+  {
+    name: 'Basic',
+    price: '₱1,650',
+    period: 'per month',
+    description: 'Perfect for small restaurants and cafes',
+    features: [
+      '5 Employee Accounts',
+      '10 Supplier Accounts',
+      'Basic Inventory Management',
+      'Order Processing',
+      'Kitchen Dashboard',
+      'Sales Reports',
+      'Email Support'
+    ],
+    popular: false
+  },
+  {
+    name: 'Premium',
+    price: '₱4,500',
+    period: 'per month',
+    description: 'Ideal for growing restaurants',
+    features: [
+      '10 Employee Accounts',
+      '15 Supplier Accounts',
+      'Advanced Inventory Management',
+      'Order Processing & Tracking',
+      'Kitchen Dashboard',
+      'Advanced Analytics & Reports',
+      'Menu Planning',
+      'Priority Email Support',
+      'Phone Support'
+    ],
+    popular: true
+  },
+  {
+    name: 'Enterprise',
+    price: '₱11,300',
+    period: 'per month',
+    description: 'For large restaurants and chains',
+    features: [
+      'Unlimited Employee Accounts',
+      'Unlimited Supplier Accounts',
+      'Full Inventory Management',
+      'Advanced Order Processing',
+      'Multi-Location Support',
+      'Custom Reports & Analytics',
+      'Menu Planning & Optimization',
+      'Table Reservations',
+      'Dedicated Account Manager',
+      '24/7 Priority Support'
+    ],
+    popular: false
+  }
+];
 
 const features = [
   {
@@ -210,15 +274,137 @@ const testimonials = [
           Join hundreds of successful restaurants using ServeWise to streamline operations and boost profitability.
         </p>
         
-        <div class="flex flex-col sm:flex-row gap-6 justify-center items-center mb-12">
-          <Link :href="route('register')" 
+        <div class="flex flex-col sm:flex-row gap-6 justify-center items-center mb-8">
+          <Link :href="route('register')"
                 class="bg-white text-orange-500 px-10 py-4 rounded-full text-lg font-bold hover:bg-gray-100 transition-all transform hover:scale-105 shadow-lg">
             Start Your Free Trial
           </Link>
-          <Link :href="route('login')"
-                class="border-2 border-white text-white px-10 py-4 rounded-full text-lg font-semibold hover:bg-white hover:text-orange-500 transition-all">
-            Sign In
-          </Link>
+          <Dialog>
+            <DialogTrigger asChild>
+              <button class="border-2 border-white text-white px-10 py-4 rounded-full text-lg font-semibold hover:bg-white hover:text-orange-500 transition-all">
+                View Pricing Plans
+              </button>
+            </DialogTrigger>
+            <DialogContent class="!max-w-6xl sm:!max-w-6xl max-h-[85vh] overflow-y-auto bg-white/95 backdrop-blur-sm w-[95vw]">
+              <DialogHeader>
+                <DialogTitle class="text-3xl font-bold text-gray-900 text-center">Subsciption Plan</DialogTitle>
+                <DialogDescription class="text-center text-gray-600 mt-2">
+                  Select the perfect plan for your restaurant's needs
+                </DialogDescription>
+              </DialogHeader>
+              <div class="mt-6 grid md:grid-cols-3 gap-6">
+                <div v-for="plan in pricingPlans" :key="plan.name"
+                     :class="[
+                       'relative bg-white rounded-2xl p-8 border-2 transition-all hover:shadow-xl',
+                       plan.popular ? 'border-orange-500 shadow-lg' : 'border-gray-200'
+                     ]">
+                  <!-- Popular Badge -->
+                  <div v-if="plan.popular" class="absolute -top-4 left-1/2 -translate-x-1/2">
+                    <span class="bg-orange-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                      Most Popular
+                    </span>
+                  </div>
+
+                  <!-- Plan Header -->
+                  <div class="text-center mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">{{ plan.name }}</h3>
+                    <p class="text-gray-600 text-sm mb-4">{{ plan.description }}</p>
+                    <div class="mb-4">
+                      <span class="text-4xl font-bold text-gray-900">{{ plan.price }}</span>
+                      <span class="text-gray-600 ml-2">{{ plan.period }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Features List -->
+                  <ul class="space-y-3 mb-8">
+                    <li v-for="feature in plan.features" :key="feature" class="flex items-start">
+                      <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                      </svg>
+                      <span class="text-gray-700">{{ feature }}</span>
+                    </li>
+                  </ul>
+
+                  <!-- CTA Button -->
+                  <Link :href="route('register')" class="block">
+                    <button
+                      :class="[
+                        'w-full py-3 px-6 rounded-full font-semibold transition-all',
+                        plan.popular
+                          ? 'bg-orange-500 text-white hover:bg-orange-600'
+                          : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                      ]">
+                      Get Started
+                    </button>
+                  </Link>
+                </div>
+              </div>
+              <div class="mt-6 text-center text-sm text-gray-600">
+                All plans include a 30-day free trial • No credit card required • Cancel anytime
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <!-- Terms & Policies Link -->
+        <div class="mb-4">
+          <Dialog>
+            <DialogTrigger asChild>
+              <button class="text-white underline hover:text-gray-200 transition-colors text-base font-medium">
+                Terms & Policies
+              </button>
+            </DialogTrigger>
+            <DialogContent class="max-w-3xl max-h-[80vh] overflow-y-auto bg-white/95 backdrop-blur-sm">
+              <DialogHeader>
+                <DialogTitle class="text-2xl font-bold text-gray-900">Terms and Policies for Restaurant Management System</DialogTitle>
+              </DialogHeader>
+              <div class="mt-4 space-y-6 text-gray-700">
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">1. System Usage</h3>
+                  <p class="leading-relaxed">This restaurant management system is designed to help manage and streamline restaurant operations. Users must provide accurate information and ensure proper handling of all data entered into the system. Misuse of the platform, including fraudulent activities, will result in account suspension or termination.</p>
+                </div>
+
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">2. Ordering and Customization</h3>
+                  <p class="leading-relaxed">The system allows customers to place orders and request modifications or exclusions of ingredients. All customization requests must be clearly communicated at the time of ordering. The restaurant reserves the right to refuse modifications that compromise food safety or operational efficiency.</p>
+                </div>
+
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">3. Inventory and Ingredient Management</h3>
+                  <p class="leading-relaxed">The restaurant commits to maintaining accurate records of inventory and ingredient availability. However, availability is subject to change, and the restaurant is not liable for out-of-stock items or substitutions made in good faith.</p>
+                </div>
+
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">4. Sales and Payment</h3>
+                  <p class="leading-relaxed">All transactions processed through this system are subject to applicable taxes and service charges. Payments must be made using the accepted methods listed in the system. The restaurant is not responsible for payment failures due to third-party payment processor errors.</p>
+                </div>
+
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">5. Data Privacy</h3>
+                  <p class="leading-relaxed">User data, including personal information, order history, and payment details, will be stored securely and used solely for operational purposes. The restaurant will not share customer data with third parties without explicit consent, except as required by law.</p>
+                </div>
+
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">6. Accountability and Security</h3>
+                  <p class="leading-relaxed">Users are responsible for maintaining the confidentiality of their account credentials. Any unauthorized use of accounts must be reported immediately. The restaurant will implement reasonable security measures but is not liable for breaches caused by user negligence.</p>
+                </div>
+
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">7. System Maintenance</h3>
+                  <p class="leading-relaxed">The system may undergo scheduled maintenance or experience unplanned downtime. The restaurant will make reasonable efforts to notify users in advance of maintenance periods but is not liable for any loss or inconvenience caused by system unavailability.</p>
+                </div>
+
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">8. Liability</h3>
+                  <p class="leading-relaxed">The restaurant is committed to providing quality service but cannot guarantee uninterrupted or error-free operation of the system. Liability for errors, delays, or issues arising from the use of this system is limited to the extent permitted by law. Users agree to use the system at their own risk.</p>
+                </div>
+
+                <div class="pt-4 border-t border-gray-200">
+                  <p class="text-sm text-gray-600">By using this restaurant management system, you acknowledge that you have read, understood, and agree to these Terms and Policies. The restaurant reserves the right to update these terms at any time without prior notice.</p>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div class="text-sm opacity-75">

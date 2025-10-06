@@ -499,8 +499,13 @@ const processCashPayment = async () => {
 
             isCashPaymentModalOpen.value = false;
 
-            // Redirect to successful payments page
-            window.location.href = '/cashier/successful-payments';
+            // Redirect to payment success page with order data
+            router.visit('/cashier/payment-success', {
+                method: 'get',
+                data: {
+                    order_id: props.order.order_id
+                }
+            });
         } else {
             console.error('Response not ok. Status:', response.status);
             const responseText = await response.text();
@@ -646,6 +651,10 @@ const getCurrentTotal = () => {
                                 <div class="flex justify-between text-sm">
                                     <span>Tax (12%):</span>
                                     <span>{{ formatCurrency(calculateTax(calculateSubtotal(order?.order_items || []))) }}</span>
+                                </div>
+                                <div v-if="order?.reservation_fee && order?.reservation_fee > 0" class="flex justify-between text-sm text-blue-600">
+                                    <span>Reservation Fee:</span>
+                                    <span>{{ formatCurrency(order.reservation_fee) }}</span>
                                 </div>
                                 <div v-if="tempDiscount" class="flex justify-between text-sm text-red-600">
                                     <span>Discount ({{ tempDiscount.reason }}):</span>

@@ -29,6 +29,19 @@ interface Dish {
   dish_description?: string;
 }
 
+interface Ingredient {
+  ingredient_id: number;
+  ingredient_name: string;
+  base_unit: string;
+}
+
+interface ExcludedIngredient {
+  request_id: number;
+  ingredient_id: number;
+  request_type: string;
+  ingredient: Ingredient;
+}
+
 interface OrderItem {
   item_id: number;
   dish_id: number;
@@ -38,6 +51,7 @@ interface OrderItem {
   special_instructions?: string;
   status: string;
   dish: Dish;
+  excluded_ingredients?: ExcludedIngredient[];
 }
 
 interface Table {
@@ -70,12 +84,6 @@ interface TodayStats {
   pending_orders: number;
   in_progress_orders: number;
   ready_orders: number;
-}
-
-interface Ingredient {
-  ingredient_id: number;
-  ingredient_name: string;
-  base_unit: string;
 }
 
 interface Props {
@@ -250,24 +258,50 @@ const onDamageReportSuccess = () => {
                 <div
                   v-for="item in order.order_items"
                   :key="item.item_id"
-                  class="flex justify-between items-center text-sm p-3 rounded border"
+                  class="text-sm p-3 rounded border"
                   :class="item.served_quantity >= item.quantity ? 'bg-green-50 border-green-200' :
                           item.served_quantity > 0 ? 'bg-yellow-50 border-yellow-200' :
                           'bg-white border-gray-200'"
                 >
-                  <div class="flex items-center space-x-2">
-                    <span class="font-medium text-base" :class="item.served_quantity >= item.quantity ? 'line-through text-gray-500' : ''">
-                      {{ item.dish?.dish_name || 'Unknown Dish' }}
-                    </span>
-                    <!-- Show serving status badges -->
-                    <span v-if="item.served_quantity >= item.quantity" class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
-                      Served
-                    </span>
-                    <span v-else-if="item.served_quantity > 0" class="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded">
-                      Served {{ item.served_quantity }}/{{ item.quantity }}
-                    </span>
+                  <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-2">
+                      <span class="font-medium text-base" :class="item.served_quantity >= item.quantity ? 'line-through text-gray-500' : ''">
+                        {{ item.dish?.dish_name || 'Unknown Dish' }}
+                      </span>
+                      <!-- Show serving status badges -->
+                      <span v-if="item.served_quantity >= item.quantity" class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                        Served
+                      </span>
+                      <span v-else-if="item.served_quantity > 0" class="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded">
+                        Served {{ item.served_quantity }}/{{ item.quantity }}
+                      </span>
+                    </div>
+                    <span class="font-bold text-lg">{{ item.quantity }}x</span>
                   </div>
-                  <span class="font-bold text-lg">{{ item.quantity }}x</span>
+
+                  <!-- Display excluded ingredients -->
+                  <div v-if="item.excluded_ingredients && item.excluded_ingredients.length > 0" class="mt-2 pt-2 border-t border-gray-300">
+                    <div class="flex items-start space-x-1">
+                      <AlertCircle class="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      <div class="text-xs">
+                        <span class="font-semibold text-red-700">Exclude:</span>
+                        <span class="text-red-600 ml-1">
+                          {{ item.excluded_ingredients.map(ex => ex.ingredient?.ingredient_name).filter(Boolean).join(', ') }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Display special instructions if any -->
+                  <div v-if="item.special_instructions" class="mt-2 pt-2 border-t border-gray-300">
+                    <div class="flex items-start space-x-1">
+                      <AlertCircle class="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div class="text-xs">
+                        <span class="font-semibold text-blue-700">Note:</span>
+                        <span class="text-blue-600 ml-1">{{ item.special_instructions }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Table;
+use App\Models\TableReservation;
 use App\Models\Employee;
 use App\Models\CustomerOrder;
 use App\Models\CustomerOrderItem;
@@ -496,20 +497,36 @@ class WaiterController extends Controller
             ->where('user_id', $employee->user_id)
             ->firstOrFail();
 
-        // Check for existing active order for occupied tables
-        $existingOrder = null;
-        if ($table->status === 'occupied') {
-            $existingOrder = CustomerOrder::where('table_id', $validated['table_id'])
-                ->whereIn('status', ['pending', 'in_progress', 'ready'])
-                ->latest()
-                ->first();
-        }
+        // Check for existing active order on this table (regardless of table status)
+        $existingOrder = CustomerOrder::where('table_id', $validated['table_id'])
+            ->whereIn('status', ['pending', 'in_progress', 'ready'])
+            ->latest()
+            ->first();
 
         DB::transaction(function () use ($validated, $employee, $table, $existingOrder, $restaurantId) {
 
             if ($existingOrder) {
                 // Add items to existing order
                 $order = $existingOrder;
+
+                // Check if order doesn't have reservation but table has active reservation
+                if (!$order->reservation_id) {
+                    $activeReservation = TableReservation::where('table_id', $validated['table_id'])
+                        ->whereIn('status', ['pending', 'confirmed', 'seated'])
+                        ->where('reservation_date', '>=', now()->startOfDay())
+                        ->orderBy('reservation_date', 'asc')
+                        ->first();
+
+                    if ($activeReservation) {
+                        $order->reservation_id = $activeReservation->id;
+                        $order->reservation_fee = $activeReservation->reservation_fee ?? 0;
+                        \Log::info('Adding reservation to existing order', [
+                            'order_id' => $order->order_id,
+                            'reservation_id' => $activeReservation->id,
+                            'reservation_fee' => $activeReservation->reservation_fee,
+                        ]);
+                    }
+                }
 
                 // Update customer name and notes if provided
                 if (!empty($validated['customer_name']) && empty($order->customer_name)) {
@@ -520,8 +537,23 @@ class WaiterController extends Controller
                 }
                 $order->save();
             } else {
+                // Check for active reservation on this table (for today or future dates)
+                $activeReservation = TableReservation::where('table_id', $validated['table_id'])
+                    ->whereIn('status', ['pending', 'confirmed', 'seated'])
+                    ->where('reservation_date', '>=', now()->startOfDay())
+                    ->orderBy('reservation_date', 'asc')
+                    ->first();
+
+                \Log::info('Waiter creating order - Reservation check', [
+                    'table_id' => $validated['table_id'],
+                    'active_reservation_found' => $activeReservation ? 'Yes' : 'No',
+                    'reservation_id' => $activeReservation?->id,
+                    'reservation_fee' => $activeReservation?->reservation_fee,
+                    'reservation_date' => $activeReservation?->reservation_date,
+                ]);
+
                 // Create new order
-                $order = CustomerOrder::create([
+                $orderData = [
                     'table_id' => $validated['table_id'],
                     'employee_id' => $employee->employee_id,
                     'restaurant_id' => $employee->user_id,
@@ -529,7 +561,16 @@ class WaiterController extends Controller
                     'notes' => $validated['notes'],
                     'status' => 'pending',
                     'ordered_at' => now(),
-                ]);
+                ];
+
+                // Add reservation info if exists
+                if ($activeReservation) {
+                    $orderData['reservation_id'] = $activeReservation->id;
+                    $orderData['reservation_fee'] = $activeReservation->reservation_fee ?? 0;
+                    \Log::info('Adding reservation to order', $orderData);
+                }
+
+                $order = CustomerOrder::create($orderData);
             }
 
             // Add order items

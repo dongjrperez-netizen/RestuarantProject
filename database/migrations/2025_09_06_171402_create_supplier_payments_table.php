@@ -19,7 +19,7 @@ return new class extends Migration
             $table->foreignId('supplier_id')->constrained('suppliers', 'supplier_id')->cascadeOnDelete();
             $table->date('payment_date');
             $table->decimal('payment_amount', 12, 2);
-            $table->enum('payment_method', ['cash', 'bank_transfer', 'check', 'credit_card', 'paypal', 'online', 'other'])->default('bank_transfer');
+            $table->enum('payment_method', ['cash', 'gcash','bank_transfer', 'check', 'credit_card', 'paypal', 'online', 'other'])->default('bank_transfer');
             $table->string('transaction_reference')->nullable();
             $table->text('notes')->nullable();
             $table->string('created_by_user_id');
