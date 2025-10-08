@@ -97,6 +97,9 @@ class AuthenticatedSessionController extends Controller
         if (Auth::guard('supplier')->check()) {
             Auth::guard('supplier')->logout();
         }
+         if (Auth::guard('admin')->check()) {
+            Auth::guard('admin')->logout();
+        }
 
         // Clear all session data
         $request->session()->invalidate();

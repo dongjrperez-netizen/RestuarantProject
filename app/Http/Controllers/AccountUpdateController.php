@@ -58,6 +58,12 @@ class AccountUpdateController extends Controller
             if (! empty($validated['password'])) {
                 $user->password = Hash::make($validated['password']);
             }
+
+            // If user was rejected and uploading new documents, change status to Pending for re-review
+            if ($user->status === 'Rejected' && $request->hasFile('documents')) {
+                $user->status = 'Pending';
+            }
+
             $user->save();
 
             if ($request->hasFile('documents')) {

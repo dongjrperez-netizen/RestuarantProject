@@ -43,6 +43,7 @@ interface User {
   subscription_status: string;
   created_at: string;
   last_login: string;
+  has_documents: boolean;
 }
 
 interface Stats {
@@ -289,6 +290,7 @@ const sendEmail = (user: User) => {
                   <TableHead>Restaurant</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Email Status</TableHead>
+                  <TableHead>Documents</TableHead>
                   <TableHead>Subscription</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead class="text-center">Actions</TableHead>
@@ -320,6 +322,11 @@ const sendEmail = (user: User) => {
                         {{ user.email_verified ? 'Verified' : 'Unverified' }}
                       </Badge>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge :variant="user.has_documents ? 'default' : 'outline'">
+                      {{ user.has_documents ? 'Uploaded' : 'None' }}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge :variant="getSubscriptionBadge(user.subscription_status)">
@@ -429,7 +436,7 @@ const sendEmail = (user: User) => {
                   </TableCell>
                 </TableRow>
                 <TableRow v-if="filteredUsers.length === 0">
-                  <TableCell colspan="7" class="text-center py-4 text-muted-foreground">
+                  <TableCell colspan="8" class="text-center py-4 text-muted-foreground">
                     No users found.
                   </TableCell>
                 </TableRow>

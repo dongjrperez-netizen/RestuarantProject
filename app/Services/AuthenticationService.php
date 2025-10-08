@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\UserRole;
 use App\Models\Employee;
 use App\Models\Supplier;
+use App\Models\Administrator;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -49,6 +50,16 @@ class AuthenticationService
         if (!$supplier->is_active) {
             return [
                 'email' => 'Your supplier account is not active. Please contact the restaurant.'
+            ];
+        }
+
+        return null;
+    }
+    public function validateAdminEmail(Administrator $admin): ?array
+    {
+        if (!$admin->is_active) {
+            return [
+                'email' => 'Your admin account is not active'
             ];
         }
 
@@ -199,6 +210,15 @@ class AuthenticationService
         return redirect()->route('cashier.bills');
     }
 
+      private function handleAdminRedirect(Administrator $admin): RedirectResponse
+    {
+        \Log::info('🔍 ADMIN REDIRECT START');
+
+        // Direct redirect to admin dashboard
+        \Log::info('🔍 ADMIN REDIRECT TO ADMIN DASHBOARD');
+        return redirect()->route('admin.dashboard');
+    }
+
     /**
      * Handle rate limiting for authentication requests
      */
@@ -233,6 +253,8 @@ class AuthenticationService
         // Check all possible user types to handle email conflicts
         $employee = Employee::where('email', $email)->with('role')->first();
         $supplier = Supplier::where('email', $email)->first();
+
+        $admin = Administrator::where('email', $email)->first();
 
         // If both employee and supplier exist with same email, prioritize based on active status
         if ($employee && $supplier) {
@@ -324,6 +346,14 @@ class AuthenticationService
                 'type' => 'supplier',
                 'model' => $supplier,
                 'guard' => 'supplier'
+            ];
+        }
+
+        if ($admin) {
+            return [
+                'type' => 'admin',
+                'model' => $admin,
+                'guard' => 'admin'
             ];
         }
 
@@ -421,6 +451,15 @@ class AuthenticationService
                     'user_type' => 'supplier'
                 ];
             }
+        }elseif ($userInfo['type'] === 'admin') {
+            $emailErrors = $this->validateAdminEmail($userInfo['model']);
+            if ($emailErrors) {
+                return [
+                    'success' => false,
+                    'errors' => $emailErrors,
+                    'user_type' => 'admin'
+                ];
+            }
         }
 
         // Attempt authentication with appropriate guard
@@ -468,9 +507,13 @@ class AuthenticationService
         if ($userType === 'employee') {
             return $this->handleEmployeeRoleRedirect($userModel);
         }
+        
 
         if ($userType === 'supplier') {
             return $this->handleSupplierRedirect($userModel);
+        }
+        if ($userType === 'admin') {
+            return $this->handleAdminRedirect($userModel);
         }
 
         // Fallback

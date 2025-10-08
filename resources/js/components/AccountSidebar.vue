@@ -10,14 +10,9 @@ import NavAccountUpdate from './NavAccountUpdate.vue';
 const NavAccontupdate: NavItem[]  = [
 
     {
-        title: 'Account Update',
+        title: 'Account Request',
         href: '/account/update',
         icon: LayoutGrid ,
-    },
-   {
-        title: 'Request',
-        href: '/request',
-        icon: ClipboardList,
     },
 ];
 

@@ -408,7 +408,7 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
     Route::get('/api/purchase-orders/{purchaseOrderId}/details', [StockInController::class, 'getPurchaseOrderDetails'])->name('purchase-orders.api-details');
 });
 
-Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
+Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/account/update', [AccountUpdateController::class, 'show'])->name('account.update.show');
     Route::post('/account/update', [AccountUpdateController::class, 'update'])->name('account.update');
     Route::get('/api/account/user', [AccountUpdateController::class, 'fetchUser']);
