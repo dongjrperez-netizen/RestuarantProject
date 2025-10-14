@@ -29,6 +29,14 @@ interface Dish {
   dish_description?: string;
 }
 
+interface DishVariant {
+  variant_id: number;
+  size_name: string;
+  price_modifier: number;
+  quantity_multiplier: number;
+  is_default: boolean;
+}
+
 interface Ingredient {
   ingredient_id: number;
   ingredient_name: string;
@@ -45,12 +53,14 @@ interface ExcludedIngredient {
 interface OrderItem {
   item_id: number;
   dish_id: number;
+  variant_id?: number;
   quantity: number;
   served_quantity: number;
   unit_price: number;
   special_instructions?: string;
   status: string;
   dish: Dish;
+  variant?: DishVariant;
   excluded_ingredients?: ExcludedIngredient[];
 }
 
@@ -265,9 +275,15 @@ const onDamageReportSuccess = () => {
                 >
                   <div class="flex justify-between items-center">
                     <div class="flex items-center space-x-2">
-                      <span class="font-medium text-base" :class="item.served_quantity >= item.quantity ? 'line-through text-gray-500' : ''">
-                        {{ item.dish?.dish_name || 'Unknown Dish' }}
-                      </span>
+                      <div class="flex flex-col">
+                        <span class="font-medium text-base" :class="item.served_quantity >= item.quantity ? 'line-through text-gray-500' : ''">
+                          {{ item.dish?.dish_name || 'Unknown Dish' }}
+                        </span>
+                        <!-- Show variant size -->
+                        <span v-if="item.variant" class="text-xs text-blue-600 font-semibold">
+                          Size: {{ item.variant.size_name }} ({{ Number(item.variant.quantity_multiplier).toFixed(1) }}x ingredients)
+                        </span>
+                      </div>
                       <!-- Show serving status badges -->
                       <span v-if="item.served_quantity >= item.quantity" class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
                         Served

@@ -6,6 +6,15 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Clock, Users, Utensils, AlertCircle, Printer } from 'lucide-vue-next';
 import { computed } from 'vue';
 
+interface DishVariant {
+  variant_id: number;
+  size_name: string;
+  price_modifier: number;
+  quantity_multiplier: number;
+  is_default: boolean;
+  is_available: boolean;
+}
+
 interface Dish {
   dish_id: number;
   dish_name: string;
@@ -19,6 +28,7 @@ interface Dish {
   planned_quantity: number;
   meal_type?: string;
   notes?: string;
+  variants?: DishVariant[];
 }
 
 interface MenuPlan {
@@ -154,9 +164,14 @@ const printMenu = () => {
                 </div>
 
                 <!-- Price Badge (Top Right) -->
-                <div v-if="dish.price" class="absolute top-2 right-2">
+                <div v-if="dish.variants && dish.variants.length > 0" class="absolute top-2 right-2">
                   <div class="bg-orange-600 text-white px-2 py-1 rounded-md text-sm font-bold shadow-sm">
-                    ₱{{ dish.price }}
+                    ₱{{ Number(dish.variants.find(v => v.is_default)?.price_modifier || 0).toFixed(2) }}
+                  </div>
+                </div>
+                <div v-else-if="dish.price" class="absolute top-2 right-2">
+                  <div class="bg-orange-600 text-white px-2 py-1 rounded-md text-sm font-bold shadow-sm">
+                    ₱{{ Number(dish.price).toFixed(2) }}
                   </div>
                 </div>
 
@@ -175,6 +190,19 @@ const printMenu = () => {
                 <h3 class="font-semibold text-foreground text-sm leading-tight overflow-hidden" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
                   {{ dish.dish_name }}
                 </h3>
+
+                <!-- Variants/Sizes -->
+                <div v-if="dish.variants && dish.variants.length > 0" class="flex flex-wrap gap-1">
+                  <div
+                    v-for="variant in dish.variants.filter(v => v.is_available)"
+                    :key="variant.variant_id"
+                    class="px-2 py-0.5 text-xs rounded-md"
+                    :class="variant.is_default ? 'bg-orange-100 text-orange-800 font-medium' : 'bg-gray-100 text-gray-700'"
+                  >
+                    {{ variant.size_name }} ₱{{ Number(variant.price_modifier || 0).toFixed(2) }}
+                  </div>
+                </div>
+
                 <!-- Additional Info -->
                 <div class="flex items-center justify-between text-xs text-muted-foreground">
                   <div v-if="dish.preparation_time" class="flex items-center gap-1">

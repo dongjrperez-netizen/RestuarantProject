@@ -89,7 +89,7 @@ class WaiterController extends Controller
             if ($isDefaultPlan) {
                 // For default plans, show all dishes regardless of planned_date
                 $dishesCollection = $activeMenuPlan->menuPlanDishes()
-                    ->with(['dish.category', 'dish.dishIngredients.ingredient'])
+                    ->with(['dish.category', 'dish.dishIngredients.ingredient', 'dish.variants'])
                     ->whereHas('dish', function ($query) use ($restaurantId) {
                         $query->where('restaurant_id', $restaurantId)
                               ->where('is_available', true)
@@ -104,7 +104,7 @@ class WaiterController extends Controller
             } else {
                 // For specific plans, filter by today's date
                 $dishesCollection = $activeMenuPlan->menuPlanDishes()
-                    ->with(['dish.category', 'dish.dishIngredients.ingredient'])
+                    ->with(['dish.category', 'dish.dishIngredients.ingredient', 'dish.variants'])
                     ->where('planned_date', $today)
                     ->whereHas('dish', function ($query) use ($restaurantId) {
                         $query->where('restaurant_id', $restaurantId)
@@ -120,24 +120,6 @@ class WaiterController extends Controller
             }
         }
 
-        // Debug: If no dishes found, try getting all available dishes for this restaurant only
-        if ($dishesCollection->isEmpty()) {
-            $allDishes = Dish::with(['category', 'dishIngredients.ingredient'])
-                ->where('restaurant_id', $restaurantId)
-                ->where('is_available', true)
-                ->where('status', 'active')
-                ->get();
-
-            $filteredDishes = $allDishes->filter(function ($dish) {
-                // Check if dish has available stock for all ingredients
-                return $dish->hasAvailableStock(1);
-            });
-
-            if ($filteredDishes->isNotEmpty()) {
-                $dishesCollection = $filteredDishes;
-            }
-        }
-
         // Group dishes by category
         $dishesGrouped = $dishesCollection->groupBy('category.category_name');
 
@@ -147,10 +129,12 @@ class WaiterController extends Controller
             $dishes[$categoryName ?: 'Uncategorized'] = $categoryDishes->toArray();
         }
 
-
         return Inertia::render('Waiter/Dashboard', [
             'tables' => $tables,
             'employee' => $employee->load('role'),
+            'activeMenuPlan' => $activeMenuPlan,
+            'dishes' => $dishes,
+            'isDefaultPlan' => $isDefaultPlan,
         ]);
     }
 
@@ -221,7 +205,7 @@ class WaiterController extends Controller
             if ($isDefaultPlan) {
                 // For default plans, show all dishes regardless of planned_date
                 $dishesCollection = $activeMenuPlan->menuPlanDishes()
-                    ->with(['dish.category', 'dish.dishIngredients.ingredient'])
+                    ->with(['dish.category', 'dish.dishIngredients.ingredient', 'dish.variants'])
                     ->whereHas('dish', function ($query) use ($restaurantId) {
                         $query->where('restaurant_id', $restaurantId)
                               ->where('is_available', true)
@@ -236,7 +220,7 @@ class WaiterController extends Controller
             } else {
                 // For specific plans, filter by today's date
                 $dishesCollection = $activeMenuPlan->menuPlanDishes()
-                    ->with(['dish.category', 'dish.dishIngredients.ingredient'])
+                    ->with(['dish.category', 'dish.dishIngredients.ingredient', 'dish.variants'])
                     ->where('planned_date', $today)
                     ->whereHas('dish', function ($query) use ($restaurantId) {
                         $query->where('restaurant_id', $restaurantId)
@@ -249,24 +233,6 @@ class WaiterController extends Controller
                         // Check if dish has available stock for all ingredients
                         return $dish->hasAvailableStock(1);
                     });
-            }
-        }
-
-        // Debug: If no dishes found, try getting all available dishes for this restaurant only
-        if ($dishesCollection->isEmpty()) {
-            $allDishes = Dish::with(['category', 'dishIngredients.ingredient'])
-                ->where('restaurant_id', $restaurantId)
-                ->where('is_available', true)
-                ->where('status', 'active')
-                ->get();
-
-            $filteredDishes = $allDishes->filter(function ($dish) {
-                // Check if dish has available stock for all ingredients
-                return $dish->hasAvailableStock(1);
-            });
-
-            if ($filteredDishes->isNotEmpty()) {
-                $dishesCollection = $filteredDishes;
             }
         }
 
@@ -405,7 +371,7 @@ class WaiterController extends Controller
             if ($isDefaultPlan) {
                 // For default plans, show all dishes regardless of planned_date
                 $dishes = $activeMenuPlan->menuPlanDishes()
-                    ->with(['dish.category', 'dish.dishIngredients.ingredient'])
+                    ->with(['dish.category', 'dish.dishIngredients.ingredient', 'dish.variants'])
                     ->whereHas('dish', function ($query) use ($restaurantId) {
                         $query->where('restaurant_id', $restaurantId)
                               ->where('is_available', true)
@@ -420,7 +386,7 @@ class WaiterController extends Controller
             } else {
                 // For specific plans, filter by today's date
                 $dishes = $activeMenuPlan->menuPlanDishes()
-                    ->with(['dish.category', 'dish.dishIngredients.ingredient'])
+                    ->with(['dish.category', 'dish.dishIngredients.ingredient', 'dish.variants'])
                     ->where('planned_date', $today)
                     ->whereHas('dish', function ($query) use ($restaurantId) {
                         $query->where('restaurant_id', $restaurantId)
@@ -433,24 +399,6 @@ class WaiterController extends Controller
                         // Check if dish has available stock for all ingredients
                         return $dish->hasAvailableStock(1);
                     });
-            }
-        }
-
-        // Debug: If no dishes found, try getting all available dishes for this restaurant only
-        if ($dishes->isEmpty()) {
-            $allDishes = Dish::with(['category', 'dishIngredients.ingredient'])
-                ->where('restaurant_id', $restaurantId)
-                ->where('is_available', true)
-                ->where('status', 'active')
-                ->get();
-
-            $filteredDishes = $allDishes->filter(function ($dish) {
-                // Check if dish has available stock for all ingredients
-                return $dish->hasAvailableStock(1);
-            });
-
-            if ($filteredDishes->isNotEmpty()) {
-                $dishes = $filteredDishes;
             }
         }
 
@@ -486,6 +434,7 @@ class WaiterController extends Controller
             'notes' => 'nullable|string',
             'order_items' => 'required|array|min:1',
             'order_items.*.dish_id' => 'required|exists:dishes,dish_id',
+            'order_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
             'order_items.*.quantity' => 'required|integer|min:1',
             'order_items.*.special_instructions' => 'nullable|string',
             'order_items.*.excluded_ingredients' => 'nullable|array',
@@ -577,6 +526,15 @@ class WaiterController extends Controller
             foreach ($validated['order_items'] as $item) {
                 $dish = Dish::find($item['dish_id']);
 
+                // Determine unit price based on variant or base price
+                $unitPrice = $dish->price;
+                if (!empty($item['variant_id'])) {
+                    $variant = \App\Models\DishVariant::find($item['variant_id']);
+                    if ($variant) {
+                        $unitPrice = $variant->price_modifier;
+                    }
+                }
+
                 // Save customer requests for excluded ingredients FIRST (before creating order item)
                 // This ensures the exclusions are already in the database when inventory deduction happens
                 if (!empty($item['excluded_ingredients'])) {
@@ -592,23 +550,30 @@ class WaiterController extends Controller
                     }
                 }
 
-                // Check if this dish already exists in the order
+                // Check if this dish already exists in the order with same variant
                 $existingItem = CustomerOrderItem::where('order_id', $order->order_id)
                     ->where('dish_id', $item['dish_id'])
+                    ->where('variant_id', $item['variant_id'] ?? null)
                     ->where('special_instructions', $item['special_instructions'] ?? null)
                     ->first();
 
                 if ($existingItem) {
-                    // Update quantity of existing item
-                    $existingItem->quantity += $item['quantity'];
+                    // Update quantity of existing item and deduct inventory for additional quantity
+                    $additionalQuantity = $item['quantity'];
+                    $existingItem->quantity += $additionalQuantity;
                     $existingItem->save();
+
+                    // Manually deduct inventory for the additional quantity
+                    $existingItem->load('variant'); // Ensure variant is loaded
+                    $existingItem->deductIngredientsForQuantity($additionalQuantity);
                 } else {
                     // Create new order item (this triggers inventory deduction)
                     CustomerOrderItem::create([
                         'order_id' => $order->order_id,
                         'dish_id' => $item['dish_id'],
+                        'variant_id' => $item['variant_id'] ?? null,
                         'quantity' => $item['quantity'],
-                        'unit_price' => $dish->price,
+                        'unit_price' => $unitPrice,
                         'special_instructions' => $item['special_instructions'] ?? null,
                         'status' => 'pending',
                     ]);
@@ -639,7 +604,7 @@ class WaiterController extends Controller
 
         try {
             // Get orders for this table with order items and dishes (only unpaid orders)
-            $orders = CustomerOrder::with(['orderItems.dish', 'table', 'employee'])
+            $orders = CustomerOrder::with(['orderItems.dish', 'orderItems.variant', 'table', 'employee'])
                 ->where('table_id', $tableId)
                 ->where('restaurant_id', $employee->user_id) // Filter by restaurant
                 ->whereNotIn('status', ['paid', 'cancelled', 'completed']) // Exclude paid, cancelled, and completed orders
@@ -662,12 +627,14 @@ class WaiterController extends Controller
                         return [
                             'item_id' => $item->item_id,
                             'dish_id' => $item->dish_id,
+                            'variant_id' => $item->variant_id,
                             'quantity' => $item->quantity,
                             'served_quantity' => $item->served_quantity,
                             'unit_price' => $item->unit_price,
                             'special_instructions' => $item->special_instructions,
                             'status' => $item->status,
-                            'dish' => $item->dish
+                            'dish' => $item->dish,
+                            'variant' => $item->variant
                         ];
                     })
                 ];

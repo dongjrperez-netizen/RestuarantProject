@@ -6,6 +6,7 @@ use App\Models\Dish;
 use App\Models\MenuCategory;
 use App\Models\DishIngredient;
 use App\Models\Ingredients;
+use App\Models\DishVariant;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -19,7 +20,7 @@ class MenuController extends Controller
         $user = Auth::user();
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
-        $query = Dish::with(['category'])
+        $query = Dish::with(['category', 'variants'])
             ->byRestaurant($restaurantId);
 
         // Apply filters
@@ -87,19 +88,61 @@ class MenuController extends Controller
     {
         $user = Auth::user();
 
-        $request->validate([
+        $validated = $request->validate([
             'dish_name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'category_id' => 'required|exists:menu_categories,category_id',
             'image_url' => 'nullable|string|max:500',
-            'price' => 'required|numeric|min:0',
+            'price' => 'nullable|numeric|min:0',
             'ingredients' => 'required|array|min:1',
             'ingredients.*.ingredient_id' => 'nullable|exists:ingredients,ingredient_id',
             'ingredients.*.ingredient_name' => 'required|string|max:255',
             'ingredients.*.quantity' => 'required|numeric|min:0.01',
             'ingredients.*.unit' => 'required|string|max:50',
             'ingredients.*.is_optional' => 'boolean',
+            'has_variants' => 'boolean',
+            'variants' => 'nullable|array',
+            'variants.*.size_name' => 'required_with:variants|string|max:50',
+            'variants.*.price_modifier' => 'required_with:variants|numeric|min:0',
+            'variants.*.quantity_multiplier' => 'required_with:variants|numeric|min:0.01|max:10',
+            'variants.*.is_default' => 'boolean',
         ]);
+
+        // Additional validation: Ensure price is provided when variants are not enabled
+        if (!$request->has_variants && (empty($request->price) || $request->price <= 0)) {
+            return back()->withErrors([
+                'price' => 'Price is required when variants are not enabled.'
+            ])->withInput();
+        }
+
+        // Additional validation: Ensure at least one ingredient is provided
+        if (empty($validated['ingredients']) || count($validated['ingredients']) < 1) {
+            return back()->withErrors([
+                'ingredients' => 'At least one ingredient is required for inventory tracking.'
+            ])->withInput();
+        }
+
+        // Additional validation: If variants are enabled, ensure at least one variant exists
+        if ($request->has_variants && (!is_array($request->variants) || count($request->variants) < 1)) {
+            return back()->withErrors([
+                'variants' => 'If variants are enabled, you must add at least one size variant.'
+            ])->withInput();
+        }
+
+        // Validation: Ensure exactly one default variant if variants exist
+        if ($request->has_variants && is_array($request->variants) && count($request->variants) > 0) {
+            $defaultCount = collect($request->variants)->where('is_default', true)->count();
+            if ($defaultCount === 0) {
+                return back()->withErrors([
+                    'variants' => 'You must mark one variant as the default size.'
+                ])->withInput();
+            }
+            if ($defaultCount > 1) {
+                return back()->withErrors([
+                    'variants' => 'Only one variant can be marked as default.'
+                ])->withInput();
+            }
+        }
 
         DB::transaction(function () use ($request, $user) {
             // Create the dish
@@ -141,6 +184,32 @@ class MenuController extends Controller
                 }
             }
 
+            // Add variants if enabled
+            \Log::info('Variant Creation Debug', [
+                'has_variants' => $request->has_variants,
+                'variants' => $request->variants,
+                'variants_is_array' => is_array($request->variants),
+                'variants_count' => is_array($request->variants) ? count($request->variants) : 0,
+            ]);
+
+            if ($request->has_variants && is_array($request->variants) && count($request->variants) > 0) {
+                foreach ($request->variants as $index => $variantData) {
+                    \Log::info('Creating variant', [
+                        'index' => $index,
+                        'data' => $variantData,
+                    ]);
+
+                    DishVariant::create([
+                        'dish_id' => $dish->dish_id,
+                        'size_name' => $variantData['size_name'],
+                        'price_modifier' => $variantData['price_modifier'],
+                        'quantity_multiplier' => $variantData['quantity_multiplier'],
+                        'is_default' => $variantData['is_default'] ?? false,
+                        'is_available' => true,
+                        'sort_order' => $index,
+                    ]);
+                }
+            }
         });
 
         return redirect()->route('menu.index')->with('success', 'Dish created successfully!');
@@ -150,7 +219,8 @@ class MenuController extends Controller
     {
         $dish->load([
             'category',
-            'dishIngredients.ingredient'
+            'dishIngredients.ingredient',
+            'variants'
         ]);
 
         return Inertia::render('Menu/Show', [
@@ -164,7 +234,8 @@ class MenuController extends Controller
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         $dish->load([
-            'dishIngredients.ingredient'
+            'dishIngredients.ingredient',
+            'variants'
         ]);
 
         $categories = MenuCategory::byRestaurant($restaurantId)
@@ -198,19 +269,61 @@ class MenuController extends Controller
 
     public function update(Request $request, Dish $dish)
     {
-        $request->validate([
+        $validated = $request->validate([
             'dish_name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'category_id' => 'required|exists:menu_categories,category_id',
             'image_url' => 'nullable|string|max:500',
-            'price' => 'required|numeric|min:0',
+            'price' => 'nullable|numeric|min:0',
             'ingredients' => 'required|array|min:1',
             'ingredients.*.ingredient_id' => 'nullable|exists:ingredients,ingredient_id',
             'ingredients.*.ingredient_name' => 'required|string|max:255',
             'ingredients.*.quantity' => 'required|numeric|min:0.01',
             'ingredients.*.unit' => 'required|string|max:50',
             'ingredients.*.is_optional' => 'boolean',
+            'has_variants' => 'boolean',
+            'variants' => 'nullable|array',
+            'variants.*.size_name' => 'required_with:variants|string|max:50',
+            'variants.*.price_modifier' => 'required_with:variants|numeric|min:0',
+            'variants.*.quantity_multiplier' => 'required_with:variants|numeric|min:0.01|max:10',
+            'variants.*.is_default' => 'boolean',
         ]);
+
+        // Additional validation: Ensure price is provided when variants are not enabled
+        if (!$request->has_variants && (empty($request->price) || $request->price <= 0)) {
+            return back()->withErrors([
+                'price' => 'Price is required when variants are not enabled.'
+            ])->withInput();
+        }
+
+        // Additional validation: Ensure at least one ingredient is provided
+        if (empty($validated['ingredients']) || count($validated['ingredients']) < 1) {
+            return back()->withErrors([
+                'ingredients' => 'At least one ingredient is required for inventory tracking.'
+            ])->withInput();
+        }
+
+        // Additional validation: If variants are enabled, ensure at least one variant exists
+        if ($request->has_variants && (!is_array($request->variants) || count($request->variants) < 1)) {
+            return back()->withErrors([
+                'variants' => 'If variants are enabled, you must add at least one size variant.'
+            ])->withInput();
+        }
+
+        // Validation: Ensure exactly one default variant if variants exist
+        if ($request->has_variants && is_array($request->variants) && count($request->variants) > 0) {
+            $defaultCount = collect($request->variants)->where('is_default', true)->count();
+            if ($defaultCount === 0) {
+                return back()->withErrors([
+                    'variants' => 'You must mark one variant as the default size.'
+                ])->withInput();
+            }
+            if ($defaultCount > 1) {
+                return back()->withErrors([
+                    'variants' => 'Only one variant can be marked as default.'
+                ])->withInput();
+            }
+        }
 
         DB::transaction(function () use ($request, $dish) {
             // Update dish basic info
@@ -247,6 +360,22 @@ class MenuController extends Controller
                         'quantity_needed' => $ingredientData['quantity'],
                         'unit_of_measure' => $ingredientData['unit'],
                         'is_optional' => $ingredientData['is_optional'] ?? false,
+                    ]);
+                }
+            }
+
+            // Update variants - delete all and recreate
+            $dish->variants()->delete();
+            if ($request->has_variants && is_array($request->variants)) {
+                foreach ($request->variants as $index => $variantData) {
+                    DishVariant::create([
+                        'dish_id' => $dish->dish_id,
+                        'size_name' => $variantData['size_name'],
+                        'price_modifier' => $variantData['price_modifier'],
+                        'quantity_multiplier' => $variantData['quantity_multiplier'],
+                        'is_default' => $variantData['is_default'] ?? false,
+                        'is_available' => true,
+                        'sort_order' => $index,
                     ]);
                 }
             }

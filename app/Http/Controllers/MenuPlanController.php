@@ -395,7 +395,7 @@ class MenuPlanController extends Controller
 
         // Get dishes for the specific date
         $dishesForDate = $menuPlan->menuPlanDishes()
-            ->with(['dish.category'])
+            ->with(['dish.category', 'dish.variants'])
             ->whereDate('planned_date', $date)
             ->get();
 
@@ -422,6 +422,7 @@ class MenuPlanController extends Controller
                     'planned_quantity' => $menuPlanDish->planned_quantity,
                     'meal_type' => $menuPlanDish->meal_type,
                     'notes' => $menuPlanDish->notes,
+                    'variants' => $menuPlanDish->dish->variants,
                 ];
             });
         });

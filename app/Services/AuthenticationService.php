@@ -240,8 +240,47 @@ class AuthenticationService
      */
     public function detectUserType(string $email): array
     {
-        // Check if it's a restaurant owner (User)
+        // Check all possible user types first to handle email conflicts
         $user = User::where('email', $email)->first();
+        $employee = Employee::where('email', $email)->with('role')->first();
+        $supplier = Supplier::where('email', $email)->first();
+        $admin = Administrator::where('email', $email)->first();
+
+        // If both user and supplier exist with same email, prioritize based on active status
+        if ($user && $supplier) {
+            // Prioritize active supplier over pending/rejected user
+            if ($supplier->is_active && in_array($user->status, ['Pending', 'Rejected'])) {
+                return [
+                    'type' => 'supplier',
+                    'model' => $supplier,
+                    'guard' => 'supplier'
+                ];
+            } elseif (!$supplier->is_active && !in_array($user->status, ['Pending', 'Rejected'])) {
+                return [
+                    'type' => 'user',
+                    'model' => $user,
+                    'guard' => 'web'
+                ];
+            } else {
+                // Both active or both inactive - prioritize supplier for supplier portal access
+                if ($supplier->is_active) {
+                    return [
+                        'type' => 'supplier',
+                        'model' => $supplier,
+                        'guard' => 'supplier'
+                    ];
+                } else {
+                    // If supplier is not active, default to user
+                    return [
+                        'type' => 'user',
+                        'model' => $user,
+                        'guard' => 'web'
+                    ];
+                }
+            }
+        }
+
+        // If only user exists
         if ($user) {
             return [
                 'type' => 'user',
@@ -249,12 +288,6 @@ class AuthenticationService
                 'guard' => 'web'
             ];
         }
-
-        // Check all possible user types to handle email conflicts
-        $employee = Employee::where('email', $email)->with('role')->first();
-        $supplier = Supplier::where('email', $email)->first();
-
-        $admin = Administrator::where('email', $email)->first();
 
         // If both employee and supplier exist with same email, prioritize based on active status
         if ($employee && $supplier) {

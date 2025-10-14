@@ -111,7 +111,7 @@ class CashierController extends Controller
         }
 
         // Get the specific order with all details
-        $order = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments', 'reservation'])
+        $order = CustomerOrder::with(['table', 'orderItems.dish', 'orderItems.variant', 'employee', 'payments', 'reservation'])
             ->where('restaurant_id', $employee->user_id)  // Filter by restaurant
             ->where('order_id', $orderId)
             ->firstOrFail();
@@ -150,7 +150,7 @@ class CashierController extends Controller
         }
 
         // Get the specific order with all details including payments and reservation
-        $order = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments', 'reservation'])
+        $order = CustomerOrder::with(['table', 'orderItems.dish', 'orderItems.variant', 'employee', 'payments', 'reservation'])
             ->where('restaurant_id', $employee->user_id)  // Filter by restaurant
             ->where('order_id', $orderId)
             ->firstOrFail();
@@ -659,7 +659,7 @@ class CashierController extends Controller
                 // Clear session data
                 session()->forget('paypal_order_payment');
 
-                return redirect()->route('cashier.successful-payments')
+                return redirect()->route('cashier.payment-success', ['order_id' => $paymentData['order_id']])
                     ->with('success', 'Payment completed successfully via PayPal');
 
             } else {

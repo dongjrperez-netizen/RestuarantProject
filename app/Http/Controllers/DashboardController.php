@@ -185,7 +185,9 @@ class DashboardController extends Controller
                 ->count();
 
             $weeklyData[] = [
-                'day' => $date->format('D'),
+                'day' => $date->format('D'), // Mon, Tue, Wed, etc.
+                'fullDay' => $date->format('l'), // Monday, Tuesday, Wednesday, etc.
+                'date' => $date->format('M d'), // Oct 13, Oct 14, etc.
                 'revenue' => round($dailyRevenue, 2),
                 'orders' => $dailyOrders,
                 'Revenue (₱)' => round($dailyRevenue, 2),
@@ -240,7 +242,8 @@ class DashboardController extends Controller
             'pending' => 'pending',
             'in_progress' => 'preparing',
             'ready' => 'ready',
-            'served' => 'ready',
+            'served' => 'completed',
+            'paid' => 'completed',
             'completed' => 'completed',
             'cancelled' => 'cancelled',
         ];
@@ -254,7 +257,8 @@ class DashboardController extends Controller
             'pending' => 'Pending',
             'in_progress' => 'Preparing',
             'ready' => 'Ready',
-            'served' => 'Ready',
+            'served' => 'Completed',
+            'paid' => 'Completed',
             'completed' => 'Completed',
             'cancelled' => 'Cancelled',
         ];

@@ -27,6 +27,7 @@ class KitchenController extends Controller
             $unpaidOrders = CustomerOrder::with([
                 'table',
                 'orderItems.dish',
+                'orderItems.variant',
                 'employee'
             ])
             ->where('restaurant_id', $restaurantId)

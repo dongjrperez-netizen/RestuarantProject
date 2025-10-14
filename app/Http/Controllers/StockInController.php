@@ -4,8 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Ingredients;
 use App\Models\Restaurant_Data;
-use App\Models\Restaurant_Order;
-use App\Models\Restaurant_Order_Items;
+use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use DB;
 use Illuminate\Http\Request;

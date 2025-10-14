@@ -41,6 +41,15 @@ interface DishIngredient {
   ingredient: Ingredient;
 }
 
+interface DishVariant {
+  variant_id: number;
+  size_name: string;
+  price_modifier: number;
+  quantity_multiplier: number;
+  is_default: boolean;
+  is_available: boolean;
+}
+
 interface Dish {
   dish_id: number;
   dish_name: string;
@@ -55,6 +64,7 @@ interface Dish {
     category_name: string;
   };
   dish_ingredients?: DishIngredient[];
+  variants?: DishVariant[];
 }
 
 interface Employee {
@@ -70,6 +80,7 @@ interface Employee {
 interface OrderItem {
   dish_id: number;
   dish: Dish;
+  variant_id?: number;
   quantity: number;
   special_instructions: string;
   excluded_ingredients?: number[];
@@ -77,6 +88,7 @@ interface OrderItem {
 
 interface OrderFormData {
   dish_id: number;
+  variant_id?: number;
   quantity: number;
   special_instructions: string;
 }
@@ -122,6 +134,7 @@ const existingOrderItems = ref<ExistingOrderItem[]>(props.existingOrder?.order_i
 const searchQuery = ref('');
 const selectedCategory = ref<number | null>(null);
 const selectedDish = ref<Dish | null>(null);
+const selectedVariant = ref<DishVariant | null>(null);
 const showQuantityModal = ref(false);
 const showCartModal = ref(false);
 const modalQuantity = ref(1);
@@ -168,9 +181,20 @@ const existingOrderTotal = computed(() => {
   }, 0);
 });
 
+// Get the price for an order item (considering variants)
+const getItemPrice = (item: OrderItem): number => {
+  if (item.variant_id && item.dish.variants) {
+    const variant = item.dish.variants.find(v => v.variant_id === item.variant_id);
+    if (variant) {
+      return Number(variant.price_modifier) || 0;
+    }
+  }
+  return Number(item.dish.price) || 0;
+};
+
 const newOrderTotal = computed(() => {
   return orderItems.value.reduce((total, item) => {
-    return total + (item.dish.price * item.quantity);
+    return total + (getItemPrice(item) * item.quantity);
   }, 0);
 });
 
@@ -184,12 +208,29 @@ const totalItems = computed(() => {
   return existingItems + newItems;
 });
 
+// Get current price based on selected variant or base price
+const currentPrice = computed(() => {
+  if (!selectedDish.value) return 0;
+  if (selectedVariant.value) {
+    return Number(selectedVariant.value.price_modifier) || 0;
+  }
+  return Number(selectedDish.value.price) || 0;
+});
+
 const openQuantityModal = (dish: Dish) => {
   selectedDish.value = dish;
   modalQuantity.value = 1;
   modalSpecialInstructions.value = '';
   showIngredients.value = false;
   excludedIngredients.value = [];
+
+  // Set default variant if dish has variants
+  if (dish.variants && dish.variants.length > 0) {
+    const defaultVariant = dish.variants.find(v => v.is_default) || dish.variants[0];
+    selectedVariant.value = defaultVariant;
+  } else {
+    selectedVariant.value = null;
+  }
 
   // Check if dish already exists in order to pre-fill quantity and instructions
   const existingItem = orderItems.value.find(item => item.dish_id === dish.dish_id);
@@ -217,12 +258,14 @@ const addDishToOrder = () => {
 
   console.log('Adding dish to order:', {
     dish_id: selectedDish.value.dish_id,
+    variant_id: selectedVariant.value?.variant_id,
     excluded_ingredients: excludedIngredients.value,
     is_new: isNewItem
   });
 
   if (existingItemIndex > -1) {
     // Update existing item
+    orderItems.value[existingItemIndex].variant_id = selectedVariant.value?.variant_id;
     orderItems.value[existingItemIndex].quantity = modalQuantity.value;
     orderItems.value[existingItemIndex].special_instructions = modalSpecialInstructions.value;
     orderItems.value[existingItemIndex].excluded_ingredients = excludedIngredients.value.length > 0 ? [...excludedIngredients.value] : [];
@@ -233,6 +276,7 @@ const addDishToOrder = () => {
     orderItems.value.push({
       dish_id: selectedDish.value.dish_id,
       dish: selectedDish.value,
+      variant_id: selectedVariant.value?.variant_id,
       quantity: modalQuantity.value,
       special_instructions: modalSpecialInstructions.value,
       excluded_ingredients: excludedIngredients.value.length > 0 ? [...excludedIngredients.value] : [],
@@ -295,6 +339,7 @@ const submitOrder = () => {
   // Transform order items to form-compatible format
   orderForm.order_items = orderItems.value.map(item => ({
     dish_id: item.dish_id,
+    variant_id: item.variant_id,
     quantity: item.quantity,
     special_instructions: item.special_instructions,
     excluded_ingredients: item.excluded_ingredients || [],
@@ -423,7 +468,11 @@ const getAllergenBadgeColor = (allergen: string) => {
                 <div class="space-y-2">
                   <div class="flex justify-between items-start">
                     <h3 class="font-semibold text-base sm:text-lg flex-1 min-w-0 pr-2">{{ dish.dish_name }}</h3>
-                    <p class="font-bold text-lg sm:text-xl text-green-600 flex-shrink-0">₱{{ dish.price || 0 }}</p>
+                    <p class="font-bold text-lg sm:text-xl text-green-600 flex-shrink-0">
+                      ₱{{ dish.variants && dish.variants.length > 0
+                        ? Number((dish.variants.find(v => v.is_default) || dish.variants[0]).price_modifier).toFixed(2)
+                        : Number(dish.price || 0).toFixed(2) }}
+                    </p>
                   </div>
                   <p class="text-sm sm:text-base text-muted-foreground">{{ dish.description || 'No description available' }}</p>
                 </div>
@@ -559,7 +608,7 @@ const getAllergenBadgeColor = (allergen: string) => {
           <div class="space-y-2">
             <div class="flex justify-between items-center">
               <h4 class="font-semibold">{{ selectedDish.dish_name }}</h4>
-              <span class="font-bold text-lg">₱{{ selectedDish.price }}</span>
+              <span class="font-bold text-lg">₱{{ currentPrice.toFixed(2) }}</span>
             </div>
             <p class="text-sm text-muted-foreground">{{ selectedDish.description || 'No description available' }}</p>
 
@@ -581,6 +630,32 @@ const getAllergenBadgeColor = (allergen: string) => {
               <span>{{ selectedDish.preparation_time }} min</span>
               <ChefHat class="h-4 w-4 ml-2" />
               <span>{{ selectedDish.category?.category_name }}</span>
+            </div>
+          </div>
+
+          <!-- Variant/Size Selection -->
+          <div v-if="selectedDish.variants && selectedDish.variants.length > 0" class="space-y-2">
+            <Label>Select Size</Label>
+            <div class="grid grid-cols-1 gap-2">
+              <button
+                v-for="variant in selectedDish.variants"
+                :key="variant.variant_id"
+                @click="selectedVariant = variant"
+                :class="[
+                  'p-3 border rounded-lg text-left transition-all',
+                  selectedVariant?.variant_id === variant.variant_id
+                    ? 'border-primary bg-primary/10 ring-2 ring-primary'
+                    : 'border-gray-300 hover:border-primary hover:bg-gray-50'
+                ]"
+              >
+                <div class="flex justify-between items-center">
+                  <span class="font-semibold">{{ variant.size_name }}</span>
+                  <span class="font-bold text-primary">₱{{ Number(variant.price_modifier).toFixed(2) }}</span>
+                </div>
+                <div class="text-xs text-muted-foreground mt-1">
+                  {{ Number(variant.quantity_multiplier).toFixed(1) }}x ingredients
+                </div>
+              </button>
             </div>
           </div>
 
@@ -681,7 +756,7 @@ const getAllergenBadgeColor = (allergen: string) => {
           <!-- Total Price -->
           <div class="flex justify-between items-center p-3 bg-muted rounded-lg">
             <span class="font-medium">Total:</span>
-            <span class="font-bold text-lg">₱{{ (selectedDish.price * modalQuantity).toFixed(2) }}</span>
+            <span class="font-bold text-lg">₱{{ (currentPrice * modalQuantity).toFixed(2) }}</span>
           </div>
         </div>
 
@@ -785,7 +860,12 @@ const getAllergenBadgeColor = (allergen: string) => {
                   >
                     <div class="flex-1 min-w-0">
                       <p class="font-medium text-sm">{{ item.dish.dish_name }}</p>
-                      <p class="text-xs text-muted-foreground">₱{{ item.dish.price }} each</p>
+                      <p class="text-xs text-muted-foreground">
+                        ₱{{ getItemPrice(item).toFixed(2) }} each
+                        <span v-if="item.variant_id && item.dish.variants" class="text-blue-600">
+                          ({{ item.dish.variants.find(v => v.variant_id === item.variant_id)?.size_name }})
+                        </span>
+                      </p>
                       <p v-if="item.special_instructions" class="text-xs text-muted-foreground mt-1 italic">
                         Special: {{ item.special_instructions }}
                       </p>
@@ -823,7 +903,7 @@ const getAllergenBadgeColor = (allergen: string) => {
                     </div>
 
                     <div class="text-right">
-                      <p class="font-semibold text-sm">₱{{ (item.dish.price * item.quantity).toFixed(2) }}</p>
+                      <p class="font-semibold text-sm">₱{{ (getItemPrice(item) * item.quantity).toFixed(2) }}</p>
                     </div>
                   </div>
                 </div>

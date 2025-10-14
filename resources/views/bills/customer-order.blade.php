@@ -210,7 +210,12 @@
             <tbody>
                 @foreach($order->orderItems as $item)
                 <tr>
-                    <td>{{ $item->dish->dish_name ?? 'Unknown Item' }}</td>
+                    <td>
+                        {{ $item->dish->dish_name ?? 'Unknown Item' }}
+                        @if($item->variant)
+                            <br><span style="font-size: 10px; color: #0066cc;">({{ $item->variant->size_name }})</span>
+                        @endif
+                    </td>
                     <td class="text-center">{{ $item->quantity }}</td>
                     <td class="text-right">₱{{ number_format($item->unit_price, 2) }}</td>
                     <td class="text-right">₱{{ number_format($item->quantity * $item->unit_price, 2) }}</td>

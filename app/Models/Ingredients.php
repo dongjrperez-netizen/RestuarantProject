@@ -73,10 +73,22 @@ class Ingredients extends Model
 
     public function decreaseStock($quantity, $unit = null)
     {
+        $originalQuantity = $quantity;
+        $originalUnit = $unit;
+
         // Convert quantity to base unit if different unit is provided
         if ($unit && $unit !== $this->base_unit) {
             try {
                 $quantity = UnitConverter::convert($quantity, $unit, $this->base_unit);
+
+                \Log::info("Unit conversion in decreaseStock", [
+                    'ingredient_name' => $this->ingredient_name,
+                    'original_quantity' => $originalQuantity,
+                    'original_unit' => $originalUnit,
+                    'converted_quantity' => $quantity,
+                    'base_unit' => $this->base_unit,
+                    'current_stock_before' => $this->current_stock,
+                ]);
             } catch (\InvalidArgumentException $e) {
                 throw new \Exception("Cannot convert {$unit} to {$this->base_unit} for ingredient: {$this->ingredient_name}");
             }
@@ -85,7 +97,14 @@ class Ingredients extends Model
         if ($this->current_stock < $quantity) {
             throw new \Exception("Insufficient stock for ingredient: {$this->ingredient_name}. Current: {$this->current_stock} {$this->base_unit}, Required: {$quantity} {$this->base_unit}");
         }
+
         $this->decrement('current_stock', $quantity);
+
+        \Log::info("Stock decremented", [
+            'ingredient_name' => $this->ingredient_name,
+            'decremented_by' => $quantity,
+            'current_stock_after' => $this->fresh()->current_stock,
+        ]);
     }
 
     public function addPackages($packageCount, $contentsPerPackage)

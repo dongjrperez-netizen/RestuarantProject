@@ -28,6 +28,15 @@ interface DishPricing {
   promo_end_date?: string;
 }
 
+interface DishVariant {
+  variant_id: number;
+  size_name: string;
+  price_modifier: number;
+  quantity_multiplier: number;
+  is_default: boolean;
+  is_available: boolean;
+}
+
 interface Dish {
   dish_id: number;
   dish_name: string;
@@ -43,6 +52,7 @@ interface Dish {
   price?: number;
   category?: MenuCategory;
   pricing?: DishPricing[];
+  variants?: DishVariant[];
   created_at: string;
   updated_at: string;
 }
@@ -254,6 +264,7 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
                 <TableHead>Dish Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Category</TableHead>
+                <TableHead>Variants</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
@@ -278,7 +289,25 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {{ getDineInPrice(dish) }}
+                  <div v-if="dish.variants && dish.variants.length > 0" class="space-y-1">
+                    <div v-for="variant in dish.variants" :key="variant.variant_id" class="text-xs">
+                      <span class="font-medium">{{ variant.size_name }}</span>
+                      <span v-if="variant.is_default" class="ml-1 text-green-600 text-[10px]">(Default)</span>
+                    </div>
+                  </div>
+                  <div v-else class="text-xs text-muted-foreground italic">
+                    No variants
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div v-if="dish.variants && dish.variants.length > 0" class="space-y-1">
+                    <div v-for="variant in dish.variants" :key="variant.variant_id" class="text-xs">
+                      ₱{{ Number(variant.price_modifier).toFixed(2) }}
+                    </div>
+                  </div>
+                  <div v-else>
+                    {{ getDineInPrice(dish) }}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Badge :variant="getStatusBadgeVariant(dish.status)">
@@ -331,7 +360,7 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
                 </TableCell>
               </TableRow>
               <TableRow v-if="!dishes || dishes.length === 0">
-                <TableCell colspan="6" class="text-center py-8">
+                <TableCell colspan="7" class="text-center py-8">
                   <div class="text-muted-foreground">
                     <div class="text-lg mb-2">No dishes found</div>
                     <div class="text-sm">Get started by adding your first dish.</div>

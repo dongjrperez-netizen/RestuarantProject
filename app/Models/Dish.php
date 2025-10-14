@@ -71,20 +71,25 @@ class Dish extends Model
         return $this->hasMany(DishIngredient::class, 'dish_id', 'dish_id');
     }
 
-
-
-    public function calculateIngredientQuantities($dishQuantity = 1)
+    public function variants(): HasMany
     {
-        return $this->dishIngredients->mapWithKeys(function ($dishIngredient) use ($dishQuantity) {
+        return $this->hasMany(DishVariant::class, 'dish_id', 'dish_id');
+    }
+
+
+
+    public function calculateIngredientQuantities($dishQuantity = 1, $variantMultiplier = 1.0)
+    {
+        return $this->dishIngredients->mapWithKeys(function ($dishIngredient) use ($dishQuantity, $variantMultiplier) {
             // Use the unit-converted quantity for accurate inventory calculation
             $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
             return [
-                $dishIngredient->ingredient_id => $quantityInBaseUnit * $dishQuantity,
+                $dishIngredient->ingredient_id => $quantityInBaseUnit * $variantMultiplier * $dishQuantity,
             ];
         });
     }
 
-    public function hasAvailableStock($dishQuantity = 1)
+    public function hasAvailableStock($dishQuantity = 1, $variantMultiplier = 1.0)
     {
         // If dish has no ingredients, consider it available
         if ($this->dishIngredients->isEmpty()) {
@@ -92,8 +97,8 @@ class Dish extends Model
         }
 
         foreach ($this->dishIngredients as $dishIngredient) {
-            // Use the unit-converted method for accurate stock checking
-            if (!$dishIngredient->hasSufficientStock($dishQuantity)) {
+            // Use the unit-converted method for accurate stock checking with variant multiplier
+            if (!$dishIngredient->hasSufficientStock($dishQuantity * $variantMultiplier)) {
                 return false;
             }
         }
@@ -101,11 +106,11 @@ class Dish extends Model
         return true;
     }
 
-    public function calculateIngredientCost()
+    public function calculateIngredientCost($variantMultiplier = 1.0)
     {
-        return $this->dishIngredients->sum(function ($dishIngredient) {
-            // Use the unit-converted cost calculation method
-            return $dishIngredient->calculateCost();
+        return $this->dishIngredients->sum(function ($dishIngredient) use ($variantMultiplier) {
+            // Use the unit-converted cost calculation method with variant multiplier
+            return $dishIngredient->calculateCost() * $variantMultiplier;
         });
     }
 
@@ -137,5 +142,20 @@ class Dish extends Model
     public function scopeAvailable($query)
     {
         return $query->where('is_available', true)->where('status', 'active');
+    }
+
+    public function hasVariants(): bool
+    {
+        return $this->variants()->exists();
+    }
+
+    public function getDefaultVariant()
+    {
+        return $this->variants()->where('is_default', true)->first();
+    }
+
+    public function getAvailableVariants()
+    {
+        return $this->variants()->where('is_available', true)->orderBy('sort_order')->get();
     }
 }

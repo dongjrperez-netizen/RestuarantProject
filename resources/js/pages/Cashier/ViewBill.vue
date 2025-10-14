@@ -628,7 +628,12 @@ const getCurrentTotal = () => {
                                     <div v-for="item in order?.order_items" :key="item.item_id"
                                          class="flex justify-between items-center">
                                         <div class="flex-1">
-                                            <p class="font-medium">{{ item.dish?.dish_name }}</p>
+                                            <p class="font-medium">
+                                                {{ item.dish?.dish_name }}
+                                                <span v-if="item.variant" class="text-sm text-blue-600 font-semibold">
+                                                    ({{ item.variant.size_name }})
+                                                </span>
+                                            </p>
                                             <p class="text-sm text-muted-foreground">
                                                 {{ formatCurrency(item.unit_price) }} × {{ item.quantity }}
                                             </p>

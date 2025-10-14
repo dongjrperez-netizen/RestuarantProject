@@ -55,6 +55,14 @@ interface DishIngredient {
   preparation_note: string;
 }
 
+interface DishVariant {
+  variant_id?: number;
+  size_name: string;
+  price_modifier: number | string;
+  quantity_multiplier: number | string;
+  is_default: boolean;
+}
+
 interface Dish {
   dish_id: number;
   dish_name: string;
@@ -63,6 +71,7 @@ interface Dish {
   image_url?: string;
   price: number;
   dish_ingredients?: any[];
+  variants?: DishVariant[];
 }
 
 interface Props {
@@ -88,9 +97,11 @@ const form = useForm({
   image_url: props.dish.image_url || '',
   price: props.dish.price || '',
   ingredients: [] as DishIngredient[],
+  has_variants: (props.dish.variants && props.dish.variants.length > 0) || false,
+  variants: [] as DishVariant[],
 });
 
-// Initialize ingredients from existing dish
+// Initialize ingredients and variants from existing dish
 onMounted(() => {
   if (props.dish.dish_ingredients) {
     form.ingredients = props.dish.dish_ingredients.map((dishIngredient, index) => ({
@@ -101,6 +112,16 @@ onMounted(() => {
       unit: dishIngredient.unit_of_measure || dishIngredient.ingredient?.base_unit || 'g',
       is_optional: dishIngredient.is_optional || false,
       preparation_note: dishIngredient.preparation_note || '',
+    }));
+  }
+
+  if (props.dish.variants && props.dish.variants.length > 0) {
+    form.variants = props.dish.variants.map(variant => ({
+      variant_id: variant.variant_id,
+      size_name: variant.size_name,
+      price_modifier: variant.price_modifier,
+      quantity_multiplier: variant.quantity_multiplier,
+      is_default: variant.is_default,
     }));
   }
 });
@@ -418,6 +439,29 @@ const handleImageError = (message: string) => {
   console.error('Image error:', message);
 };
 
+const addVariant = () => {
+  form.variants.push({
+    size_name: '',
+    price_modifier: '',
+    quantity_multiplier: 1.0,
+    is_default: form.variants.length === 0, // First variant is default
+  });
+};
+
+const removeVariant = (index: number) => {
+  form.variants.splice(index, 1);
+  // If we removed the default, make the first one default
+  if (form.variants.length > 0 && !form.variants.some(v => v.is_default)) {
+    form.variants[0].is_default = true;
+  }
+};
+
+const setDefaultVariant = (index: number) => {
+  form.variants.forEach((v, i) => {
+    v.is_default = i === index;
+  });
+};
+
 const submit = () => {
   form.put(`/menu/${props.dish.dish_id}`, {
     onSuccess: () => {
@@ -684,14 +728,130 @@ const submit = () => {
                   </TableBody>
                 </Table>
               </div>
+
+              <!-- Error message for ingredients -->
+              <p v-if="form.errors.ingredients" class="text-sm text-red-500 mt-2">
+                {{ form.errors.ingredients }}
+              </p>
             </div>
           </div>
         </div>
 
+        <!-- Variants Section -->
+        <Card>
+          <CardHeader>
+            <div class="flex items-center justify-between">
+              <CardTitle>Size Variants (Optional)</CardTitle>
+              <div class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="has_variants"
+                  v-model="form.has_variants"
+                  class="h-4 w-4 rounded border-gray-300"
+                  @change="() => console.log('Checkbox changed to:', form.has_variants)"
+                />
+                <Label for="has_variants" class="cursor-pointer">Enable multiple sizes</Label>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent v-if="form.has_variants" class="space-y-4">
+            <p class="text-sm text-muted-foreground">
+              Define different sizes for this dish. The base price and ingredients are defined above.
+              Here you set the multipliers for each size.
+            </p>
+
+            <div v-if="form.variants.length === 0" class="text-center py-8 border-2 border-dashed rounded-lg">
+              <p class="text-sm text-muted-foreground mb-4">No size variants added yet</p>
+              <Button @click="addVariant" variant="outline">
+                <Plus class="w-4 h-4 mr-2" />
+                Add First Size Variant
+              </Button>
+            </div>
+
+            <div v-else class="space-y-3">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead class="w-[25%]">Size Name</TableHead>
+                    <TableHead class="w-[20%]">Price</TableHead>
+                    <TableHead class="w-[20%]">Quantity Multiplier</TableHead>
+                    <TableHead class="w-[15%]">Default</TableHead>
+                    <TableHead class="w-[20%]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-for="(variant, index) in form.variants" :key="index">
+                    <TableCell>
+                      <Input
+                        v-model="variant.size_name"
+                        placeholder="e.g., Small, Medium, Large"
+                        class="w-full"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        v-model.number="variant.price_modifier"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        class="w-full"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        v-model.number="variant.quantity_multiplier"
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        max="10"
+                        placeholder="1.0"
+                        class="w-full"
+                      />
+                      <p class="text-xs text-muted-foreground mt-1">
+                        {{ variant.quantity_multiplier }}x ingredients
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        :checked="variant.is_default"
+                        @change="setDefaultVariant(index)"
+                        class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        @click="removeVariant(index)"
+                        class="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 class="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+
+              <Button @click="addVariant" type="button" variant="outline" size="sm">
+                <Plus class="w-4 h-4 mr-2" />
+                Add Another Size
+              </Button>
+            </div>
+
+            <!-- Error message for variants -->
+            <p v-if="form.errors.variants" class="text-sm text-red-500 mt-2">
+              {{ form.errors.variants }}
+            </p>
+          </CardContent>
+        </Card>
+
         <!-- Bottom Section: Pricing and Update Button -->
         <div class="flex items-end justify-between">
           <div class="space-y-2">
-            <Label for="pricing">Pricing</Label>
+            <Label for="pricing">{{ form.has_variants ? 'Base Price (for reference)' : 'Pricing' }}</Label>
             <Input
               id="pricing"
               v-model="form.price"
@@ -699,7 +859,14 @@ const submit = () => {
               step="0.01"
               placeholder="0.00"
               class="w-48"
+              :class="{ 'border-red-500': form.errors.price }"
             />
+            <p v-if="form.has_variants" class="text-xs text-muted-foreground">
+              Variant prices will be used instead
+            </p>
+            <p v-if="form.errors.price" class="text-sm text-red-500">
+              {{ form.errors.price }}
+            </p>
           </div>
 
           <div class="flex items-center gap-2">

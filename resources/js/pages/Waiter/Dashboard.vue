@@ -4,8 +4,18 @@ import WaiterLayout from '@/layouts/WaiterLayout.vue';
 import Button from '@/components/ui/button/Button.vue';
 import { ref, computed } from 'vue';
 
+interface DishVariant {
+  variant_id: number;
+  size_name: string;
+  price_modifier: number;
+  quantity_multiplier: number;
+  is_default: boolean;
+  is_available: boolean;
+}
+
 interface OrderItem {
   item_id: number;
+  variant_id?: number;
   quantity: number;
   served_quantity: number;
   status: 'pending' | 'served';
@@ -13,6 +23,7 @@ interface OrderItem {
     dish_id: number;
     dish_name: string;
   };
+  variant?: DishVariant;
 }
 
 interface Order {
@@ -601,6 +612,9 @@ const maintenanceTables = computed(() =>
                         </span>
                         <span :class="isItemFullyServed(item) ? 'line-through text-gray-500' : ''">
                           {{ item.dish?.dish_name || 'Unknown Item' }}
+                          <span v-if="item.variant" class="text-xs text-blue-600 font-semibold">
+                            ({{ item.variant.size_name }})
+                          </span>
                         </span>
                       </div>
                       <div class="flex items-center space-x-2">

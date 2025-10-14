@@ -6,6 +6,15 @@ interface MenuCategory {
   category_name: string;
 }
 
+interface DishVariant {
+  variant_id: number;
+  size_name: string;
+  price_modifier: number;
+  quantity_multiplier: number;
+  is_default: boolean;
+  is_available: boolean;
+}
+
 interface Dish {
   dish_id: number;
   dish_name: string;
@@ -14,6 +23,7 @@ interface Dish {
   is_available: boolean;
   status: 'active' | 'inactive';
   category?: MenuCategory;
+  variants?: DishVariant[];
 }
 
 interface MenuPlan {
@@ -114,8 +124,11 @@ const props = defineProps<Props>();
                       {{ dish.dish_name }}
                     </h4>
                     <div class="flex flex-col items-end space-y-1">
-                      <span class="font-bold text-lg text-green-600">
+                      <span v-if="!dish.variants || dish.variants.length === 0" class="font-bold text-lg text-green-600">
                         ₱{{ Number(dish.price).toFixed(2) }}
+                      </span>
+                      <span v-else class="text-xs text-gray-500 font-medium">
+                        Multiple sizes
                       </span>
                       <span
                         class="px-2 py-1 text-xs font-medium rounded-full"
@@ -128,6 +141,24 @@ const props = defineProps<Props>();
                   <p v-if="dish.description" class="text-sm text-gray-600">
                     {{ dish.description }}
                   </p>
+
+                  <!-- Variants Display -->
+                  <div v-if="dish.variants && dish.variants.length > 0" class="mt-3 pt-3 border-t border-gray-200">
+                    <p class="text-xs font-medium text-gray-700 mb-2">Available Sizes:</p>
+                    <div class="space-y-1">
+                      <div
+                        v-for="variant in dish.variants"
+                        :key="variant.variant_id"
+                        class="flex justify-between items-center text-sm"
+                      >
+                        <div class="flex items-center gap-2">
+                          <span class="font-medium text-gray-700">{{ variant.size_name }}</span>
+                          <span v-if="variant.is_default" class="text-xs text-blue-600">(Default)</span>
+                        </div>
+                        <span class="font-semibold text-green-600">₱{{ Number(variant.price_modifier).toFixed(2) }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
