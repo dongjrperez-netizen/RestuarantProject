@@ -33,9 +33,9 @@ class RegisteredUserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'last_name' => 'required|string|max:255',
-            'first_name' => 'required|string|max:255',
-            'middle_name' => 'required|string|max:255',
+            'last_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
+            'first_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
+            'middle_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
             'date_of_birth' => 'required|date',
             'gender' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:users,email',
@@ -49,8 +49,11 @@ class RegisteredUserController extends Controller
         ], [
             // Personal Information
             'last_name.required' => 'Last name is required.',
+            'last_name.regex' => 'Last name can only contain letters, spaces, hyphens, and apostrophes.',
             'first_name.required' => 'First name is required.',
+            'first_name.regex' => 'First name can only contain letters, spaces, hyphens, and apostrophes.',
             'middle_name.required' => 'Middle name is required.',
+            'middle_name.regex' => 'Middle name can only contain letters, spaces, hyphens, and apostrophes.',
             'date_of_birth.required' => 'Date of birth is required.',
             'date_of_birth.date' => 'Please provide a valid date of birth.',
             'gender.required' => 'Gender is required.',

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AdminAuth;
+use App\Http\Middleware\AuthenticateAnyGuard;
 use App\Http\Middleware\CheckDemoSubscription;
 use App\Http\Middleware\CheckSubscription;
 use App\Http\Middleware\EmployeeAuth;
@@ -18,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
+        channels: __DIR__.'/../routes/channels.php',
         health: '/up',
         then: function () {
             Route::prefix('supplier')
@@ -35,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            'auth.any' => AuthenticateAnyGuard::class,
             'check.demo.subscription' => CheckDemoSubscription::class,
             'check.subscription' => CheckSubscription::class,
             'admin.auth' => AdminAuth::class,

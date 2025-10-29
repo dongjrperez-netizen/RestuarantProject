@@ -10,6 +10,8 @@ use App\Models\CustomerOrderItem;
 use App\Models\CustomerRequest;
 use App\Models\Dish;
 use App\Models\MenuPlan;
+use App\Events\OrderCreated;
+use App\Events\OrderServed;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -587,6 +589,12 @@ class WaiterController extends Controller
 
             // Recalculate order totals
             $order->calculateTotals();
+            
+            // Broadcast the order created/updated event
+            if (!$existingOrder) {
+                // Only broadcast for new orders
+                broadcast(new OrderCreated($order))->toOthers();
+            }
         });
 
         return redirect()
@@ -734,6 +742,12 @@ class WaiterController extends Controller
                 'new_served_quantity' => $orderItem->served_quantity,
                 'new_status' => $orderItem->status
             ]);
+            
+            // Check if any items were served and broadcast event
+            if ($request->served && $orderItem->served_quantity > 0) {
+                $order = $orderItem->customerOrder;
+                broadcast(new OrderServed($order))->toOthers();
+            }
 
             return response()->json([
                 'success' => true,

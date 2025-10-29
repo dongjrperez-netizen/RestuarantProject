@@ -14,6 +14,7 @@ interface PurchaseOrderItem {
   purchase_order_item_id: number;
   ingredient: {
     ingredient_name: string;
+    base_unit: string;
   };
   ordered_quantity: number;
   received_quantity: number;
@@ -284,9 +285,13 @@ const submit = () => {
                   <div>
                     <h4 class="font-medium">{{ item.ingredient.ingredient_name }}</h4>
                     <p class="text-sm text-muted-foreground">
-                      Ordered: {{ item.ordered_quantity }} {{ item.unit_of_measure }} | 
-                      Already Received: {{ item.received_quantity }} | 
+                      Ordered: {{ item.ordered_quantity }} {{ item.unit_of_measure }} |
+                      Already Received: {{ item.received_quantity }} |
                       Remaining: {{ getRemainingQuantity(item) }}
+                    </p>
+                    <p class="text-xs text-muted-foreground mt-1">
+                      Package Unit: <span class="font-medium">{{ item.unit_of_measure }}</span> |
+                      Base Unit: <span class="font-medium">{{ item.ingredient.base_unit }}</span>
                     </p>
                   </div>
                   <Badge :variant="getReceiveStatus(item, receiveItems[index].received_quantity).variant">

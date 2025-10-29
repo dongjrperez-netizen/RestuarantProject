@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CustomerOrder;
 use App\Models\CustomerPayment;
 use App\Models\Employee;
+use App\Events\OrderStatusUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -266,10 +267,16 @@ class CashierController extends Controller
             'paid_at' => now(),
         ]);
 
+        // Store previous status for broadcasting
+        $previousStatus = $order->status;
+        
         // Update order status to paid
         $order->update([
             'status' => 'paid',
         ]);
+        
+        // Broadcast the payment completion event
+        broadcast(new OrderStatusUpdated($order, $previousStatus))->toOthers();
 
         // Update table status to available
         if ($order->table) {
@@ -645,9 +652,15 @@ class CashierController extends Controller
                     'cashier_id' => $paymentData['cashier_id'],
                     'paid_at' => now(),
                 ]);
+                
+                // Store previous status for broadcasting
+                $previousStatus = $order->status;
 
                 // Update order status to paid
                 $order->update(['status' => 'paid']);
+                
+                // Broadcast the payment completion event
+                broadcast(new OrderStatusUpdated($order, $previousStatus))->toOthers();
 
                 // Update table status to available
                 if ($order->table) {

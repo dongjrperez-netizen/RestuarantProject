@@ -17,6 +17,8 @@ return new class extends Migration
             $table->decimal('plan_price', 10, 2);
             $table->string('plan_duration');
             $table->string('paypal_plan_id')->nullable();
+            $table->string('employee_limit')->nullable();
+            $table->string('supplier_limit')->nullable();
             $table->timestamps();
         });
     }

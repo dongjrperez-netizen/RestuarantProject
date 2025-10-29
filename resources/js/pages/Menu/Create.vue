@@ -551,7 +551,7 @@ const submit = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead class="w-[25%]">Size Name</TableHead>
+                    <TableHead class="w-[25%]">Size</TableHead>
                     <TableHead class="w-[20%]">Price</TableHead>
                     <TableHead class="w-[20%]">Quantity Multiplier</TableHead>
                     <TableHead class="w-[15%]">Default</TableHead>

@@ -31,6 +31,7 @@ use App\Http\Controllers\SuppliersController;
 use App\Http\Controllers\UsersubscriptionController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -38,6 +39,56 @@ use Inertia\Inertia;
 Route::get('/', function () {
     return Inertia::render('Welcome');
 })->name('home');
+
+// Custom broadcasting auth endpoint that supports multiple guards
+Route::post('/broadcasting-custom-auth', function (Illuminate\Http\Request $request) {
+    // Find authenticated user from any guard
+    $authenticatedUser = null;
+    $guardName = null;
+
+    foreach (['waiter', 'kitchen', 'cashier', 'web'] as $guard) {
+        if (Auth::guard($guard)->check()) {
+            $authenticatedUser = Auth::guard($guard)->user();
+            $guardName = $guard;
+            break;
+        }
+    }
+
+    if (!$authenticatedUser) {
+        \Log::warning('Broadcasting auth failed - no authenticated user');
+        return response()->json(['message' => 'Unauthenticated'], 403);
+    }
+
+    \Log::info('Broadcasting auth request', [
+        'guard' => $guardName,
+        'user_id' => $authenticatedUser->employee_id ?? $authenticatedUser->id,
+        'channel' => $request->input('channel_name'),
+    ]);
+
+    // Set the default guard to use this authenticated user
+    Auth::shouldUse($guardName);
+
+    // Call Laravel's broadcasting authorization
+    return Broadcast::auth($request);
+})->middleware('web');
+
+// Test route for broadcasting
+Route::get('/test-broadcast/{restaurantId}', function($restaurantId) {
+    $testOrder = (object) [
+        'order_id' => 999,
+        'order_number' => 'TEST-' . time(),
+        'status' => 'pending',
+        'restaurant_id' => $restaurantId,
+        'customer_name' => 'Test Customer',
+        'created_at' => now()->toISOString(),
+        'table' => (object) ['table_number' => '99', 'table_name' => 'Test Table'],
+        'order_items' => [(object) ['dish' => (object) ['dish_name' => 'Test Dish']]]
+    ];
+    
+    broadcast(new \App\Events\OrderCreated((object) $testOrder))->toOthers();
+    
+    return response()->json(['message' => 'Test event broadcasted', 'order' => $testOrder]);
+})->name('test.broadcast');
 
 Route::get('dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified', 'check.subscription'])
@@ -120,6 +171,7 @@ Route::get('/debug/employees', function () {
 Route::middleware(['auth:cashier', 'role:cashier'])->prefix('cashier')->name('cashier.')->group(function () {
     Route::get('/successful-payments', [CashierController::class, 'successfulPayments'])->name('successful-payments');
     Route::get('/bills', [CashierController::class, 'bills'])->name('bills');
+    Route::get('/api/orders', [App\Http\Controllers\OrderPollingController::class, 'cashierOrders'])->name('api.orders');
     Route::get('/bills/{orderId}', [CashierController::class, 'viewBill'])->name('bills.view');
     Route::get('/bills/{orderId}/print', [CashierController::class, 'printBill'])->name('bills.print');
     Route::post('/bills/{orderId}/discount', [CashierController::class, 'applyDiscount'])->name('bills.discount');
@@ -336,6 +388,7 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
 // Kitchen Staff Routes
 Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->name('kitchen.')->group(function () {
     Route::get('/dashboard', [KitchenController::class, 'dashboard'])->name('dashboard');
+    Route::get('/api/orders', [App\Http\Controllers\OrderPollingController::class, 'kitchenOrders'])->name('api.orders');
     Route::post('/preparation-orders/{id}/start', [KitchenController::class, 'startPreparationOrder'])->name('preparation-orders.start');
     Route::post('/preparation-orders/{orderId}/items/{itemId}/start', [KitchenController::class, 'startPreparationItem'])->name('preparation-items.start');
     Route::post('/preparation-orders/{orderId}/items/{itemId}/complete', [KitchenController::class, 'completePreparationItem'])->name('preparation-items.complete');
@@ -553,3 +606,14 @@ require __DIR__.'/billing.php';
 Route::prefix('supplier')->name('supplier.')->group(function () {
     require __DIR__.'/supplier.php';
 });
+// Debug route to check authentication status
+Route::get('/debug/auth-check', function() {
+    return response()->json([
+        'waiter_auth' => Auth::guard('waiter')->check(),
+        'waiter_user' => Auth::guard('waiter')->user(),
+        'web_auth' => Auth::guard('web')->check(),
+        'web_user' => Auth::guard('web')->user(),
+        'session_data' => session()->all(),
+        'cookies' => request()->cookies->all(),
+    ]);
+})->middleware('web');

@@ -73,14 +73,20 @@ class EmployeeController extends Controller
         }
 
         $validated = $request->validate([
-            'firstname' => 'required|string|max:255',
-            'lastname' => 'required|string|max:255',
-            'middlename' => 'nullable|string|max:255',
+            'firstname' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
+            'lastname' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
+            'middlename' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
             'email' => 'required|string|email|max:255|unique:employees',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'date_of_birth' => 'required|date|before:today',
             'gender' => 'required|in:male,female,other',
             'role_id' => 'required|exists:roles,id',
+        ], [
+            'firstname.required' => 'First name is required.',
+            'firstname.regex' => 'First name can only contain letters, spaces, hyphens, and apostrophes.',
+            'lastname.required' => 'Last name is required.',
+            'lastname.regex' => 'Last name can only contain letters, spaces, hyphens, and apostrophes.',
+            'middlename.regex' => 'Middle name can only contain letters, spaces, hyphens, and apostrophes.',
         ]);
 
         $validated['password'] = Hash::make($validated['password']);

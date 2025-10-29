@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\MenuPreparationOrder;
 use App\Models\MenuPreparationItem;
 use App\Models\CustomerOrder;
+use App\Events\OrderStatusUpdated;
+use App\Events\OrderReadyToServe;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Employee;
@@ -23,50 +25,40 @@ class KitchenController extends Controller
         $restaurantId = $employee->user_id; // Employee belongs to their specific restaurant
 
         try {
-            // Get customer orders that need kitchen attention
+            // Single optimized query with all relationships loaded eagerly
             $unpaidOrders = CustomerOrder::with([
                 'table',
-                'orderItems.dish',
-                'orderItems.variant',
+                'orderItems' => function($query) {
+                    $query->whereColumn('served_quantity', '<', 'quantity')
+                         ->with(['dish', 'variant', 'excludedIngredients.ingredient']);
+                },
                 'employee'
             ])
             ->where('restaurant_id', $restaurantId)
             ->whereIn('status', ['pending', 'ready', 'completed', 'in_progress'])
             ->whereHas('orderItems', function ($query) {
-                // Only show orders that have at least one item not fully served
                 $query->whereColumn('served_quantity', '<', 'quantity');
             })
             ->orderBy('created_at', 'desc')
             ->limit(20)
             ->get();
 
-            // Load excluded ingredients for each order item
-            foreach ($unpaidOrders as $order) {
-                foreach ($order->orderItems as $item) {
-                    $item->excluded_ingredients = \App\Models\CustomerRequest::where('order_id', $order->order_id)
-                        ->where('dish_id', $item->dish_id)
-                        ->where('request_type', 'exclude')
-                        ->with('ingredient')
-                        ->get();
-                }
-            }
+            // Single query for all stats using DB::raw
+            $stats = CustomerOrder::selectRaw('
+                COUNT(*) as total_orders,
+                SUM(CASE WHEN status IN ("pending", "confirmed") THEN 1 ELSE 0 END) as pending_orders,
+                SUM(CASE WHEN status = "in_progress" THEN 1 ELSE 0 END) as in_progress_orders,
+                SUM(CASE WHEN status = "ready" THEN 1 ELSE 0 END) as ready_orders
+            ')
+            ->where('restaurant_id', $restaurantId)
+            ->whereDate('created_at', today())
+            ->first();
 
-            // Relationship should be loaded via with() clause above
-
-            // Get today's kitchen statistics
             $todayStats = [
-                'total_orders' => CustomerOrder::where('restaurant_id', $restaurantId)
-                    ->whereDate('created_at', today())
-                    ->count(),
-                'pending_orders' => CustomerOrder::where('restaurant_id', $restaurantId)
-                    ->whereIn('status', ['pending', 'confirmed'])
-                    ->count(),
-                'in_progress_orders' => CustomerOrder::where('restaurant_id', $restaurantId)
-                    ->where('status', 'in_progress')
-                    ->count(),
-                'ready_orders' => CustomerOrder::where('restaurant_id', $restaurantId)
-                    ->where('status', 'ready')
-                    ->count(),
+                'total_orders' => (int) $stats->total_orders,
+                'pending_orders' => (int) $stats->pending_orders,
+                'in_progress_orders' => (int) $stats->in_progress_orders,
+                'ready_orders' => (int) $stats->ready_orders,
             ];
 
         } catch (\Exception $e) {
@@ -289,11 +281,21 @@ class KitchenController extends Controller
             if (!$order) {
                 return response()->json(['error' => 'Order not found'], 404);
             }
+            
+            $previousStatus = $order->status;
 
             $order->update([
                 'status' => $request->status,
                 'updated_at' => now()
             ]);
+
+            // Broadcast the status update event
+            broadcast(new OrderStatusUpdated($order, $previousStatus))->toOthers();
+
+            // If order is now ready, broadcast specific ready event for waiters
+            if ($request->status === 'ready' && $previousStatus !== 'ready') {
+                broadcast(new OrderReadyToServe($order))->toOthers();
+            }
 
             return response()->json([
                 'success' => true,

@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Receipt, Printer, CreditCard, Search, Filter } from 'lucide-vue-next';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 // Props
-defineProps<{
+const props = defineProps<{
     employee?: any;
     orders?: any;
 }>();
@@ -18,6 +18,49 @@ defineProps<{
 // Search and filter
 const searchTerm = ref('');
 const statusFilter = ref('all');
+const orders = ref(props.orders);
+
+// Real-time updates using polling
+let pollingInterval = null;
+
+const setupRealTimeUpdates = () => {
+    // Poll for updates every 5 seconds
+    pollingInterval = setInterval(async () => {
+        try {
+            const response = await fetch('/cashier/api/orders');
+            const data = await response.json();
+            
+            if (data.success && data.orders) {
+                orders.value = data.orders;
+                console.log('Cashier orders updated');
+            }
+        } catch (error) {
+            console.error('Error fetching orders:', error);
+        }
+    }, 5000); // Poll every 5 seconds
+    
+    console.log('Cashier auto-refresh enabled (every 5 seconds)');
+};
+
+const cleanupRealTimeUpdates = () => {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+};
+
+const showNotification = (message, type = 'info') => {
+    // You can implement a toast notification system here
+    console.log(`[${type.toUpperCase()}] ${message}`);
+};
+
+onMounted(() => {
+    setupRealTimeUpdates();
+});
+
+onUnmounted(() => {
+    cleanupRealTimeUpdates();
+});
 
 // Payment handling
 // Define a type for the order object

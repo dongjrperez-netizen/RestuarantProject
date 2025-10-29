@@ -20,7 +20,7 @@ import {
   CalendarClock,
   AlertTriangle
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 
 interface Dish {
@@ -132,17 +132,64 @@ const getOrderAge = (dateString: string) => {
 
 const loading = ref(false);
 const showDamageModal = ref(false);
+const orders = ref(props.unpaidOrders);
+
+// Real-time updates using polling
+let pollingInterval = null;
+
+const setupRealTimeUpdates = () => {
+    // Poll for updates every 5 seconds
+    pollingInterval = setInterval(async () => {
+        try {
+            const response = await axios.get('/kitchen/api/orders');
+            if (response.data.success && response.data.orders) {
+                orders.value = response.data.orders;
+                console.log('Orders updated');
+            }
+        } catch (error) {
+            console.error('Error fetching orders:', error);
+        }
+    }, 5000); // Poll every 5 seconds
+    
+    console.log('Kitchen auto-refresh enabled (every 5 seconds)');
+};
+
+const cleanupRealTimeUpdates = () => {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+};
+
+const showNotification = (message, type = 'info') => {
+    // You can implement a toast notification system here
+    console.log(`[${type.toUpperCase()}] ${message}`);
+};
+
+onMounted(() => {
+    setupRealTimeUpdates();
+});
+
+onUnmounted(() => {
+    cleanupRealTimeUpdates();
+});
 
 const updateOrderStatus = async (orderId: number, newStatus: string) => {
   if (loading.value) return;
 
   loading.value = true;
   try {
-    await axios.post(`/kitchen/orders/${orderId}/status`, {
+    const response = await axios.post(`/kitchen/orders/${orderId}/status`, {
       status: newStatus
     });
-    // Refresh the page to show updated data
-    router.reload();
+    
+    // Update the order status locally
+    const orderIndex = orders.value.findIndex(order => order.order_id === orderId);
+    if (orderIndex !== -1) {
+      orders.value[orderIndex].status = newStatus;
+    }
+    
+    console.log('Order status updated successfully:', response.data);
   } catch (error) {
     console.error('Error updating order status:', error);
     alert('Failed to update order status');
@@ -231,7 +278,7 @@ const onDamageReportSuccess = () => {
       <!-- Orders Grid -->
       <div class="flex gap-6 overflow-x-auto pb-4">
         <Card
-          v-for="order in unpaidOrders"
+          v-for="order in orders"
           :key="order.order_id"
           class="flex-shrink-0 w-80 border-2 border-gray-300 hover:shadow-lg transition-all duration-200 flex flex-col h-full"
         >
@@ -346,7 +393,7 @@ const onDamageReportSuccess = () => {
         </Card>
 
         <!-- Empty state -->
-        <div v-if="unpaidOrders.length === 0" class="col-span-full text-center py-12 text-gray-500">
+        <div v-if="orders.length === 0" class="col-span-full text-center py-12 text-gray-500">
           <ChefHat class="h-16 w-16 mx-auto mb-4 text-gray-300" />
           <h3 class="text-lg font-medium text-gray-900 mb-2">No orders to display</h3>
           <p>Orders will appear here when they are ready for kitchen preparation</p>

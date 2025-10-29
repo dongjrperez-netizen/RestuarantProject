@@ -68,9 +68,8 @@ class CustomerOrderItem extends Model
     public function excludedIngredients()
     {
         return $this->hasMany(CustomerRequest::class, 'order_id', 'order_id')
-            ->where('dish_id', $this->dish_id)
             ->where('request_type', 'exclude')
-            ->with('ingredient');
+            ->whereColumn('customer_requests.dish_id', 'customer_order_items.dish_id');
     }
 
     protected static function boot()

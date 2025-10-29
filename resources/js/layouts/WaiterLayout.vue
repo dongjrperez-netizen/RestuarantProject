@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ref, computed } from 'vue';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import Button from '@/components/ui/button/Button.vue';
+import OrderReadyNotification from '@/components/OrderReadyNotification.vue';
 import {
   Menu,
   LogOut,
@@ -19,13 +20,21 @@ interface Employee {
   role: {
     role_name: string;
   };
+  user_id?: number;
 }
 
 interface Props {
   employee: Employee;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
+
+const page = usePage();
+
+// Get restaurant ID from employee's user_id or from page props
+const restaurantId = computed(() => {
+  return props.employee.user_id || (page.props as any).auth?.user?.id || null;
+});
 
 const sidebarOpen = ref(false);
 
@@ -58,16 +67,19 @@ const logout = () => {
           </h1>
         </div>
 
-        <!-- User Info -->
-        <Button
-          @click="logout"
-          variant="ghost"
-          size="sm"
-          class="text-red-600 hover:text-red-700 hover:bg-red-50 p-2"
-          :disabled="logoutForm.processing"
-        >
-          <LogOut class="h-4 w-4" />
-        </Button>
+        <!-- Notification Bell & User Info -->
+        <div class="flex items-center gap-2">
+          <OrderReadyNotification v-if="restaurantId" :restaurant-id="restaurantId" />
+          <Button
+            @click="logout"
+            variant="ghost"
+            size="sm"
+            class="text-red-600 hover:text-red-700 hover:bg-red-50 p-2"
+            :disabled="logoutForm.processing"
+          >
+            <LogOut class="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </header>
 
@@ -226,12 +238,13 @@ const logout = () => {
               </h1>
             </div>
 
-            <!-- User Info -->
+            <!-- Notification Bell & User Info -->
             <div class="flex items-center gap-1 sm:gap-3">
               <div class="text-right hidden md:block">
                 <p class="text-sm font-medium text-gray-900">{{ employee.firstname }} {{ employee.lastname }}</p>
                 <p class="text-xs text-gray-500">{{ employee.role.role_name }}</p>
               </div>
+              <OrderReadyNotification v-if="restaurantId" :restaurant-id="restaurantId" />
               <Button
                 @click="logout"
                 variant="ghost"

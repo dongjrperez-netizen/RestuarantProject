@@ -12,6 +12,7 @@ interface PurchaseOrderItem {
   purchase_order_item_id: number;
   ingredient: {
     ingredient_name: string;
+    base_unit: string;
   };
   ordered_quantity: number;
   received_quantity: number;
@@ -283,7 +284,8 @@ const cancelOrder = () => {
                 <TableHead>Received Qty</TableHead>
                 <TableHead>Unit Price</TableHead>
                 <TableHead>Total Price</TableHead>
-                <TableHead>Unit</TableHead>
+                <TableHead>Package Unit</TableHead>
+                <TableHead>Base Unit</TableHead>
                 <TableHead>Quality</TableHead>
                 <TableHead>Notes</TableHead>
               </TableRow>
@@ -323,6 +325,9 @@ const cancelOrder = () => {
                 </TableCell>
                 <TableCell>
                   {{ item.unit_of_measure }}
+                </TableCell>
+                <TableCell>
+                  <span class="text-sm text-muted-foreground">{{ item.ingredient.base_unit }}</span>
                 </TableCell>
                 <TableCell>
                   <div v-if="item.quality_rating" class="space-y-1">
