@@ -159,7 +159,7 @@ const formatDate = (dateString: string) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div class="grid gap-4 md:grid-cols-3">
+          <div class="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
             <a 
               href="/supplier/ingredients/create"
               class="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
@@ -192,9 +192,22 @@ const formatDate = (dateString: string) => {
                 <div class="text-sm text-muted-foreground">Manage purchase orders from restaurants</div>
               </div>
             </a>
+
+            <!-- 🆕 View History -->
+            <a 
+              href="/supplier/payments/history"
+              class="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Clock class="h-8 w-8 text-primary mr-3" />
+              <div>
+                <div class="font-medium">View History</div>
+                <div class="text-sm text-muted-foreground">Check your past transactions and order logs</div>
+              </div>
+            </a>
           </div>
         </CardContent>
       </Card>
+
     </div>
   </SupplierLayout>
 </template>

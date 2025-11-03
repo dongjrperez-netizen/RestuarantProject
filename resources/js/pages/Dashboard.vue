@@ -155,6 +155,22 @@ const quickActions = ref<QuickAction[]>([
 const chartData = ref(props.weeklyData);
 const donutData = ref(props.orderStatusData);
 
+// Map colors to statuses dynamically
+const getStatusColor = (status: string) => {
+  const colorMap: Record<string, string> = {
+    'Completed': 'rgb(34, 197, 94)',    // green
+    'Pending': 'rgb(251, 191, 36)',      // yellow/amber
+    'Preparing': 'rgb(59, 130, 246)',    // blue
+    'Ready': 'rgb(16, 185, 129)',        // teal/emerald
+  };
+  return colorMap[status] || 'rgb(156, 163, 175)'; // default gray
+};
+
+// Generate colors array based on the order of data
+const donutColors = computed(() => {
+  return donutData.value.map(item => getStatusColor(item.status));
+});
+
 const getOrderStatusBadge = (status: string) => {
   switch (status) {
     case 'pending':
@@ -376,7 +392,7 @@ setInterval(() => {
                                 :data="donutData"
                                 index="status"
                                 category="count"
-                                :colors="['rgb(34, 197, 94)', 'rgb(251, 191, 36)', 'rgb(59, 130, 246)', 'rgb(16, 185, 129)']"
+                                :colors="donutColors"
                                 :value-formatter="(value) => `${value} orders`"
                                 class="h-64"
                             />
@@ -390,12 +406,7 @@ setInterval(() => {
                                     <div class="flex items-center gap-2">
                                         <div
                                             class="w-3 h-3 rounded-full"
-                                            :style="{
-                                                backgroundColor: item.status === 'Completed' ? 'rgb(34, 197, 94)' :
-                                                                 item.status === 'Pending' ? 'rgb(251, 191, 36)' :
-                                                                 item.status === 'Preparing' ? 'rgb(59, 130, 246)' :
-                                                                 'rgb(16, 185, 129)'
-                                            }"
+                                            :style="{ backgroundColor: getStatusColor(item.status) }"
                                         ></div>
                                         <span class="text-sm">{{ item.status }}</span>
                                     </div>

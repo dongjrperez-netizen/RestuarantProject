@@ -66,9 +66,9 @@ const submit = () => {
   <Head title="Create Supplier" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="space-y-6 mx-6">
+    <div class="p-6">
       <!-- Header -->
-      <div class="flex justify-between items-center mb-6">
+     <div class="flex justify-between items-center mb-6">
         <div>
           <h1 class="text-2xl font-bold text-foreground">Create Supplier</h1>
           <p class="text-muted-foreground mt-1">

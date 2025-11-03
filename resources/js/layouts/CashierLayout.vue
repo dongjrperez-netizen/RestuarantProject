@@ -2,7 +2,7 @@
 import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
 import CashierSidebar from '@/components/CashierSidebar.vue';
-import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
+import CashierHeader from '@/components/CashierHeader.vue';
 import type { BreadcrumbItemType } from '@/types';
 
 interface Props {
@@ -20,7 +20,7 @@ withDefaults(defineProps<Props>(), {
     <AppShell variant="sidebar">
         <CashierSidebar />
         <AppContent variant="sidebar" class="overflow-x-hidden">
-            <AppSidebarHeader :breadcrumbs="breadcrumbs" />
+            <CashierHeader :breadcrumbs="breadcrumbs" />
             <slot />
         </AppContent>
     </AppShell>

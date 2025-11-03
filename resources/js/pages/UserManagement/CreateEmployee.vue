@@ -20,17 +20,40 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { ref, onMounted } from 'vue';
 
 interface Role {
   id: number;
   role_name: string;
 }
 
-interface Props {
-  roles: Role[];
+interface SubscriptionLimit {
+  allowed: boolean;
+  message: string;
 }
 
-defineProps<Props>();
+interface Props {
+  roles: Role[];
+  subscriptionLimits: SubscriptionLimit;
+}
+
+const props = defineProps<Props>();
+
+const showLimitModal = ref(false);
+
+onMounted(() => {
+  if (!props.subscriptionLimits.allowed) {
+    showLimitModal.value = true;
+  }
+});
 
 const form = useForm({
   firstname: '',
@@ -44,6 +67,14 @@ const form = useForm({
   role_id: '',
 });
 
+const submit = () => {
+  if (!props.subscriptionLimits.allowed) {
+    showLimitModal.value = true;
+    return;
+  }
+  form.post(route('employees.store'));
+};
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Employees',
@@ -55,9 +86,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-const submit = () => {
-  form.post(route('employees.store'));
-};
 </script>
 
 <template>
@@ -245,4 +273,22 @@ const submit = () => {
             </Card>
         </div>
     </AppLayout>
+
+    <Dialog v-model:open="showLimitModal">
+  <DialogContent class="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle class="text-red-600">Subscription Limit Reached</DialogTitle>
+      <DialogDescription class="mt-2">
+        {{ props.subscriptionLimits.message }}
+      </DialogDescription>
+    </DialogHeader>
+    <DialogFooter>
+      <Button variant="outline" @click="showLimitModal = false">Close</Button>
+      <Link href="/user-management/subscriptions/upgrade">
+        <Button>Upgrade Plan</Button>
+      </Link>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
 </template>

@@ -38,6 +38,7 @@ interface MenuPlan {
   end_date: string;
   description?: string;
   is_active: boolean;
+  is_default?: boolean;
   menu_plan_dishes: MenuPlanDish[];
 }
 
@@ -91,6 +92,7 @@ const form = useForm({
   start_date: formatDateForInput(props.menuPlan.start_date),
   end_date: formatDateForInput(props.menuPlan.end_date),
   description: props.menuPlan.description || '',
+  is_default: props.menuPlan.is_default ?? false,
   dishes: existingDishes,
 });
 
@@ -292,6 +294,7 @@ const submit = () => {
     start_date: form.start_date,
     end_date: form.end_date,
     description: form.description,
+    is_default: form.is_default,
     dishes: cleanedDishes
   };
 
@@ -426,6 +429,23 @@ const submit = () => {
                 placeholder="Describe this menu plan..."
                 class="min-h-[80px]"
               />
+            </div>
+            <div class="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="is_default"
+                v-model="form.is_default"
+                class="h-4 w-4 text-primary border-input rounded focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <Label for="is_default" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Set as Default Plan
+              </Label>
+              <div class="text-xs text-muted-foreground ml-2">
+                (This plan will be used as fallback when no specific plan exists for a week)
+              </div>
+              <div class="text-xs text-blue-600 ml-2" v-if="form.is_default">
+                ✓ This will be the default plan
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -625,4 +645,7 @@ const submit = () => {
       </form>
     </div>
   </AppLayout>
+
+ 
+
 </template>

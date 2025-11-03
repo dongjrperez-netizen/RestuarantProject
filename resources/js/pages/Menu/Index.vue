@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { type BreadcrumbItem } from '@/types';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Eye, Edit2, Play, Pause, Trash2, MoreHorizontal } from 'lucide-vue-next';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { type BreadcrumbItem } from '@/types';
 
 interface MenuCategory {
   category_id: number;
@@ -19,40 +19,13 @@ interface MenuCategory {
   is_active: boolean;
 }
 
-interface DishPricing {
-  pricing_id: number;
-  price_type: string;
-  base_price: number;
-  promotional_price?: number;
-  promo_start_date?: string;
-  promo_end_date?: string;
-}
-
-interface DishVariant {
-  variant_id: number;
-  size_name: string;
-  price_modifier: number;
-  quantity_multiplier: number;
-  is_default: boolean;
-  is_available: boolean;
-}
-
 interface Dish {
   dish_id: number;
   dish_name: string;
   description?: string;
-  preparation_time?: number;
-  serving_size?: number;
-  serving_unit?: string;
-  image_url?: string;
-  calories?: number;
-  allergens?: string[];
-  dietary_tags?: string[];
-  status: 'draft' | 'active' | 'inactive' | 'archived';
-  price?: number;
   category?: MenuCategory;
-  pricing?: DishPricing[];
-  variants?: DishVariant[];
+  price?: number;
+  status: 'active' | 'inactive' | 'archived';
   created_at: string;
   updated_at: string;
 }
@@ -80,7 +53,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const statusOptions = [
   { value: 'all', label: 'All Status' },
-  { value: 'draft', label: 'Draft' },
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Inactive' },
   { value: 'archived', label: 'Archived' },
@@ -89,7 +61,6 @@ const statusOptions = [
 const getStatusBadgeVariant = (status: string) => {
   switch (status) {
     case 'active': return 'default';
-    case 'draft': return 'secondary';
     case 'inactive': return 'destructive';
     case 'archived': return 'outline';
     default: return 'secondary';
@@ -121,39 +92,33 @@ const clearFilters = () => {
   applyFilters();
 };
 
+// 🔍 Automatically trigger search when typing or changing filters
+watch([searchQuery, selectedCategory, selectedStatus], () => {
+  applyFilters();
+});
+
 const updateDishStatus = (dish: Dish, newStatus: string) => {
-  router.post(`/menu/${dish.dish_id}/status`, {
-    status: newStatus
-  }, {
-    preserveState: true,
-  });
+  router.post(`/menu/${dish.dish_id}/status`, { status: newStatus }, { preserveState: true });
 };
 
 const deleteDish = (dish: Dish) => {
   if (confirm(`Are you sure you want to delete "${dish.dish_name}"? This action cannot be undone.`)) {
-    router.delete(`/menu/${dish.dish_id}`, {
-      preserveState: true,
-      onSuccess: () => {
-        // Refresh the page or show success message
-      }
-    });
+    router.delete(`/menu/${dish.dish_id}`, { preserveState: true });
   }
 };
 
 const activeDishes = computed(() => (props.dishes || []).filter(dish => dish.status === 'active').length);
-const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.status === 'draft').length);
 </script>
 
 <template>
   <Head title="Menu Management" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="space-y-6 mx-8">
+    <div class="space-y-6 mx-8 mt-6">
       <!-- Header -->
       <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">Menu Management</h1>
-          <p class="text-muted-foreground">Manage your restaurant menu items and categories</p>
+        <div class="text-3xl font-bold tracking-tight">
+          <!-- Optional title text -->
         </div>
         <div class="flex space-x-2">
           <Link href="/menu-categories">
@@ -163,48 +128,10 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
             <Button>Add New Dish</Button>
           </Link>
         </div>
-      </div>
+    </div>
 
-      <!-- Summary Cards -->
-      <div class="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Total Dishes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ (dishes || []).length }}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Active Dishes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ activeDishes }}</div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Draft Dishes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ draftDishes }}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Categories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ (categories || []).length }}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- Dishes Table -->
+      <!-- Filters and Search -->
       <Card>
         <CardHeader>
           <div class="flex items-center justify-between">
@@ -214,12 +141,11 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
                 <Input
                   v-model="searchQuery"
                   placeholder="Search dishes..."
-                  @keyup.enter="applyFilters"
                 />
               </div>
 
               <div class="w-[150px]">
-                <Select v-model="selectedCategory" @update:model-value="applyFilters">
+                <Select v-model="selectedCategory">
                   <SelectTrigger>
                     <SelectValue placeholder="All Categories" />
                   </SelectTrigger>
@@ -237,7 +163,7 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
               </div>
 
               <div class="w-[150px]">
-                <Select v-model="selectedStatus" @update:model-value="applyFilters">
+                <Select v-model="selectedStatus">
                   <SelectTrigger>
                     <SelectValue placeholder="All Status" />
                   </SelectTrigger>
@@ -257,6 +183,7 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
             </div>
           </div>
         </CardHeader>
+
         <CardContent>
           <Table>
             <TableHeader>
@@ -264,7 +191,6 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
                 <TableHead>Dish Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Variants</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
@@ -272,43 +198,12 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
             </TableHeader>
             <TableBody>
               <TableRow v-for="dish in (dishes || [])" :key="dish.dish_id">
-                <TableCell class="font-medium">
-                  <div class="font-semibold">{{ dish.dish_name }}</div>
-                </TableCell>
+                <TableCell class="font-medium">{{ dish.dish_name }}</TableCell>
+                <TableCell>{{ dish.description || 'No description' }}</TableCell>
                 <TableCell>
-                  <div v-if="dish.description" class="text-sm text-muted-foreground max-w-xs">
-                    {{ dish.description?.substring(0, 120) }}{{ dish.description?.length > 120 ? '...' : '' }}
-                  </div>
-                  <div v-else class="text-xs text-muted-foreground italic">
-                    No description
-                  </div>
+                  <Badge variant="secondary">{{ dish.category?.category_name || 'Uncategorized' }}</Badge>
                 </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">
-                    {{ dish.category?.category_name || 'Uncategorized' }}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div v-if="dish.variants && dish.variants.length > 0" class="space-y-1">
-                    <div v-for="variant in dish.variants" :key="variant.variant_id" class="text-xs">
-                      <span class="font-medium">{{ variant.size_name }}</span>
-                      <span v-if="variant.is_default" class="ml-1 text-green-600 text-[10px]">(Default)</span>
-                    </div>
-                  </div>
-                  <div v-else class="text-xs text-muted-foreground italic">
-                    No variants
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div v-if="dish.variants && dish.variants.length > 0" class="space-y-1">
-                    <div v-for="variant in dish.variants" :key="variant.variant_id" class="text-xs">
-                      ₱{{ Number(variant.price_modifier).toFixed(2) }}
-                    </div>
-                  </div>
-                  <div v-else>
-                    {{ getDineInPrice(dish) }}
-                  </div>
-                </TableCell>
+                <TableCell>{{ getDineInPrice(dish) }}</TableCell>
                 <TableCell>
                   <Badge :variant="getStatusBadgeVariant(dish.status)">
                     {{ dish.status }}
@@ -322,49 +217,40 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem @click="router.visit(`/menu/${dish.dish_id}`)" class="flex items-center cursor-pointer">
-                        <Eye class="mr-2 h-4 w-4" />
-                        View Details
+                      <DropdownMenuItem @click="router.visit(`/menu/${dish.dish_id}`)">
+                        <Eye class="mr-2 h-4 w-4" /> View
                       </DropdownMenuItem>
-                      <DropdownMenuItem @click="router.visit(`/menu/${dish.dish_id}/edit`)" class="flex items-center cursor-pointer">
-                        <Edit2 class="mr-2 h-4 w-4" />
-                        Edit Dish
+                      <DropdownMenuItem @click="router.visit(`/menu/${dish.dish_id}/edit`)">
+                        <Edit2 class="mr-2 h-4 w-4" /> Edit
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        v-if="dish.status === 'draft'"
-                        @click="updateDishStatus(dish, 'active')"
-                        class="flex items-center"
-                      >
-                        <Play class="mr-2 h-4 w-4" />
-                        Activate
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        v-else-if="dish.status === 'active'"
+                        v-if="dish.status === 'active'"
                         @click="updateDishStatus(dish, 'inactive')"
-                        class="flex items-center"
                       >
-                        <Pause class="mr-2 h-4 w-4" />
-                        Deactivate
+                        <Pause class="mr-2 h-4 w-4" /> Deactivate
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        v-else
+                        @click="updateDishStatus(dish, 'active')"
+                      >
+                        <Play class="mr-2 h-4 w-4" /> Activate
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
+                        class="text-destructive"
                         @click="deleteDish(dish)"
-                        class="flex items-center text-destructive focus:text-destructive"
                       >
-                        <Trash2 class="mr-2 h-4 w-4" />
-                        Delete
+                        <Trash2 class="mr-2 h-4 w-4" /> Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
+
               <TableRow v-if="!dishes || dishes.length === 0">
-                <TableCell colspan="7" class="text-center py-8">
-                  <div class="text-muted-foreground">
-                    <div class="text-lg mb-2">No dishes found</div>
-                    <div class="text-sm">Get started by adding your first dish.</div>
-                  </div>
+                <TableCell colspan="6" class="text-center py-8 text-muted-foreground">
+                  No dishes found.
                 </TableCell>
               </TableRow>
             </TableBody>

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Receipt, Printer, CreditCard, Search, Filter } from 'lucide-vue-next';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 // Props
 defineProps<{
@@ -76,6 +76,43 @@ const formatDate = (dateString: string) => {
 const getPrintBillUrl = (order: any) => {
     return `/cashier/bills/${order.order_id}/print`;
 };
+
+// Auto-refresh functionality
+let refreshInterval: ReturnType<typeof setInterval> | null = null;
+const REFRESH_INTERVAL = 10000; // Refresh every 10 seconds
+
+const startAutoRefresh = () => {
+    // Clear any existing interval
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+
+    // Set up new interval to reload orders
+    refreshInterval = setInterval(() => {
+        router.reload({
+            only: ['orders'],
+            preserveScroll: true,
+            preserveState: true,
+        });
+    }, REFRESH_INTERVAL);
+};
+
+const stopAutoRefresh = () => {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+};
+
+// Start auto-refresh when component mounts
+onMounted(() => {
+    startAutoRefresh();
+});
+
+// Clean up interval when component unmounts
+onUnmounted(() => {
+    stopAutoRefresh();
+});
 
 </script>
 

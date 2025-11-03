@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { Head, Link, useForm, router, usePage } from '@inertiajs/vue3';
 import Button from '@/components/ui/button/Button.vue';
 import {
   Menu,
@@ -8,7 +8,9 @@ import {
   Users,
   TableProperties,
   ChefHat,
-  X
+  X,
+  Bell,
+  BellRing
 } from 'lucide-vue-next';
 
 interface Employee {
@@ -21,19 +23,112 @@ interface Employee {
   };
 }
 
-interface Props {
-  employee: Employee;
+interface ReadyOrder {
+  order_id: number;
+  order_number: string;
+  table_number: string;
+  table_name: string;
 }
 
-defineProps<Props>();
+interface Props {
+  employee: Employee;
+  readyOrders?: ReadyOrder[];
+}
+
+const props = defineProps<Props>();
 
 const sidebarOpen = ref(false);
+const showNotifications = ref(false);
+const readyOrdersList = ref<ReadyOrder[]>(props.readyOrders || []);
+const previousReadyOrdersCount = ref(props.readyOrders?.length || 0);
+const newNotifications = ref(false);
 
 const logoutForm = useForm({});
 
 const logout = () => {
   logoutForm.post(route('logout'));
 };
+
+// Auto-refresh for ready orders
+let refreshInterval: ReturnType<typeof setInterval> | null = null;
+const REFRESH_INTERVAL = 10000; // Check every 10 seconds
+
+const startAutoRefresh = () => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+  }
+
+  refreshInterval = setInterval(() => {
+    router.reload({
+      only: ['readyOrders'],
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: () => {
+        const page = usePage();
+        const newReadyOrders = (page.props.readyOrders as ReadyOrder[]) || [];
+
+        // Check if there are new ready orders
+        if (newReadyOrders.length > previousReadyOrdersCount.value) {
+          newNotifications.value = true;
+          // Play notification sound if available
+          playNotificationSound();
+        }
+
+        readyOrdersList.value = newReadyOrders;
+        previousReadyOrdersCount.value = newReadyOrders.length;
+      }
+    });
+  }, REFRESH_INTERVAL);
+};
+
+const stopAutoRefresh = () => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
+};
+
+const playNotificationSound = () => {
+  // Simple beep sound using Audio API
+  try {
+    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZUQ0PVq3n7q9aGQxDmN301H0pBSuB0PLaizsIGGS57OihUxELTKXh8bllHgU2j9Xx0YQ2Bx1rwO7mnVIPD1Ks5O+uWBkLQZje87d/Kgc');
+    audio.play();
+  } catch (error) {
+    console.log('Notification sound failed:', error);
+  }
+};
+
+const toggleNotifications = () => {
+  showNotifications.value = !showNotifications.value;
+  if (showNotifications.value) {
+    newNotifications.value = false;
+  }
+};
+
+const hasReadyOrders = computed(() => readyOrdersList.value.length > 0);
+
+// Remove individual notification
+const removeNotification = (orderId: number) => {
+  readyOrdersList.value = readyOrdersList.value.filter(order => order.order_id !== orderId);
+  previousReadyOrdersCount.value = readyOrdersList.value.length;
+};
+
+// Clear all notifications
+const clearAllNotifications = () => {
+  readyOrdersList.value = [];
+  previousReadyOrdersCount.value = 0;
+  showNotifications.value = false;
+};
+
+onMounted(() => {
+  startAutoRefresh();
+  readyOrdersList.value = props.readyOrders || [];
+  previousReadyOrdersCount.value = props.readyOrders?.length || 0;
+});
+
+onUnmounted(() => {
+  stopAutoRefresh();
+});
 </script>
 
 <template>
@@ -58,16 +153,95 @@ const logout = () => {
           </h1>
         </div>
 
-        <!-- User Info -->
-        <Button
-          @click="logout"
-          variant="ghost"
-          size="sm"
-          class="text-red-600 hover:text-red-700 hover:bg-red-50 p-2"
-          :disabled="logoutForm.processing"
-        >
-          <LogOut class="h-4 w-4" />
-        </Button>
+        <!-- Notification Bell & Logout -->
+        <div class="flex items-center gap-2">
+          <!-- Notification Bell -->
+          <div class="relative">
+            <Button
+              @click="toggleNotifications"
+              variant="ghost"
+              size="sm"
+              class="p-2 relative"
+              :class="hasReadyOrders ? 'text-green-600 hover:text-green-700 hover:bg-green-50' : ''"
+            >
+              <component :is="newNotifications ? BellRing : Bell" class="h-5 w-5" :class="newNotifications ? 'animate-pulse' : ''" />
+              <span
+                v-if="hasReadyOrders"
+                class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold"
+              >
+                {{ readyOrdersList.length }}
+              </span>
+            </Button>
+
+            <!-- Notification Dropdown -->
+            <div
+              v-if="showNotifications"
+              class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50 max-h-96 overflow-hidden flex flex-col"
+              @click.stop
+            >
+              <div class="p-3 border-b bg-green-50 flex items-center justify-between">
+                <div>
+                  <h3 class="font-semibold text-green-800">Ready to Serve</h3>
+                  <p class="text-xs text-green-600">{{ readyOrdersList.length }} order{{ readyOrdersList.length !== 1 ? 's' : '' }} ready</p>
+                </div>
+                <Button
+                  v-if="readyOrdersList.length > 0"
+                  @click="clearAllNotifications"
+                  variant="ghost"
+                  size="sm"
+                  class="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  Clear All
+                </Button>
+              </div>
+
+              <div class="overflow-y-auto flex-1">
+                <div v-if="readyOrdersList.length === 0" class="p-4 text-center text-gray-500">
+                  <Bell class="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p class="text-sm">No orders ready</p>
+                </div>
+
+                <div v-else class="divide-y">
+                  <div
+                    v-for="order in readyOrdersList"
+                    :key="order.order_id"
+                    class="p-3 hover:bg-gray-50 group"
+                  >
+                    <div class="flex items-center gap-3">
+                      <div class="flex-shrink-0 h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
+                        <span class="text-green-700 font-bold text-sm">{{ order.table_number }}</span>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <p class="font-medium text-sm">{{ order.table_name }}</p>
+                        <p class="text-xs text-gray-600">Order {{ order.order_number }}</p>
+                        <p class="text-xs text-green-600 font-medium">Ready to serve!</p>
+                      </div>
+                      <Button
+                        @click="removeNotification(order.order_id)"
+                        variant="ghost"
+                        size="sm"
+                        class="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X class="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Logout Button -->
+          <Button
+            @click="logout"
+            variant="ghost"
+            size="sm"
+            class="text-red-600 hover:text-red-700 hover:bg-red-50 p-2"
+            :disabled="logoutForm.processing"
+          >
+            <LogOut class="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </header>
 
@@ -226,8 +400,84 @@ const logout = () => {
               </h1>
             </div>
 
-            <!-- User Info -->
+            <!-- Notifications & User Info -->
             <div class="flex items-center gap-1 sm:gap-3">
+              <!-- Notification Bell -->
+              <div class="relative">
+                <Button
+                  @click="toggleNotifications"
+                  variant="ghost"
+                  size="sm"
+                  class="p-2 relative"
+                  :class="hasReadyOrders ? 'text-green-600 hover:text-green-700 hover:bg-green-50' : ''"
+                >
+                  <component :is="newNotifications ? BellRing : Bell" class="h-5 w-5" :class="newNotifications ? 'animate-pulse' : ''" />
+                  <span
+                    v-if="hasReadyOrders"
+                    class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold"
+                  >
+                    {{ readyOrdersList.length }}
+                  </span>
+                </Button>
+
+                <!-- Notification Dropdown (Desktop) -->
+                <div
+                  v-if="showNotifications"
+                  class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50 max-h-96 overflow-hidden flex flex-col"
+                  @click.stop
+                >
+                  <div class="p-3 border-b bg-green-50 flex items-center justify-between">
+                    <div>
+                      <h3 class="font-semibold text-green-800">Ready to Serve</h3>
+                      <p class="text-xs text-green-600">{{ readyOrdersList.length }} order{{ readyOrdersList.length !== 1 ? 's' : '' }} ready</p>
+                    </div>
+                    <Button
+                      v-if="readyOrdersList.length > 0"
+                      @click="clearAllNotifications"
+                      variant="ghost"
+                      size="sm"
+                      class="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+
+                  <div class="overflow-y-auto flex-1">
+                    <div v-if="readyOrdersList.length === 0" class="p-4 text-center text-gray-500">
+                      <Bell class="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p class="text-sm">No orders ready</p>
+                    </div>
+
+                    <div v-else class="divide-y">
+                      <div
+                        v-for="order in readyOrdersList"
+                        :key="order.order_id"
+                        class="p-3 hover:bg-gray-50 group"
+                      >
+                        <div class="flex items-center gap-3">
+                          <div class="flex-shrink-0 h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
+                            <span class="text-green-700 font-bold text-sm">{{ order.table_number }}</span>
+                          </div>
+                          <div class="flex-1 min-w-0">
+                            <p class="font-medium text-sm">{{ order.table_name }}</p>
+                            <p class="text-xs text-gray-600">Order {{ order.order_number }}</p>
+                            <p class="text-xs text-green-600 font-medium">Ready to serve!</p>
+                          </div>
+                          <Button
+                            @click="removeNotification(order.order_id)"
+                            variant="ghost"
+                            size="sm"
+                            class="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X class="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div class="text-right hidden md:block">
                 <p class="text-sm font-medium text-gray-900">{{ employee.firstname }} {{ employee.lastname }}</p>
                 <p class="text-xs text-gray-500">{{ employee.role.role_name }}</p>

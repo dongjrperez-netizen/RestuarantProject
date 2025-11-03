@@ -25,6 +25,16 @@ import {
 import { Label } from '@/components/ui/label';
 import { Edit } from 'lucide-vue-next';
 import { ref, computed } from 'vue';
+import { router } from '@inertiajs/vue3';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+
+
 
 interface Supplier {
   supplier_id: number;
@@ -58,16 +68,35 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // Pagination
 const currentPage = ref(1);
-const itemsPerPage = 6;
+const itemsPerPage = 7;
 
+const searchQuery = ref('');
+const stockFilter = ref('all'); // all | low | in
+
+const filteredIngredients = computed(() => {
+  return props.ingredients.filter((ingredient) => {
+    const matchesSearch = ingredient.ingredient_name
+      .toLowerCase()
+      .includes(searchQuery.value.toLowerCase());
+
+    const matchesFilter =
+      stockFilter.value === 'all' ||
+      (stockFilter.value === 'low' && ingredient.is_low_stock) ||
+      (stockFilter.value === 'in' && !ingredient.is_low_stock);
+
+    return matchesSearch && matchesFilter;
+  });
+});
+
+// Updated pagination to use filtered results
 const paginatedIngredients = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
   const end = start + itemsPerPage;
-  return props.ingredients.slice(start, end);
+  return filteredIngredients.value.slice(start, end);
 });
 
 const totalPages = computed(() => {
-  return Math.ceil(props.ingredients.length / itemsPerPage);
+  return Math.ceil(filteredIngredients.value.length / itemsPerPage);
 });
 
 const goToPage = (page: number) => {
@@ -121,6 +150,26 @@ const saveEdit = () => {
     },
   });
 };
+
+
+
+const selectedCategory = ref('all');
+
+// Perform search
+const search = () => {
+  router.get(route('inventory.ingredients.index'), {
+    search: searchQuery.value,
+    status: stockFilter.value,
+  }, { preserveState: true, replace: true });
+};
+
+// Clear filters
+
+const clearFilters = () => {
+  searchQuery.value = '';
+  stockFilter.value = 'all';
+  search();
+};
 </script>
 
 <template>
@@ -138,41 +187,42 @@ const saveEdit = () => {
 
       <!-- Header -->
       <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">Ingredients Inventory</h1>
-          <p class="text-muted-foreground">Monitor your ingredient stock levels and reorder points</p>
-        </div>
+      
       </div>
-
-      <!-- Summary Cards -->
-      <div class="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-sm font-medium">Total Ingredients</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ formatNumber(stats.total_ingredients) }}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-sm font-medium">Low Stock Ingredients</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold text-yellow-600">{{ formatNumber(stats.low_stock_count) }}</div>
-            <p class="text-xs text-muted-foreground mt-1">
-              {{ stats.low_stock_count === 0 ? 'All ingredients are well stocked' : 'Items need reordering' }}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
       <!-- Ingredients Table -->
       <Card>
-        <CardHeader>
+       <CardHeader>
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <!-- Left side title -->
           <CardTitle>Inventory Stock Levels</CardTitle>
-        </CardHeader>
+
+          <!-- Right side search + filter controls -->
+          <div class="flex items-center gap-2">
+            <!-- Filter by stock status -->
+            <Select v-model="stockFilter" @change="search">
+              <SelectTrigger class="w-36">
+                <SelectValue placeholder="All Stock" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="in">In Stock</SelectItem>
+                <SelectItem value="low">Low Stock</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <!-- Search input -->
+            <Input
+              v-model="searchQuery"
+              placeholder="Search ingredients..."
+              @keyup.enter="search"
+              class="w-48"
+            />
+
+            <Button @click="clearFilters" variant="ghost" size="sm">Clear</Button>
+          </div>
+        </div>
+      </CardHeader>
+
         <CardContent>
           <Table>
             <TableHeader>

@@ -185,17 +185,16 @@ const copyInvitationLink = async (supplier: Supplier) => {
 
     <div class="space-y-6 mx-8">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between mt-6">
         <div>
-          <h1 class="text-3xl font-bold tracking-tight">Suppliers</h1>
-          <p class="text-muted-foreground">Manage your suppliers and their contact information</p>
+        
         </div>
         <Link href="/suppliers/create">
           <Button>Add Supplier</Button>
         </Link>
       </div>
 
-      <!-- Summary Cards -->
+      <!-- Summary Cards
       <div class="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -223,7 +222,7 @@ const copyInvitationLink = async (supplier: Supplier) => {
             <div class="text-2xl font-bold">{{ suppliers.filter(s => s.email).length }}</div>
           </CardContent>
         </Card>
-      </div>
+      </div> -->
 
       <!-- Suppliers Table -->
       <Card>

@@ -73,19 +73,10 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
 
   <AppLayout :breadcrumbs="breadcrumbs">
     <div class="space-y-6 mx-6">
-      <!-- Header -->
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">Purchase Orders</h1>
-          <p class="text-muted-foreground">Manage your purchase orders and track deliveries</p>
-        </div>
-        <Link href="/purchase-orders/create">
-          <Button>Create Purchase Order</Button>
-        </Link>
-      </div>
+      
 
       <!-- Summary Cards -->
-      <div class="grid gap-4 md:grid-cols-4">
+      <div class="grid gap-4 md:grid-cols-4 mt-6">
         <Card>
           <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle class="text-sm font-medium">Total Orders</CardTitle>
@@ -129,6 +120,14 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
         </Card>
       </div>
 
+      <div class="flex items-center justify-between mt-6">
+      <div>
+        <!-- Optional title or breadcrumbs -->
+      </div>
+      <Link href="/purchase-orders/create">
+        <Button>Create Purchase Order</Button>
+      </Link>
+    </div>
       <!-- Purchase Orders Table -->
       <Card>
         <CardHeader>

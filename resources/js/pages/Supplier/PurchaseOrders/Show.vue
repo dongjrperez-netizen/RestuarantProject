@@ -182,7 +182,7 @@ const markDelivered = () => {
           <XCircle class="h-4 w-4 mr-2" />
           Reject Order
         </Button>
-
+<!-- 
         <Button 
           v-if="canMarkDelivered(purchaseOrder.status)"
           @click="showDeliveredDialog = true"
@@ -190,7 +190,7 @@ const markDelivered = () => {
         >
           <Package class="h-4 w-4 mr-2" />
           Mark as Delivered
-        </Button>
+        </Button> -->
       </div>
 
       <div class="grid gap-6 lg:grid-cols-3">

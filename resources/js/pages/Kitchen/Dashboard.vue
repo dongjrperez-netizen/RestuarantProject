@@ -20,7 +20,7 @@ import {
   CalendarClock,
   AlertTriangle
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 
 interface Dish {
@@ -196,6 +196,46 @@ const onDamageReportSuccess = () => {
   // Optional: You could reload data or show a success message here
   console.log('Damage/spoilage report submitted successfully');
 };
+
+// Auto-refresh functionality
+let refreshInterval: ReturnType<typeof setInterval> | null = null;
+const REFRESH_INTERVAL = 10000; // Refresh every 10 seconds
+
+const startAutoRefresh = () => {
+  // Clear any existing interval
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+  }
+
+  // Set up new interval to reload orders
+  refreshInterval = setInterval(() => {
+    // Only reload if not currently loading/updating an order
+    if (!loading.value) {
+      router.reload({
+        only: ['unpaidOrders', 'todayStats'],
+        preserveScroll: true,
+        preserveState: true,
+      });
+    }
+  }, REFRESH_INTERVAL);
+};
+
+const stopAutoRefresh = () => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
+};
+
+// Start auto-refresh when component mounts
+onMounted(() => {
+  startAutoRefresh();
+});
+
+// Clean up interval when component unmounts
+onUnmounted(() => {
+  stopAutoRefresh();
+});
 </script>
 
 <template>

@@ -465,6 +465,8 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
     Route::get('/bills/{bill}/paypal/success', [SupplierBillController::class, 'paypalSuccess'])->name('bills.paypal.success');
     Route::get('/bills/{bill}/paypal/cancel', [SupplierBillController::class, 'paypalCancel'])->name('bills.paypal.cancel');
 
+    Route::post('/payments/cash', [SupplierPaymentController::class, 'handleCashPayment'])->name('payments.cash');
+
     // Quick Payment Route (for Bills/Show page)
     Route::post('/bills/{bill}/quick-payment', [SupplierBillController::class, 'quickPayment'])->name('bills.quick-payment');
 

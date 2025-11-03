@@ -38,6 +38,20 @@ class WaiterController extends Controller
             ->orderBy('table_number')
             ->get();
 
+        // Get ready orders with table information
+        $readyOrders = CustomerOrder::with(['table'])
+            ->where('restaurant_id', $employee->user_id)
+            ->where('status', 'ready')
+            ->get()
+            ->map(function ($order) {
+                return [
+                    'order_id' => $order->order_id,
+                    'order_number' => $order->order_number,
+                    'table_number' => $order->table->table_number,
+                    'table_name' => $order->table->table_name,
+                ];
+            });
+
         // Get today's menu plan using the same logic as the API
         $today = now()->format('Y-m-d');
 
@@ -135,6 +149,7 @@ class WaiterController extends Controller
             'activeMenuPlan' => $activeMenuPlan,
             'dishes' => $dishes,
             'isDefaultPlan' => $isDefaultPlan,
+            'readyOrders' => $readyOrders,
         ]);
     }
 
