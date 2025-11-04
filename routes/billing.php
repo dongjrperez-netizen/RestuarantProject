@@ -22,8 +22,6 @@ Route::middleware(['auth:web', 'verified', 'check.subscription'])->prefix('billi
     Route::post('/bills/auto-mark-overdue', [SupplierBillController::class, 'autoMarkOverdue'])
         ->name('bills.auto-mark-overdue');
 
-    Route::post('/bills/{bill}/quick-payment', [SupplierBillController::class, 'quickPayment'])
-        ->name('bills.quick-payment');
 
     // GCash Payment Routes (PayMongo)
     Route::post('/bills/gcash/checkout', [SupplierPaymentController::class, 'createGCashCheckout'])
