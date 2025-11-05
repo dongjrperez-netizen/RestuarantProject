@@ -64,6 +64,16 @@ const formatNumber = (num: number) => {
 
 const reportModules = [
   {
+    id: 'comprehensive',
+    title: 'Comprehensive Report',
+    description: 'Generate complete daily/monthly business reports with all operational data',
+    icon: FileText,
+    href: '/reports/comprehensive',
+    color: 'bg-indigo-500',
+    stats: 'All-in-one report',
+    count: 'Sales, Inventory, Purchases, Billing & Spoilage'
+  },
+  {
     id: 'sales',
     title: 'Sales Performance',
     description: 'Analyze sales trends, top-selling items, and revenue patterns',

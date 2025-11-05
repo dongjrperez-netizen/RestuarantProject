@@ -77,6 +77,8 @@ class OrderStatusUpdated implements ShouldBroadcast
                 return 'Order has been served to customer';
             case 'paid':
                 return 'Order has been paid';
+            case 'voided':
+                return 'Order has been voided by cashier';
             default:
                 return 'Order status updated';
         }

@@ -258,4 +258,111 @@ class CustomerOrderItem extends Model
             }
         }
     }
+
+    /**
+     * Restore ingredients to inventory when order is voided/cancelled
+     * Only restores if inventory was previously deducted
+     */
+    public function restoreIngredientsToInventory()
+    {
+        // Only restore if inventory was actually deducted
+        if (!$this->inventory_deducted) {
+            \Log::info("No inventory to restore for order item {$this->item_id} - inventory was never deducted");
+            return;
+        }
+
+        // Get the dish and its ingredients
+        $dish = $this->dish;
+        if (!$dish) {
+            \Log::warning("Cannot restore inventory - dish not found for order item {$this->item_id}");
+            return;
+        }
+
+        $dishIngredients = $dish->dishIngredients;
+        if ($dishIngredients->isEmpty()) {
+            \Log::warning("Cannot restore inventory - no ingredients found for dish {$dish->dish_name}");
+            return;
+        }
+
+        // Get excluded ingredients for this order item
+        $excludedIngredientIds = CustomerRequest::where('order_id', $this->order_id)
+            ->where('dish_id', $this->dish_id)
+            ->where('request_type', 'exclude')
+            ->pluck('ingredient_id')
+            ->toArray();
+
+        // Restore each ingredient based on the order quantity
+        foreach ($dishIngredients as $dishIngredient) {
+            $ingredient = $dishIngredient->ingredient;
+            if (!$ingredient) {
+                \Log::warning("Ingredient not found for dish ingredient ID {$dishIngredient->id}");
+                continue;
+            }
+
+            // Skip this ingredient if customer requested exclusion (it was never deducted)
+            if (in_array($ingredient->ingredient_id, $excludedIngredientIds)) {
+                \Log::info("Ingredient excluded from inventory restoration", [
+                    'order_item_id' => $this->item_id,
+                    'ingredient_id' => $ingredient->ingredient_id,
+                    'ingredient_name' => $ingredient->ingredient_name,
+                    'reason' => 'Was excluded in original order',
+                ]);
+                continue;
+            }
+
+            // Calculate quantity to restore using unit conversion and variant multiplier
+            $variantMultiplier = 1.0;
+            if ($this->variant_id && $this->variant) {
+                $variantMultiplier = (float) $this->variant->quantity_multiplier;
+            }
+
+            // Calculate quantity in the dish's unit (same calculation as deduction)
+            $quantityInDishUnit = $dishIngredient->quantity_needed * $variantMultiplier * $this->quantity;
+
+            try {
+                // Convert to base unit if needed
+                $quantityInBaseUnit = $quantityInDishUnit;
+                if ($dishIngredient->unit_of_measure && $dishIngredient->unit_of_measure !== $ingredient->base_unit) {
+                    $quantityInBaseUnit = \App\Utils\UnitConverter::convert(
+                        $quantityInDishUnit,
+                        $dishIngredient->unit_of_measure,
+                        $ingredient->base_unit
+                    );
+                }
+
+                // Restore the stock
+                $ingredient->increaseStock($quantityInBaseUnit);
+
+                \Log::info("Inventory restored successfully", [
+                    'order_item_id' => $this->item_id,
+                    'ingredient_name' => $ingredient->ingredient_name,
+                    'dish_ingredient_quantity' => $dishIngredient->quantity_needed,
+                    'dish_ingredient_unit' => $dishIngredient->unit_of_measure,
+                    'variant_multiplier' => $variantMultiplier,
+                    'quantity_in_dish_unit' => $quantityInDishUnit,
+                    'quantity_in_base_unit' => $quantityInBaseUnit,
+                    'ingredient_base_unit' => $ingredient->base_unit,
+                    'order_quantity' => $this->quantity,
+                ]);
+            } catch (\Exception $e) {
+                // Log the error but don't fail the restoration
+                \Log::error("Failed to restore ingredient {$ingredient->ingredient_name} for order item {$this->item_id}: " . $e->getMessage(), [
+                    'dish_ingredient_quantity' => $dishIngredient->quantity_needed,
+                    'dish_ingredient_unit' => $dishIngredient->unit_of_measure,
+                    'quantity_in_dish_unit' => $quantityInDishUnit,
+                    'ingredient_base_unit' => $ingredient->base_unit,
+                    'current_stock' => $ingredient->current_stock,
+                    'order_quantity' => $this->quantity,
+                ]);
+            }
+        }
+
+        // Mark as inventory restored (reset the deducted flag)
+        $this->update([
+            'inventory_deducted' => false,
+            'inventory_deducted_at' => null,
+        ]);
+
+        \Log::info("Inventory restoration completed for order item {$this->item_id}");
+    }
 }

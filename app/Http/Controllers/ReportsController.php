@@ -506,6 +506,8 @@ class ReportsController extends Controller
         $options->set('defaultFont', 'Arial');
         $options->set('isHtml5ParserEnabled', true);
         $options->set('isPhpEnabled', true);
+        $options->set('isRemoteEnabled', true); // Enable loading external images from URLs
+        $options->set('chroot', realpath(base_path())); // Set base path for security
 
         $dompdf = new Dompdf($options);
 
@@ -633,5 +635,702 @@ class ReportsController extends Controller
         }
 
         return $csvData;
+    }
+
+    // Comprehensive Daily/Monthly Sales Report
+    public function comprehensiveReport(Request $request)
+    {
+        $restaurantId = $this->getRestaurantId();
+
+        if (!$restaurantId) {
+            return redirect()->route('dashboard')->with('error', 'No restaurant data found.');
+        }
+
+        $reportType = $request->get('type', 'daily'); // daily, monthly, or yearly
+        $date = $request->get('date', Carbon::now()->toDateString());
+        $showGraphs = $request->get('show_graphs', false); // Option to show graphs in PDF
+
+        if ($reportType === 'yearly') {
+            $startDate = Carbon::parse($date)->startOfYear();
+            $endDate = Carbon::parse($date)->endOfYear();
+            $reportTitle = 'Yearly Sales Report';
+            $period = $startDate->format('Y');
+        } elseif ($reportType === 'monthly') {
+            $startDate = Carbon::parse($date)->startOfMonth();
+            $endDate = Carbon::parse($date)->endOfMonth();
+            $reportTitle = 'Monthly Sales Report';
+            $period = $startDate->format('F j') . ' - ' . $endDate->format('j, Y');
+        } else {
+            $startDate = Carbon::parse($date)->startOfDay();
+            $endDate = Carbon::parse($date)->endOfDay();
+            $reportTitle = 'Daily Sales Report';
+            $period = $startDate->format('F j, Y');
+        }
+
+        $data = $this->getComprehensiveReportData($restaurantId, $startDate, $endDate);
+
+        if ($request->get('export') === 'pdf') {
+            return $this->exportComprehensiveReport($data, $reportTitle, $period, $startDate, $endDate, $showGraphs, $reportType);
+        }
+
+        // Generate chart URLs for web view if requested
+        $chartUrls = null;
+        if ($showGraphs) {
+            // Add breakdown data needed for charts
+            if ($reportType === 'yearly') {
+                $monthlyBreakdown = [];
+                for ($month = 1; $month <= 12; $month++) {
+                    $monthStart = Carbon::parse($startDate)->month($month)->startOfMonth();
+                    $monthEnd = Carbon::parse($startDate)->month($month)->endOfMonth();
+                    $monthSales = CustomerOrder::where('restaurant_id', $restaurantId)
+                        ->whereBetween('created_at', [$monthStart, $monthEnd])
+                        ->where('status', 'paid')
+                        ->sum('total_amount');
+                    $monthlyBreakdown[$monthStart->format('M')] = (float) $monthSales;
+                }
+                $data['monthly_breakdown'] = $monthlyBreakdown;
+            } elseif ($reportType === 'monthly') {
+                $dailyBreakdown = [];
+                $currentDate = $startDate->copy();
+                while ($currentDate <= $endDate) {
+                    $daySales = CustomerOrder::where('restaurant_id', $restaurantId)
+                        ->whereDate('created_at', $currentDate)
+                        ->where('status', 'paid')
+                        ->sum('total_amount');
+                    $dailyBreakdown[$currentDate->format('M j')] = (float) $daySales;
+                    $currentDate->addDay();
+                }
+                $data['daily_breakdown'] = $dailyBreakdown;
+            } elseif ($reportType === 'daily') {
+                // Hourly breakdown for daily reports
+                $hourlyBreakdown = [];
+                for ($hour = 0; $hour < 24; $hour++) {
+                    $hourStart = $startDate->copy()->hour($hour)->minute(0)->second(0);
+                    $hourEnd = $startDate->copy()->hour($hour)->minute(59)->second(59);
+                    $hourSales = CustomerOrder::where('restaurant_id', $restaurantId)
+                        ->whereBetween('created_at', [$hourStart, $hourEnd])
+                        ->where('status', 'paid')
+                        ->sum('total_amount');
+                    $hourlyBreakdown[str_pad($hour, 2, '0', STR_PAD_LEFT) . ':00'] = (float) $hourSales;
+                }
+                $data['hourly_breakdown'] = $hourlyBreakdown;
+            }
+
+            $chartUrls = $this->generateChartUrlsForWeb($data, $reportType);
+        }
+
+        return Inertia::render('Reports/Comprehensive', [
+            'reportData' => $data,
+            'reportType' => $reportType,
+            'reportTitle' => $reportTitle,
+            'period' => $period,
+            'date' => $date,
+            'chartUrls' => $chartUrls,
+        ]);
+    }
+
+    private function getComprehensiveReportData($restaurantId, $startDate, $endDate)
+    {
+        // Get restaurant data
+        $restaurant = Restaurant_Data::where('user_id', Auth::id())
+            ->orWhere('id', $restaurantId)
+            ->first();
+
+        // A. Summary Section
+        $totalSales = CustomerOrder::where('restaurant_id', $restaurantId)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->where('status', 'paid')
+            ->sum('total_amount');
+
+        $totalOrders = CustomerOrder::where('restaurant_id', $restaurantId)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->where('status', 'paid')
+            ->count();
+
+        $totalExpenses = PurchaseOrder::where('restaurant_id', $restaurantId)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->whereIn('status', ['delivered', 'received'])
+            ->sum('total_amount');
+
+        $totalSpoilageCost = DamageSpoilageLog::where('restaurant_id', $restaurantId)
+            ->whereBetween('incident_date', [$startDate, $endDate])
+            ->sum('estimated_cost');
+
+        $netProfit = $totalSales - $totalExpenses - $totalSpoilageCost;
+
+        // B. Detailed Data Sections
+
+        // 1. Sales Report
+        $salesOrders = CustomerOrder::with(['employee', 'payments.cashier'])
+            ->where('restaurant_id', $restaurantId)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->where('status', 'paid')
+            ->orderBy('created_at')
+            ->get()
+            ->map(function ($order) {
+                $payment = $order->payments()->where('status', 'completed')->with('cashier')->latest()->first();
+                return [
+                    'date' => $order->created_at->format('M j'),
+                    'order_id' => $order->order_number,
+                    'total_amount' => $order->total_amount,
+                    'payment_type' => $payment ? ucfirst(str_replace('_', ' ', $payment->payment_method)) : 'N/A',
+                    'cashier' => ($payment && $payment->cashier) ? $payment->cashier->firstname . ' ' . $payment->cashier->lastname : 'N/A',
+                ];
+            });
+
+        // 2. Inventory Report
+        $inventoryItems = Ingredients::where('restaurant_id', $restaurantId)
+            ->selectRaw('
+                ingredient_name,
+                current_stock,
+                base_unit,
+                CASE
+                    WHEN current_stock <= reorder_level THEN "Low Stock"
+                    WHEN current_stock = 0 THEN "Out of Stock"
+                    ELSE "Available"
+                END as status
+            ')
+            ->orderBy('ingredient_name')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'item_name' => $item->ingredient_name,
+                    'current_stock' => number_format($item->current_stock, 2) . ' ' . $item->base_unit,
+                    'current_stock_raw' => $item->current_stock, // For charts
+                    'status' => $item->status,
+                ];
+            });
+
+        // Top Selling Items (for charts)
+        $topItems = CustomerOrderItem::selectRaw('dish_id, SUM(quantity) as quantity_sold')
+            ->whereHas('order', function ($query) use ($restaurantId, $startDate, $endDate) {
+                $query->where('restaurant_id', $restaurantId)
+                    ->whereBetween('created_at', [$startDate, $endDate])
+                    ->where('status', 'paid');
+            })
+            ->with('dish')
+            ->groupBy('dish_id')
+            ->orderByDesc('quantity_sold')
+            ->limit(10)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'dish_name' => $item->dish ? $item->dish->dish_name : 'Unknown',
+                    'quantity_sold' => $item->quantity_sold,
+                ];
+            });
+
+        // 3. Purchase Order Report
+        $purchaseOrders = PurchaseOrder::with(['supplier', 'items.ingredient'])
+            ->where('restaurant_id', $restaurantId)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->whereIn('status', ['delivered', 'received'])
+            ->orderBy('created_at')
+            ->get()
+            ->map(function ($po) {
+                return [
+                    'po_no' => $po->order_number,
+                    'supplier' => $po->supplier ? $po->supplier->supplier_name : 'N/A',
+                    'items' => $po->items->pluck('ingredient.ingredient_name')->join(', '),
+                    'total_cost' => $po->total_amount,
+                    'date_received' => $po->updated_at->format('M j, Y'),
+                ];
+            });
+
+        // 4. Billing Report (same as sales but with invoice format)
+        $billingReports = CustomerOrder::with(['employee'])
+            ->where('restaurant_id', $restaurantId)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->where('status', 'paid')
+            ->orderBy('created_at')
+            ->get()
+            ->map(function ($order) {
+                return [
+                    'invoice_no' => 'INV-' . $order->order_number,
+                    'order_id' => $order->order_number,
+                    'customer' => $order->customer_name ?: 'Walk-in',
+                    'amount' => $order->total_amount,
+                    'status' => 'Paid',
+                    'date' => $order->created_at->format('M j, Y'),
+                ];
+            });
+
+        // 5. Spoilage Report
+        $spoilageReports = DamageSpoilageLog::with(['ingredient'])
+            ->where('restaurant_id', $restaurantId)
+            ->whereBetween('incident_date', [$startDate, $endDate])
+            ->orderBy('incident_date')
+            ->get()
+            ->map(function ($log) {
+                return [
+                    'item_name' => $log->ingredient ? $log->ingredient->ingredient_name : 'N/A',
+                    'quantity' => $log->quantity . ' ' . ($log->ingredient ? $log->ingredient->base_unit : ''),
+                    'reason' => $log->reason,
+                    'date' => Carbon::parse($log->incident_date)->format('M j, Y'),
+                    'value_lost' => $log->estimated_cost,
+                ];
+            });
+
+        return [
+            'restaurant' => $restaurant,
+            'summary' => [
+                'total_sales' => $totalSales,
+                'total_orders' => $totalOrders,
+                'total_expenses' => $totalExpenses,
+                'total_spoilage_cost' => $totalSpoilageCost,
+                'net_profit' => $netProfit,
+            ],
+            'sales_summary' => [ // For charts
+                'total_sales' => $totalSales,
+            ],
+            'sales_orders' => $salesOrders,
+            'top_items' => $topItems,
+            'inventory_items' => $inventoryItems,
+            'inventory_status' => $inventoryItems, // For charts
+            'purchase_orders' => $purchaseOrders,
+            'billing_reports' => $billingReports,
+            'spoilage_reports' => $spoilageReports,
+        ];
+    }
+
+    private function exportComprehensiveReport($data, $reportTitle, $period, $startDate, $endDate, $showGraphs = false, $reportType = 'daily')
+    {
+        $generatedBy = Auth::user()->first_name . ' ' . Auth::user()->last_name;
+        $generatedDate = Carbon::now()->format('F j, Y');
+
+        $filename = strtolower(str_replace(' ', '_', $reportTitle)) . '_' . $startDate->format('Y_m_d');
+
+        // Generate chart URLs if graphs are requested
+        $chartUrls = [];
+        if ($showGraphs) {
+            // Add breakdown data needed for charts
+            if ($reportType === 'yearly') {
+                // Generate monthly breakdown for yearly report
+                $monthlyBreakdown = [];
+                for ($month = 1; $month <= 12; $month++) {
+                    $monthStart = Carbon::parse($startDate)->month($month)->startOfMonth();
+                    $monthEnd = Carbon::parse($startDate)->month($month)->endOfMonth();
+                    $monthSales = CustomerOrder::where('restaurant_id', Auth::user()->restaurant_id)
+                        ->whereBetween('created_at', [$monthStart, $monthEnd])
+                        ->where('status', 'paid')
+                        ->sum('total_amount');
+                    $monthlyBreakdown[$monthStart->format('M')] = (float) $monthSales;
+                }
+                $data['monthly_breakdown'] = $monthlyBreakdown;
+            } elseif ($reportType === 'monthly') {
+                // Generate daily breakdown for monthly report
+                $dailyBreakdown = [];
+                $currentDate = $startDate->copy();
+                while ($currentDate <= $endDate) {
+                    $daySales = CustomerOrder::where('restaurant_id', Auth::user()->restaurant_id)
+                        ->whereDate('created_at', $currentDate)
+                        ->where('status', 'paid')
+                        ->sum('total_amount');
+                    $dailyBreakdown[$currentDate->format('M j')] = (float) $daySales;
+                    $currentDate->addDay();
+                }
+                $data['daily_breakdown'] = $dailyBreakdown;
+            }
+
+            $chartUrls = $this->generateChartUrls($data, $reportType);
+        }
+
+        $pdf = $this->generatePDF('reports.comprehensive_pdf', [
+            'data' => $data,
+            'reportTitle' => $reportTitle,
+            'period' => $period,
+            'generatedBy' => $generatedBy,
+            'generatedDate' => $generatedDate,
+            'showGraphs' => $showGraphs,
+            'chartUrls' => $chartUrls,
+        ], $filename);
+
+        // Clean up temporary chart files
+        if ($showGraphs && !empty($chartUrls)) {
+            $this->cleanupTempCharts($chartUrls);
+        }
+
+        return $pdf;
+    }
+
+    /**
+     * Clean up temporary chart files
+     */
+    private function cleanupTempCharts($chartPaths)
+    {
+        foreach ($chartPaths as $path) {
+            if ($path && file_exists($path)) {
+                @unlink($path);
+                \Log::info("Cleaned up temp chart file", ['path' => $path]);
+            }
+        }
+    }
+
+    /**
+     * Generate chart URLs for web view (returns QuickChart.io URLs directly)
+     */
+    private function generateChartUrlsForWeb($data, $reportType)
+    {
+        $charts = [];
+
+        // 1. Sales Trend Chart (Line Chart)
+        if (!empty($data['sales_summary'])) {
+            $salesChartUrl = $this->generateSalesTrendChart($data, $reportType);
+            if ($salesChartUrl) {
+                $charts['sales_trend'] = $salesChartUrl;
+            }
+        }
+
+        // 2. Top Selling Items (Bar Chart)
+        if (!empty($data['top_items'])) {
+            $topItemsUrl = $this->generateTopItemsChart($data['top_items']);
+            if ($topItemsUrl) {
+                $charts['top_items'] = $topItemsUrl;
+            }
+        }
+
+        // 3. Inventory Status (Bar Chart)
+        if (!empty($data['inventory_status'])) {
+            $inventoryUrl = $this->generateInventoryChart($data['inventory_status']);
+            if ($inventoryUrl) {
+                $charts['inventory'] = $inventoryUrl;
+            }
+        }
+
+        // 4. Supplier Spending (Pie Chart)
+        if (!empty($data['purchase_orders'])) {
+            $supplierUrl = $this->generateSupplierSpendingChart($data['purchase_orders']);
+            if ($supplierUrl) {
+                $charts['supplier_spending'] = $supplierUrl;
+            }
+        }
+
+        // 5. Spoilage Report (Bar Chart)
+        if (!empty($data['spoilage_reports'])) {
+            $spoilageUrl = $this->generateSpoilageChart($data['spoilage_reports']);
+            if ($spoilageUrl) {
+                $charts['spoilage'] = $spoilageUrl;
+            }
+        }
+
+        return $charts;
+    }
+
+    /**
+     * Generate chart URLs using QuickChart.io API
+     * This generates chart images that can be embedded in PDFs
+     */
+    private function generateChartUrls($data, $reportType)
+    {
+        $charts = [];
+
+        // 1. Sales Trend Chart (Line Chart)
+        if (!empty($data['sales_summary'])) {
+            $salesChartUrl = $this->generateSalesTrendChart($data, $reportType);
+            if ($salesChartUrl) {
+                $base64Chart = $this->convertChartUrlToBase64($salesChartUrl);
+                if ($base64Chart) {
+                    $charts['sales_trend'] = $base64Chart;
+                }
+            }
+        }
+
+        // 2. Top Selling Items (Bar Chart)
+        if (!empty($data['top_items'])) {
+            $topItemsUrl = $this->generateTopItemsChart($data['top_items']);
+            if ($topItemsUrl) {
+                $base64Chart = $this->convertChartUrlToBase64($topItemsUrl);
+                if ($base64Chart) {
+                    $charts['top_items'] = $base64Chart;
+                }
+            }
+        }
+
+        // 3. Inventory Status (Bar Chart)
+        if (!empty($data['inventory_status'])) {
+            $inventoryUrl = $this->generateInventoryChart($data['inventory_status']);
+            if ($inventoryUrl) {
+                $base64Chart = $this->convertChartUrlToBase64($inventoryUrl);
+                if ($base64Chart) {
+                    $charts['inventory'] = $base64Chart;
+                }
+            }
+        }
+
+        // 4. Supplier Spending (Pie Chart)
+        if (!empty($data['purchase_orders'])) {
+            $supplierUrl = $this->generateSupplierSpendingChart($data['purchase_orders']);
+            if ($supplierUrl) {
+                $base64Chart = $this->convertChartUrlToBase64($supplierUrl);
+                if ($base64Chart) {
+                    $charts['supplier_spending'] = $base64Chart;
+                }
+            }
+        }
+
+        // 5. Spoilage Report (Bar Chart)
+        if (!empty($data['spoilage_reports'])) {
+            $spoilageUrl = $this->generateSpoilageChart($data['spoilage_reports']);
+            if ($spoilageUrl) {
+                $base64Chart = $this->convertChartUrlToBase64($spoilageUrl);
+                if ($base64Chart) {
+                    $charts['spoilage'] = $base64Chart;
+                }
+            }
+        }
+
+        return $charts;
+    }
+
+    private function generateSalesTrendChart($data, $reportType)
+    {
+        // For daily: show hourly trends
+        // For monthly: show daily trends
+        // For yearly: show monthly trends
+
+        $labels = [];
+        $values = [];
+
+        if ($reportType === 'yearly' && isset($data['monthly_breakdown'])) {
+            foreach ($data['monthly_breakdown'] as $month => $amount) {
+                $labels[] = $month;
+                $values[] = $amount;
+            }
+        } elseif ($reportType === 'monthly' && isset($data['daily_breakdown'])) {
+            foreach ($data['daily_breakdown'] as $day => $amount) {
+                $labels[] = $day;
+                $values[] = $amount;
+            }
+        } elseif ($reportType === 'daily' && isset($data['hourly_breakdown'])) {
+            foreach ($data['hourly_breakdown'] as $hour => $amount) {
+                $labels[] = $hour;
+                $values[] = $amount;
+            }
+        }
+
+        if (empty($labels)) {
+            return null;
+        }
+
+        $chartConfig = [
+            'type' => 'line',
+            'data' => [
+                'labels' => $labels,
+                'datasets' => [[
+                    'label' => 'Sales',
+                    'data' => $values,
+                    'borderColor' => 'rgb(75, 192, 192)',
+                    'backgroundColor' => 'rgba(75, 192, 192, 0.2)',
+                    'fill' => true,
+                ]]
+            ],
+            'options' => [
+                'responsive' => true,
+                'title' => [
+                    'display' => true,
+                    'text' => 'Sales Trend'
+                ]
+            ]
+        ];
+
+        return 'https://quickchart.io/chart?c=' . urlencode(json_encode($chartConfig)) . '&width=800&height=400';
+    }
+
+    private function generateTopItemsChart($topItems)
+    {
+        $labels = [];
+        $values = [];
+
+        // Convert Collection to array if needed
+        $itemsArray = is_array($topItems) ? $topItems : $topItems->toArray();
+
+        foreach (array_slice($itemsArray, 0, 10) as $item) {
+            $labels[] = substr($item['dish_name'], 0, 20);
+            $values[] = $item['quantity_sold'];
+        }
+
+        $chartConfig = [
+            'type' => 'bar',
+            'data' => [
+                'labels' => $labels,
+                'datasets' => [[
+                    'label' => 'Quantity Sold',
+                    'data' => $values,
+                    'backgroundColor' => 'rgba(54, 162, 235, 0.8)',
+                ]]
+            ],
+            'options' => [
+                'responsive' => true,
+                'title' => [
+                    'display' => true,
+                    'text' => 'Top Selling Items'
+                ]
+            ]
+        ];
+
+        return 'https://quickchart.io/chart?c=' . urlencode(json_encode($chartConfig)) . '&width=800&height=400';
+    }
+
+    private function generateInventoryChart($inventory)
+    {
+        $labels = [];
+        $values = [];
+
+        // Convert Collection to array if needed
+        $inventoryArray = is_array($inventory) ? $inventory : $inventory->toArray();
+
+        foreach (array_slice($inventoryArray, 0, 15) as $item) {
+            $labels[] = substr($item['item_name'] ?? 'Unknown', 0, 15);
+            // Use raw value if available, otherwise parse formatted string
+            if (isset($item['current_stock_raw'])) {
+                $values[] = $item['current_stock_raw'];
+            } else {
+                $stockStr = $item['current_stock'] ?? '0';
+                $values[] = floatval(preg_replace('/[^0-9.]/', '', $stockStr));
+            }
+        }
+
+        $chartConfig = [
+            'type' => 'bar',
+            'data' => [
+                'labels' => $labels,
+                'datasets' => [[
+                    'label' => 'Current Stock',
+                    'data' => $values,
+                    'backgroundColor' => 'rgba(75, 192, 192, 0.8)',
+                ]]
+            ],
+            'options' => [
+                'responsive' => true,
+                'title' => [
+                    'display' => true,
+                    'text' => 'Inventory Levels'
+                ]
+            ]
+        ];
+
+        return 'https://quickchart.io/chart?c=' . urlencode(json_encode($chartConfig)) . '&width=800&height=400';
+    }
+
+    private function generateSupplierSpendingChart($purchaseOrders)
+    {
+        $supplierTotals = [];
+
+        // Convert Collection to array if needed
+        $ordersArray = is_array($purchaseOrders) ? $purchaseOrders : $purchaseOrders->toArray();
+
+        foreach ($ordersArray as $po) {
+            $supplier = $po['supplier'] ?? 'Unknown';
+            if (!isset($supplierTotals[$supplier])) {
+                $supplierTotals[$supplier] = 0;
+            }
+            $supplierTotals[$supplier] += $po['total_cost'] ?? 0;
+        }
+
+        $labels = array_keys($supplierTotals);
+        $values = array_values($supplierTotals);
+
+        $chartConfig = [
+            'type' => 'pie',
+            'data' => [
+                'labels' => $labels,
+                'datasets' => [[
+                    'data' => $values,
+                    'backgroundColor' => [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 206, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(153, 102, 255, 0.8)',
+                    ]
+                ]]
+            ],
+            'options' => [
+                'responsive' => true,
+                'title' => [
+                    'display' => true,
+                    'text' => 'Supplier Spending Distribution'
+                ]
+            ]
+        ];
+
+        return 'https://quickchart.io/chart?c=' . urlencode(json_encode($chartConfig)) . '&width=800&height=400';
+    }
+
+    private function generateSpoilageChart($spoilage)
+    {
+        $labels = [];
+        $values = [];
+
+        // Convert Collection to array if needed
+        $spoilageArray = is_array($spoilage) ? $spoilage : $spoilage->toArray();
+
+        foreach (array_slice($spoilageArray, 0, 10) as $item) {
+            $labels[] = substr($item['item_name'] ?? 'Unknown', 0, 20);
+            // Extract numeric value from quantity string (e.g., "100 kg" -> 100)
+            $quantityStr = $item['quantity'] ?? '0';
+            $quantity = floatval(preg_replace('/[^0-9.]/', '', $quantityStr));
+            $values[] = $quantity;
+        }
+
+        $chartConfig = [
+            'type' => 'bar',
+            'data' => [
+                'labels' => $labels,
+                'datasets' => [[
+                    'label' => 'Quantity Wasted',
+                    'data' => $values,
+                    'backgroundColor' => 'rgba(255, 99, 132, 0.8)',
+                ]]
+            ],
+            'options' => [
+                'responsive' => true,
+                'title' => [
+                    'display' => true,
+                    'text' => 'Top Spoiled Items'
+                ]
+            ]
+        ];
+
+        return 'https://quickchart.io/chart?c=' . urlencode(json_encode($chartConfig)) . '&width=800&height=400';
+    }
+
+    /**
+     * Download chart and save as temporary file for PDF embedding
+     */
+    private function convertChartUrlToBase64($url)
+    {
+        try {
+            \Log::info("Attempting to fetch chart from URL", ['url' => substr($url, 0, 200)]);
+
+            // Fetch the image from QuickChart.io
+            $imageData = @file_get_contents($url);
+
+            if ($imageData === false) {
+                \Log::warning("Failed to fetch chart image from URL: " . substr($url, 0, 200));
+                return null;
+            }
+
+            \Log::info("Successfully fetched chart image", ['size' => strlen($imageData) . ' bytes']);
+
+            // Save to temporary file instead of base64
+            $tempDir = storage_path('app/temp_charts');
+            if (!file_exists($tempDir)) {
+                mkdir($tempDir, 0755, true);
+            }
+
+            $filename = 'chart_' . md5($url) . '.png';
+            $filePath = $tempDir . '/' . $filename;
+
+            file_put_contents($filePath, $imageData);
+
+            \Log::info("Chart saved to temp file", ['path' => $filePath]);
+
+            // Return the local file path
+            return $filePath;
+        } catch (\Exception $e) {
+            \Log::error("Error saving chart to temp file: " . $e->getMessage());
+            return null;
+        }
     }
 }

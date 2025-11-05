@@ -2,7 +2,14 @@
 import { Head, useForm } from '@inertiajs/vue3';
 import WaiterLayout from '@/layouts/WaiterLayout.vue';
 import Button from '@/components/ui/button/Button.vue';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+
+// Declare Echo type for TypeScript
+declare global {
+  interface Window {
+    Echo: any;
+  }
+}
 
 interface DishVariant {
   variant_id: number;
@@ -29,7 +36,7 @@ interface OrderItem {
 interface Order {
   order_id: number;
   order_number: string;
-  status: 'pending' | 'in_progress' | 'ready' | 'served';
+  status: 'pending' | 'in_progress' | 'ready' | 'served' | 'voided';
   order_items: OrderItem[];
 }
 
@@ -49,6 +56,7 @@ interface Employee {
   firstname: string;
   lastname: string;
   email: string;
+  user_id: number;
   role: {
     role_name: string;
   };
@@ -71,6 +79,41 @@ const updateTableStatusForm = useForm({
 const showOrderModal = ref(false);
 const selectedTable = ref<Table | null>(null);
 const tableOrders = ref<any[]>([]);
+
+// Highlighted order ID (for scrolling to specific order)
+const highlightedOrderId = ref<number | string | null>(null);
+
+// Function to open table orders modal by table ID
+const openTableOrdersByTableId = (tableId: number, orderId?: number | string) => {
+  const table = props.tables.find(t => t.id === tableId);
+  if (table) {
+    // Set highlighted order if provided
+    if (orderId) {
+      highlightedOrderId.value = orderId;
+      console.log('Setting highlighted order ID:', orderId);
+    }
+    viewTableOrders(table);
+
+    // Scroll to the highlighted order after modal opens
+    if (orderId) {
+      setTimeout(() => {
+        const orderElement = document.getElementById(`order-${orderId}`);
+        if (orderElement) {
+          orderElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Flash highlight effect
+          orderElement.classList.add('highlight-flash');
+          setTimeout(() => {
+            orderElement.classList.remove('highlight-flash');
+            highlightedOrderId.value = null;
+          }, 3000);
+        }
+      }, 300);
+    }
+  }
+};
+
+// Note: Toast notifications have been removed in favor of the bell icon notification system
+// All notifications now appear in the OrderReadyNotification component
 
 const updateTableStatus = (table: Table, newStatus: string) => {
   updateTableStatusForm.status = newStatus;
@@ -255,6 +298,81 @@ const reservedTables = computed(() =>
 const maintenanceTables = computed(() =>
   props.tables.filter(table => table.status === 'maintenance')
 );
+
+// Real-time order status updates
+onMounted(() => {
+  if (window.Echo && props.employee) {
+    const restaurantId = props.employee.user_id;
+
+    console.log('Setting up real-time listener for restaurant:', restaurantId);
+
+    // Listen for order status updates for this restaurant
+    const channel = window.Echo.private(`restaurant.${restaurantId}.waiter`);
+
+    channel.listen('.order.status.updated', (event: any) => {
+        console.log('Order status updated event received:', event);
+        console.log('Event new_status:', event.new_status);
+        console.log('Event order:', event.order);
+
+        // If an order is voided, remove it from the current view
+        if (event.new_status === 'voided' && event.order) {
+          const voidedOrderId = event.order.order_id;
+
+          console.log(`Processing voided order ${voidedOrderId}`);
+
+          // Remove the voided order from tableOrders if it exists
+          tableOrders.value = tableOrders.value.filter(order =>
+            order.order_id !== voidedOrderId
+          );
+
+          console.log(`Order ${voidedOrderId} was voided and removed from view`);
+        }
+      })
+      .error((error: any) => {
+        console.error('Channel subscription error:', error);
+      });
+
+    // Log when subscription is successful
+    channel.subscribed(() => {
+      console.log('Successfully subscribed to waiter channel');
+    });
+
+    console.log('Waiter dashboard listening for order updates on channel:', `restaurant.${restaurantId}.waiter`);
+  } else {
+    console.warn('Echo or employee not available:', {
+      hasEcho: !!window.Echo,
+      hasEmployee: !!props.employee
+    });
+  }
+
+  // Listen for custom events to open table orders modal
+  const handleViewTableOrders = (event: any) => {
+    console.log('view-table-orders event received:', event.detail);
+    if (event.detail?.tableId) {
+      const orderId = event.detail?.orderId;
+      console.log('Opening table orders for table ID:', event.detail.tableId, 'order ID:', orderId);
+      openTableOrdersByTableId(event.detail.tableId, orderId);
+    }
+  };
+
+  window.addEventListener('view-table-orders', handleViewTableOrders);
+  console.log('Event listener registered for view-table-orders');
+});
+
+onUnmounted(() => {
+  if (window.Echo && props.employee) {
+    const restaurantId = props.employee.user_id;
+    window.Echo.leave(`restaurant.${restaurantId}.waiter`);
+  }
+
+  // Remove custom event listener
+  const handleViewTableOrders = (event: any) => {
+    if (event.detail?.tableId) {
+      openTableOrdersByTableId(event.detail.tableId);
+    }
+  };
+  window.removeEventListener('view-table-orders', handleViewTableOrders);
+});
 </script>
 
 <template>
@@ -572,6 +690,8 @@ const maintenanceTables = computed(() =>
 
             <div v-else class="space-y-4">
               <div v-for="order in tableOrders" :key="order.order_id"
+                :id="`order-${order.order_id}`"
+                :class="{ 'highlighted-order': highlightedOrderId === order.order_id }"
                    class="border rounded-lg p-4 bg-gray-50">
                 <div class="flex justify-between items-start mb-3">
                   <div>
@@ -648,3 +768,24 @@ const maintenanceTables = computed(() =>
     </Teleport>
   </WaiterLayout>
 </template>
+
+<style scoped>
+/* Highlight animation for specific order */
+@keyframes highlight-flash {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: rgba(250, 204, 21, 0.3);
+  }
+}
+
+.highlight-flash {
+  animation: highlight-flash 0.8s ease-in-out 3;
+}
+
+.highlighted-order {
+  border: 2px solid #facc15;
+  border-radius: 0.5rem;
+}
+</style>

@@ -6,8 +6,11 @@ import Badge from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Receipt, Printer, CreditCard, Search, Filter } from 'lucide-vue-next';
+import { Receipt, Printer, CreditCard, Search, Filter, Ban } from 'lucide-vue-next';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 // Props
 const props = defineProps<{
@@ -91,6 +94,7 @@ const getStatusColor = (status: string) => {
         case 'ready': return 'default';
         case 'completed': return 'secondary';
         case 'paid': return 'success';
+        case 'voided': return 'destructive';
         default: return 'secondary';
     }
 };
@@ -118,6 +122,116 @@ const formatDate = (dateString: string) => {
 // Generate print bill URL (no discount data needed since discount is handled in ViewBill)
 const getPrintBillUrl = (order: any) => {
     return `/cashier/bills/${order.order_id}/print`;
+};
+
+// Void Order functionality
+const showVoidModal = ref(false);
+const selectedOrderForVoid = ref<Order | null>(null);
+const isVoidingOrder = ref(false);
+const voidError = ref('');
+
+// Create fresh form data each time to prevent any caching
+const voidForm = ref({
+    manager_access_code: '',
+    void_reason: ''
+});
+
+// VOID POLICY: Check if order can be voided based on status
+// Only allow voiding orders that are 'pending' or 'in_progress'
+const canVoidOrder = (order: Order) => {
+    const allowedStatuses = ['pending', 'in_progress'];
+    return allowedStatuses.includes(order.status.toLowerCase());
+};
+
+// Get reason why order cannot be voided
+const getVoidRestrictionReason = (order: Order) => {
+    const status = order.status.toLowerCase();
+    switch (status) {
+        case 'voided':
+            return 'Order already voided';
+        case 'paid':
+            return 'Cannot void paid orders. Process refund instead';
+        case 'ready':
+            return 'Order completed by kitchen. Voiding no longer allowed';
+        case 'completed':
+            return 'Order already served. Voiding no longer allowed';
+        default:
+            return `Cannot void order with status: ${order.status}`;
+    }
+};
+
+const openVoidModal = (order: Order) => {
+    selectedOrderForVoid.value = order;
+    voidError.value = '';
+
+    // Reset form to ensure blank fields
+    voidForm.value = {
+        manager_access_code: '',
+        void_reason: ''
+    };
+
+    showVoidModal.value = true;
+};
+
+const closeVoidModal = () => {
+    showVoidModal.value = false;
+    selectedOrderForVoid.value = null;
+
+    // Clear form after closing
+    voidForm.value = {
+        manager_access_code: '',
+        void_reason: ''
+    };
+    voidError.value = '';
+};
+
+const submitVoidOrder = () => {
+    if (!selectedOrderForVoid.value) return;
+
+    // Validate form
+    if (!voidForm.value.manager_access_code || voidForm.value.manager_access_code.length !== 6) {
+        voidError.value = 'Please enter a valid 6-digit manager access code';
+        return;
+    }
+
+    // Void reason is now optional - no validation needed
+
+    isVoidingOrder.value = true;
+    voidError.value = '';
+
+    // Use Inertia router for automatic CSRF handling
+    router.post(`/cashier/bills/${selectedOrderForVoid.value.order_id}/void`, voidForm.value, {
+        preserveScroll: true,
+        preserveState: false,
+        onSuccess: () => {
+            showNotification('Order voided successfully', 'success');
+            closeVoidModal();
+
+            // Reload the orders list
+            router.reload({ only: ['orders'] });
+        },
+        onError: (errors) => {
+            console.error('Errors:', errors);
+            // Handle validation errors
+            if (errors.manager_access_code) {
+                voidError.value = errors.manager_access_code;
+            } else if (errors.void_reason) {
+                voidError.value = errors.void_reason;
+            } else if (errors.error) {
+                voidError.value = errors.error;
+            } else if (typeof errors === 'string') {
+                voidError.value = errors;
+            } else if (errors.message) {
+                voidError.value = errors.message;
+            } else {
+                voidError.value = 'Invalid manager access code or failed to void order.';
+            }
+            isVoidingOrder.value = false;
+        },
+        onFinish: () => {
+            isVoidingOrder.value = false;
+        },
+    });
 };
 
 </script>
@@ -159,7 +273,6 @@ const getPrintBillUrl = (order: any) => {
                                 <option value="pending">Pending</option>
                                 <option value="ready">Ready</option>
                                 <option value="completed">Completed</option>
-                                <option value="paid">Paid</option>
                             </select>
                         </div>
                     </div>
@@ -226,9 +339,30 @@ const getPrintBillUrl = (order: any) => {
                                                 </Link>
                                             </Button>
 
+                                            <!-- Void Order Button (only for pending and in_progress orders) -->
+                                            <Button
+                                                v-if="canVoidOrder(order)"
+                                                variant="destructive"
+                                                size="sm"
+                                                @click="openVoidModal(order)"
+                                                :title="`Void this ${order.status} order`"
+                                            >
+                                                <Ban class="w-4 h-4 mr-1" />
+                                                Void
+                                            </Button>
+
+                                            <!-- Show reason when void is not allowed -->
+                                            <span
+                                                v-if="!canVoidOrder(order) && order.status !== 'paid'"
+                                                class="text-xs text-muted-foreground italic"
+                                                :title="getVoidRestrictionReason(order)"
+                                            >
+                                                {{ order.status === 'voided' ? 'Voided' : 'Cannot void' }}
+                                            </span>
+
                                             <!-- Process Payment Button (only for ready/completed orders) -->
                                             <Button
-                                                v-if="order.status !== 'paid' && order.status !== 'pending'"
+                                                v-if="order.status !== 'paid' && order.status !== 'pending' && order.status !== 'voided'"
                                                 size="sm"
                                                 @click="redirectToPayment(order)"
                                             >
@@ -279,6 +413,90 @@ const getPrintBillUrl = (order: any) => {
             </Card>
 
         </div>
+
+        <!-- Void Order Modal -->
+        <Dialog :open="showVoidModal" @update:open="closeVoidModal">
+            <DialogContent class="sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2 text-destructive">
+                        <Ban class="w-5 h-5" />
+                        Void Order - Manager Authorization Required
+                    </DialogTitle>
+                    <DialogDescription>
+                        Voiding order <strong>{{ selectedOrderForVoid?.order_number }}</strong> requires manager approval.
+                        This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div class="space-y-4 py-4">
+                    <!-- Manager Access Code -->
+                    <div class="space-y-2">
+                        <Label for="manager_code">Manager Access Code</Label>
+                        <Input
+                            id="manager_code"
+                            v-model="voidForm.manager_access_code"
+                            type="password"
+                            placeholder="Enter 6-digit code"
+                            maxlength="6"
+                            :disabled="isVoidingOrder"
+                            autocomplete="one-time-code"
+                            autocorrect="off"
+                            autocapitalize="off"
+                            spellcheck="false"
+                            data-lpignore="true"
+                            data-form-type="other"
+                        />
+                        <p class="text-xs text-muted-foreground">
+                            Ask your manager for their access code to authorize this void.
+                        </p>
+                    </div>
+
+                    <!-- Void Reason -->
+                    <div class="space-y-2">
+                        <Label for="void_reason">Reason for Voiding (Optional)</Label>
+                        <Textarea
+                            id="void_reason"
+                            v-model="voidForm.void_reason"
+                            placeholder="Optionally provide a reason for voiding this order"
+                            rows="4"
+                            :disabled="isVoidingOrder"
+                            autocomplete="off"
+                        />
+                    </div>
+
+                    <!-- Error Message -->
+                    <div v-if="voidError" class="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
+                        {{ voidError }}
+                    </div>
+
+                    <!-- Order Details -->
+                    <div class="p-3 bg-muted rounded-md space-y-1 text-sm">
+                        <p><strong>Table:</strong> {{ selectedOrderForVoid?.table?.table_name || 'N/A' }}</p>
+                        <p><strong>Customer:</strong> {{ selectedOrderForVoid?.customer_name || 'Walk-in' }}</p>
+                        <p><strong>Total:</strong> {{ selectedOrderForVoid ? formatCurrency(selectedOrderForVoid.total_amount) : '' }}</p>
+                        <p><strong>Items:</strong> {{ selectedOrderForVoid?.order_items?.length || 0 }}</p>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        @click="closeVoidModal"
+                        :disabled="isVoidingOrder"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        @click="submitVoidOrder"
+                        :disabled="isVoidingOrder"
+                    >
+                        <Ban class="w-4 h-4 mr-2" />
+                        {{ isVoidingOrder ? 'Voiding...' : 'Void Order' }}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
     </CashierLayout>
 </template>

@@ -33,6 +33,9 @@ class CustomerOrder extends Model
         'prepared_at',
         'served_at',
         'completed_at',
+        'voided_by',
+        'voided_at',
+        'void_reason',
     ];
 
     protected $casts = [
@@ -44,6 +47,7 @@ class CustomerOrder extends Model
         'prepared_at' => 'datetime',
         'served_at' => 'datetime',
         'completed_at' => 'datetime',
+        'voided_at' => 'datetime',
     ];
 
     protected $attributes = [
@@ -84,6 +88,11 @@ class CustomerOrder extends Model
         return $this->hasMany(CustomerPayment::class, 'order_id', 'order_id');
     }
 
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'voided_by', 'employee_id');
+    }
+
     public function scopePending($query)
     {
         return $query->where('status', 'pending');
@@ -112,6 +121,11 @@ class CustomerOrder extends Model
     public function scopeCancelled($query)
     {
         return $query->where('status', 'cancelled');
+    }
+
+    public function scopeVoided($query)
+    {
+        return $query->where('status', 'voided');
     }
 
     public function scopeByTable($query, $tableId)

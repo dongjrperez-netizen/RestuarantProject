@@ -78,3 +78,25 @@ Broadcast::channel('restaurant.{restaurantId}.waiter', function ($user, $restaur
 
     return false;
 });
+
+// Inventory channel - restaurant owners and managers can listen
+Broadcast::channel('restaurant.{restaurantId}.inventory', function ($user, $restaurantId) {
+    // Check if user is admin (web guard - User model)
+    if (Auth::guard('web')->check()) {
+        return (int) $user->id === (int) $restaurantId;
+    }
+
+    // Check if user is a manager or other employee with inventory access
+    $employee = null;
+
+    if (Auth::guard('cashier')->check()) {
+        $employee = Auth::guard('cashier')->user();
+    } elseif (Auth::guard('kitchen')->check()) {
+        $employee = Auth::guard('kitchen')->user();
+    } elseif (Auth::guard('waiter')->check()) {
+        $employee = Auth::guard('waiter')->user();
+    }
+
+    // Employees can listen to inventory updates for their restaurant
+    return $employee && (int) $employee->user_id === (int) $restaurantId;
+});

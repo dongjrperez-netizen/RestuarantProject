@@ -84,11 +84,85 @@ Route::get('/test-broadcast/{restaurantId}', function($restaurantId) {
         'table' => (object) ['table_number' => '99', 'table_name' => 'Test Table'],
         'order_items' => [(object) ['dish' => (object) ['dish_name' => 'Test Dish']]]
     ];
-    
+
     broadcast(new \App\Events\OrderCreated((object) $testOrder))->toOthers();
-    
+
     return response()->json(['message' => 'Test event broadcasted', 'order' => $testOrder]);
 })->name('test.broadcast');
+
+// Test route for void order notification
+Route::get('/test-void-notification/{restaurantId}', function($restaurantId) {
+    // Get a real table from the database for realistic testing
+    $realTable = \App\Models\Table::where('user_id', $restaurantId)->first();
+
+    // Create a mock order object with all necessary relationships
+    $mockOrder = new \App\Models\CustomerOrder();
+    $mockOrder->order_id = 'TEST-VOID-' . time();
+    $mockOrder->order_number = 'ORD-TEST-' . time();
+    $mockOrder->status = 'voided';
+    $mockOrder->restaurant_id = $restaurantId;
+    $mockOrder->customer_name = 'Test Customer';
+    $mockOrder->total_amount = 1000;
+    $mockOrder->created_at = now();
+    $mockOrder->updated_at = now();
+
+    // Create mock table relationship (use real table if available)
+    if ($realTable) {
+        $mockTable = new \stdClass();
+        $mockTable->table_number = $realTable->table_number;
+        $mockTable->table_name = $realTable->table_name;
+        $mockTable->id = $realTable->id;
+    } else {
+        $mockTable = new \stdClass();
+        $mockTable->table_number = '5';
+        $mockTable->table_name = 'Table 5';
+        $mockTable->id = 5;
+    }
+
+    // Create mock employee relationship
+    $mockEmployee = new \stdClass();
+    $mockEmployee->employee_id = 1;
+    $mockEmployee->firstname = 'Test';
+    $mockEmployee->lastname = 'Waiter';
+
+    // Manually set relationships for the mock object
+    $mockOrder->setRelation('table', $mockTable);
+    $mockOrder->setRelation('employee', $mockEmployee);
+    $mockOrder->setRelation('orderItems', collect([]));
+
+    // Broadcast the void order event
+    broadcast(new \App\Events\OrderStatusUpdated($mockOrder, 'completed'));
+
+    \Log::info('Test void notification broadcasted', [
+        'order_id' => $mockOrder->order_id,
+        'order_number' => $mockOrder->order_number,
+        'restaurant_id' => $restaurantId,
+        'status' => $mockOrder->status,
+        'table_id' => $mockTable->id,
+    ]);
+
+    return response()->json([
+        'message' => 'Void order notification test broadcasted successfully!',
+        'instructions' => [
+            'Check the BELL ICON in the upper right corner of the waiter dashboard',
+            'Expected notification: "Order ' . $mockOrder->order_number . ' has been voided by cashier"',
+            'The notification should appear with a yellow warning icon',
+            'Click the notification to be redirected to the order details',
+            'The bell icon should show an unread count badge',
+        ],
+        'order' => [
+            'order_id' => $mockOrder->order_id,
+            'order_number' => $mockOrder->order_number,
+            'status' => $mockOrder->status,
+            'restaurant_id' => $restaurantId,
+            'table' => [
+                'id' => $mockTable->id,
+                'table_number' => $mockTable->table_number,
+                'table_name' => $mockTable->table_name,
+            ],
+        ]
+    ]);
+})->name('test.void.notification');
 
 Route::get('dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified', 'check.subscription'])
@@ -176,6 +250,7 @@ Route::middleware(['auth:cashier', 'role:cashier'])->prefix('cashier')->name('ca
     Route::get('/bills/{orderId}/print', [CashierController::class, 'printBill'])->name('bills.print');
     Route::post('/bills/{orderId}/discount', [CashierController::class, 'applyDiscount'])->name('bills.discount');
     Route::delete('/bills/{orderId}/discount', [CashierController::class, 'removeDiscount'])->name('bills.discount.remove');
+    Route::post('/bills/{orderId}/void', [CashierController::class, 'voidOrder'])->name('bills.void');
     // PayPal routes must come before generic {orderId} routes
     Route::post('/payment/paypal', [CashierController::class, 'payWithPaypal'])->name('payment.paypal');
     Route::get('/payment/paypal/success', [CashierController::class, 'paypalSuccess'])->name('payment.paypal.success');
@@ -407,6 +482,7 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->prefix('reports')
     Route::get('/inventory', [ReportsController::class, 'inventory'])->name('inventory');
     Route::get('/purchase-orders', [ReportsController::class, 'purchaseOrders'])->name('purchase-orders');
     Route::get('/wastage', [ReportsController::class, 'wastage'])->name('wastage');
+    Route::get('/comprehensive', [ReportsController::class, 'comprehensiveReport'])->name('comprehensive');
 });
 
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {

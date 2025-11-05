@@ -19,6 +19,7 @@ class Employee extends Authenticatable
         'middlename',
         'email',
         'password',
+        'manager_access_code',
         'date_of_birth',
         'gender',
         'role_id',
@@ -33,6 +34,7 @@ class Employee extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'manager_access_code',
     ];
 
     protected function casts(): array

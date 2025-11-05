@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { Bell, X, CheckCircle } from 'lucide-vue-next';
+import { Bell, X, CheckCircle, AlertTriangle } from 'lucide-vue-next';
 import Button from '@/components/ui/button/Button.vue';
+import { router } from '@inertiajs/vue3';
+
+type NotificationType = 'ready' | 'voided' | 'info';
 
 interface OrderNotification {
   id: string;
-  orderId: number;
+  orderId: number | string;
   orderNumber: string;
   tableName: string;
   tableNumber: string;
+  tableId?: number;
   message: string;
   timestamp: string;
   read: boolean;
+  type: NotificationType;
 }
 
 const props = defineProps<{
@@ -29,16 +34,18 @@ const unreadCount = computed(() => {
 const hasUnread = computed(() => unreadCount.value > 0);
 
 // Add new notification
-const addNotification = (data: any) => {
+const addNotification = (data: any, type: NotificationType = 'ready') => {
   const notification: OrderNotification = {
-    id: `${data.order.order_id}-${Date.now()}`,
-    orderId: data.order.order_id,
-    orderNumber: data.order.order_number,
-    tableName: data.table.name,
-    tableNumber: data.table.number,
+    id: `${data.order?.order_id || data.orderId}-${Date.now()}`,
+    orderId: data.order?.order_id || data.orderId,
+    orderNumber: data.order?.order_number || data.orderNumber,
+    tableName: data.table?.name || data.tableName || 'Unknown Table',
+    tableNumber: data.table?.number || data.tableNumber || '?',
+    tableId: data.table?.id || data.tableId,
     message: data.message,
-    timestamp: data.timestamp,
+    timestamp: data.timestamp || new Date().toISOString(),
     read: false,
+    type: type,
   };
 
   notifications.value.unshift(notification);
@@ -46,10 +53,11 @@ const addNotification = (data: any) => {
   // Play notification sound
   playNotificationSound();
 
-  // Auto-remove after 30 seconds if not manually removed
+  // Auto-remove after 60 seconds if not manually removed (longer for important notifications)
+  const autoRemoveDelay = type === 'voided' ? 60000 : 30000;
   setTimeout(() => {
     removeNotification(notification.id);
-  }, 30000);
+  }, autoRemoveDelay);
 };
 
 // Mark notification as read
@@ -108,6 +116,70 @@ const formatTimestamp = (timestamp: string) => {
   return date.toLocaleDateString();
 };
 
+// Handle notification click - redirect to order details
+const handleNotificationClick = (notification: OrderNotification) => {
+  // Mark as read
+  markAsRead(notification.id);
+
+  // Close the panel
+  showNotificationPanel.value = false;
+
+  // If we have a table ID and order ID, open the table orders modal and highlight the order
+  if (notification.tableId && notification.orderId) {
+    console.log('Notification clicked, opening order:', notification.orderId, 'for table ID:', notification.tableId);
+
+    // Use setTimeout to ensure the panel closes first, then trigger the event
+    setTimeout(() => {
+      // Trigger the table orders modal via a custom event with both tableId and orderId
+      window.dispatchEvent(new CustomEvent('view-table-orders', {
+        detail: {
+          tableId: notification.tableId,
+          orderId: notification.orderId,
+          highlightOrder: true
+        }
+      }));
+      console.log('Custom event dispatched for table ID:', notification.tableId, 'order ID:', notification.orderId);
+    }, 100);
+  }
+};
+
+// Get notification icon based on type
+const getNotificationIcon = (type: NotificationType) => {
+  switch (type) {
+    case 'ready':
+      return CheckCircle;
+    case 'voided':
+      return AlertTriangle;
+    default:
+      return Bell;
+  }
+};
+
+// Get notification color based on type
+const getNotificationColor = (type: NotificationType) => {
+  switch (type) {
+    case 'ready':
+      return 'text-green-600';
+    case 'voided':
+      return 'text-yellow-600';
+    default:
+      return 'text-blue-600';
+  }
+};
+
+// Get notification background color based on type
+const getNotificationBgColor = (type: NotificationType, read: boolean) => {
+  if (read) return '';
+  switch (type) {
+    case 'ready':
+      return 'bg-green-50';
+    case 'voided':
+      return 'bg-yellow-50';
+    default:
+      return 'bg-blue-50';
+  }
+};
+
 // Initialize Echo listener
 let echoChannel: any = null;
 
@@ -116,7 +188,26 @@ onMounted(() => {
     echoChannel = window.Echo.private(`restaurant.${props.restaurantId}.waiter`)
       .listen('.order.ready.to.serve', (data: any) => {
         console.log('Order ready notification received:', data);
-        addNotification(data);
+        addNotification(data, 'ready');
+      })
+      .listen('.order.status.updated', (event: any) => {
+        console.log('Order status updated notification received:', event);
+
+        // Handle voided orders
+        if (event.new_status === 'voided' && event.order) {
+          const voidNotificationData = {
+            order: event.order,
+            orderId: event.order.order_id,
+            orderNumber: event.order.order_number,
+            tableName: event.order.table?.table_name || 'Unknown Table',
+            tableNumber: event.order.table?.table_number || '?',
+            tableId: event.order.table?.id,
+            message: `Order ${event.order.order_number} has been voided by cashier`,
+            timestamp: event.timestamp || new Date().toISOString(),
+          };
+
+          addNotification(voidNotificationData, 'voided');
+        }
       });
 
     console.log('Subscribed to waiter channel for restaurant:', props.restaurantId);
@@ -161,10 +252,10 @@ defineExpose({
         v-if="showNotificationPanel"
         class="fixed inset-0 z-50 flex items-start justify-end p-4 sm:p-6 pointer-events-none"
       >
-        <!-- Backdrop -->
+        <!-- Backdrop - Lightened -->
         <div
           @click="toggleNotificationPanel"
-          class="fixed inset-0 bg-black bg-opacity-25 pointer-events-auto"
+          class="fixed inset-0 bg-black bg-opacity-10 pointer-events-auto"
         ></div>
 
         <!-- Panel -->
@@ -201,19 +292,29 @@ defineExpose({
               <div
                 v-for="notification in notifications"
                 :key="notification.id"
-                class="p-4 hover:bg-gray-50 transition-colors"
-                :class="{ 'bg-blue-50': !notification.read }"
+                class="p-4 transition-colors cursor-pointer relative"
+                :class="[
+                  getNotificationBgColor(notification.type, notification.read),
+                  'hover:bg-gray-100'
+                ]"
+                @click="handleNotificationClick(notification)"
               >
                 <div class="flex items-start justify-between gap-3">
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 mb-1">
-                      <CheckCircle :size="18" class="text-green-600 flex-shrink-0" />
+                      <component
+                        :is="getNotificationIcon(notification.type)"
+                        :size="18"
+                        :class="getNotificationColor(notification.type)"
+                        class="flex-shrink-0"
+                      />
                       <span class="font-semibold text-gray-900 truncate">
                         {{ notification.orderNumber }}
                       </span>
                       <span
                         v-if="!notification.read"
-                        class="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full"
+                        class="px-2 py-0.5 text-xs font-medium rounded-full"
+                        :class="notification.type === 'voided' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'"
                       >
                         New
                       </span>
@@ -226,9 +327,10 @@ defineExpose({
                       <span class="text-gray-400">•</span>
                       <span>{{ formatTimestamp(notification.timestamp) }}</span>
                     </div>
+                    <p class="text-xs text-gray-400 mt-1 italic">Click to view order</p>
                   </div>
                   <button
-                    @click="removeNotification(notification.id)"
+                    @click.stop="removeNotification(notification.id)"
                     class="p-1 rounded-full hover:bg-gray-200 transition-colors flex-shrink-0"
                     title="Dismiss"
                   >

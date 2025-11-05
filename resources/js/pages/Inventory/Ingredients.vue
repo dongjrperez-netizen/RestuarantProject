@@ -24,7 +24,15 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Edit } from 'lucide-vue-next';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { router } from '@inertiajs/vue3';
+
+// Declare Echo type for TypeScript
+declare global {
+  interface Window {
+    Echo: any;
+  }
+}
 
 interface Supplier {
   supplier_id: number;
@@ -50,7 +58,12 @@ interface Stats {
 const props = defineProps<{
   ingredients: Ingredient[];
   stats: Stats;
+  user?: any;
 }>();
+
+// Make ingredients reactive so we can update them in real-time
+const ingredients = ref<Ingredient[]>([...props.ingredients]);
+const stats = ref({ ...props.stats });
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Inventory', href: '/inventory' },
@@ -63,11 +76,11 @@ const itemsPerPage = 6;
 const paginatedIngredients = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
   const end = start + itemsPerPage;
-  return props.ingredients.slice(start, end);
+  return ingredients.value.slice(start, end);
 });
 
 const totalPages = computed(() => {
-  return Math.ceil(props.ingredients.length / itemsPerPage);
+  return Math.ceil(ingredients.value.length / itemsPerPage);
 });
 
 const goToPage = (page: number) => {
@@ -121,6 +134,57 @@ const saveEdit = () => {
     },
   });
 };
+
+// Real-time inventory updates
+onMounted(() => {
+  const user = (page.props as any).auth?.user;
+
+  if (window.Echo && user) {
+    const restaurantId = user.id; // User ID is the restaurant ID
+
+    console.log('Setting up inventory real-time listener for restaurant:', restaurantId);
+
+    // Listen for inventory updates for this restaurant
+    window.Echo.private(`restaurant.${restaurantId}.inventory`)
+      .listen('.inventory.updated', (event: any) => {
+        console.log('Inventory update received:', event);
+
+        // Find and update the ingredient in the list
+        const index = ingredients.value.findIndex(
+          (ing) => ing.ingredient_id === event.ingredient.ingredient_id
+        );
+
+        if (index !== -1) {
+          // Update the existing ingredient
+          ingredients.value[index] = {
+            ...ingredients.value[index],
+            current_stock: event.ingredient.current_stock,
+            is_low_stock: event.ingredient.current_stock <= ingredients.value[index].reorder_level,
+          };
+
+          // Update low stock count
+          const lowStockCount = ingredients.value.filter(
+            (ing) => ing.is_low_stock
+          ).length;
+          stats.value.low_stock_count = lowStockCount;
+
+          console.log(`Updated ${event.ingredient.ingredient_name}: ${event.previous_stock} → ${event.new_stock}`);
+        }
+      });
+
+    console.log('Inventory real-time updates enabled');
+  }
+});
+
+onUnmounted(() => {
+  const user = (page.props as any).auth?.user;
+
+  if (window.Echo && user) {
+    const restaurantId = user.id;
+    window.Echo.leave(`restaurant.${restaurantId}.inventory`);
+    console.log('Inventory real-time listener disconnected');
+  }
+});
 </script>
 
 <template>

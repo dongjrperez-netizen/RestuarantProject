@@ -615,7 +615,7 @@ class WaiterController extends Controller
             $orders = CustomerOrder::with(['orderItems.dish', 'orderItems.variant', 'table', 'employee'])
                 ->where('table_id', $tableId)
                 ->where('restaurant_id', $employee->user_id) // Filter by restaurant
-                ->whereNotIn('status', ['paid', 'cancelled', 'completed']) // Exclude paid, cancelled, and completed orders
+                ->whereNotIn('status', ['paid', 'cancelled', 'completed', 'voided']) // Exclude paid, cancelled, completed, and voided orders
                 ->orderBy('created_at', 'desc')
                 ->get();
 

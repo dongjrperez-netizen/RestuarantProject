@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\InventoryUpdated;
 use App\Utils\UnitConverter;
 use Illuminate\Database\Eloquent\Model;
 
@@ -68,13 +69,19 @@ class Ingredients extends Model
 
     public function increaseStock($quantity)
     {
+        $previousStock = $this->current_stock;
         $this->increment('current_stock', $quantity);
+        $this->refresh();
+
+        // Broadcast inventory update
+        broadcast(new InventoryUpdated($this, 'increased', $previousStock))->toOthers();
     }
 
     public function decreaseStock($quantity, $unit = null)
     {
         $originalQuantity = $quantity;
         $originalUnit = $unit;
+        $previousStock = $this->current_stock;
 
         // Convert quantity to base unit if different unit is provided
         if ($unit && $unit !== $this->base_unit) {
@@ -99,19 +106,28 @@ class Ingredients extends Model
         }
 
         $this->decrement('current_stock', $quantity);
+        $this->refresh();
 
         \Log::info("Stock decremented", [
             'ingredient_name' => $this->ingredient_name,
             'decremented_by' => $quantity,
-            'current_stock_after' => $this->fresh()->current_stock,
+            'current_stock_after' => $this->current_stock,
         ]);
+
+        // Broadcast inventory update
+        broadcast(new InventoryUpdated($this, 'decreased', $previousStock))->toOthers();
     }
 
     public function addPackages($packageCount, $contentsPerPackage)
     {
+        $previousStock = $this->current_stock;
         $this->increment('packages', $packageCount);
         $totalUnits = $packageCount * $contentsPerPackage;
         $this->increment('current_stock', $totalUnits);
+        $this->refresh();
+
+        // Broadcast inventory update
+        broadcast(new InventoryUpdated($this, 'increased', $previousStock))->toOthers();
     }
 
     public function removePackages($packageCount, $contentsPerPackage)
@@ -119,9 +135,14 @@ class Ingredients extends Model
         if ($this->packages < $packageCount) {
             throw new \Exception("Insufficient packages for ingredient: {$this->ingredient_name}. Current: {$this->packages}, Required: {$packageCount}");
         }
+        $previousStock = $this->current_stock;
         $this->decrement('packages', $packageCount);
         $totalUnits = $packageCount * $contentsPerPackage;
         $this->decrement('current_stock', $totalUnits);
+        $this->refresh();
+
+        // Broadcast inventory update
+        broadcast(new InventoryUpdated($this, 'decreased', $previousStock))->toOthers();
     }
 
     /**

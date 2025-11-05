@@ -232,19 +232,23 @@ const openQuantityModal = (dish: Dish) => {
     selectedVariant.value = null;
   }
 
-  // Check if dish already exists in order to pre-fill quantity and instructions
-  const existingItem = orderItems.value.find(item => item.dish_id === dish.dish_id);
+  // Check if this exact dish + variant combo already exists in order to pre-fill quantity and instructions
+  const existingItem = orderItems.value.find(item =>
+    item.dish_id === dish.dish_id &&
+    item.variant_id === selectedVariant.value?.variant_id
+  );
   if (existingItem) {
     modalQuantity.value = existingItem.quantity;
     modalSpecialInstructions.value = existingItem.special_instructions;
     excludedIngredients.value = existingItem.excluded_ingredients || [];
     console.log('Opening modal for existing item:', {
       dish_id: dish.dish_id,
+      variant_id: selectedVariant.value?.variant_id,
       excluded_ingredients: excludedIngredients.value,
       existing_excluded: existingItem.excluded_ingredients
     });
   } else {
-    console.log('Opening modal for new dish:', dish.dish_id);
+    console.log('Opening modal for new dish:', dish.dish_id, 'variant:', selectedVariant.value?.variant_id);
   }
 
   showQuantityModal.value = true;
@@ -253,7 +257,12 @@ const openQuantityModal = (dish: Dish) => {
 const addDishToOrder = () => {
   if (!selectedDish.value || modalQuantity.value < 1) return;
 
-  const existingItemIndex = orderItems.value.findIndex(item => item.dish_id === selectedDish.value!.dish_id);
+  // Find existing item with same dish_id AND variant_id (size)
+  // This allows ordering the same dish in different sizes
+  const existingItemIndex = orderItems.value.findIndex(item =>
+    item.dish_id === selectedDish.value!.dish_id &&
+    item.variant_id === selectedVariant.value?.variant_id
+  );
   const isNewItem = existingItemIndex === -1;
 
   console.log('Adding dish to order:', {
@@ -313,8 +322,10 @@ const toggleIngredientExclusion = (ingredientId: number) => {
   }
 };
 
-const removeDishFromOrder = (dishId: number) => {
-  const itemIndex = orderItems.value.findIndex(item => item.dish_id === dishId);
+const removeDishFromOrder = (dishId: number, variantId?: number) => {
+  const itemIndex = orderItems.value.findIndex(item =>
+    item.dish_id === dishId && item.variant_id === variantId
+  );
   if (itemIndex > -1) {
     if (orderItems.value[itemIndex].quantity > 1) {
       orderItems.value[itemIndex].quantity--;
@@ -324,13 +335,15 @@ const removeDishFromOrder = (dishId: number) => {
   }
 };
 
-const updateQuantity = (dishId: number, quantity: number) => {
-  const item = orderItems.value.find(item => item.dish_id === dishId);
+const updateQuantity = (dishId: number, quantity: number, variantId?: number) => {
+  const item = orderItems.value.find(item =>
+    item.dish_id === dishId && item.variant_id === variantId
+  );
   if (item) {
     if (quantity > 0) {
       item.quantity = quantity;
     } else {
-      removeDishFromOrder(dishId);
+      removeDishFromOrder(dishId, variantId);
     }
   }
 };
@@ -855,7 +868,7 @@ const getAllergenBadgeColor = (allergen: string) => {
                   <div v-if="existingOrderItems.length > 0" class="text-xs font-medium text-green-600 mb-2 px-2 mt-4">Additional Items:</div>
                   <div
                     v-for="item in orderItems"
-                    :key="item.dish_id"
+                    :key="`${item.dish_id}-${item.variant_id || 'no-variant'}`"
                     class="flex items-start gap-3 p-3 border rounded-lg bg-white"
                   >
                     <div class="flex-1 min-w-0">
@@ -876,7 +889,7 @@ const getAllergenBadgeColor = (allergen: string) => {
 
                     <div class="flex items-center gap-2">
                       <Button
-                        @click="removeDishFromOrder(item.dish_id)"
+                        @click="removeDishFromOrder(item.dish_id, item.variant_id)"
                         variant="outline"
                         size="icon"
                         class="h-8 w-8"
@@ -886,7 +899,7 @@ const getAllergenBadgeColor = (allergen: string) => {
 
                       <Input
                         :model-value="item.quantity"
-                        @update:model-value="(value) => updateQuantity(item.dish_id, parseInt(String(value)) || 0)"
+                        @update:model-value="(value) => updateQuantity(item.dish_id, parseInt(String(value)) || 0, item.variant_id)"
                         type="number"
                         min="0"
                         class="w-14 h-8 text-center text-xs"
