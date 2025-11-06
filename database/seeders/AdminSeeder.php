@@ -10,10 +10,12 @@ class AdminSeeder extends Seeder
 {
     public function run(): void
     {
-        Administrator::create([
-            'email' => 'Admin@gmail.com',
-            'password' => Hash::make('Admin123'),
-            'is_active' => true,
-        ]);
+        Administrator::updateOrCreate(
+            ['email' => 'Admin@gmail.com'], // Find by email
+            [
+                'password' => Hash::make('Admin123'),
+                'is_active' => true,
+            ]
+        );
     }
 }

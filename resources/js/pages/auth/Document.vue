@@ -9,6 +9,7 @@ import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { LoaderCircle, Plus, X } from 'lucide-vue-next';
 import { ref, computed } from 'vue';
 
+
 interface Props {
   debug_info?: any;
 }
@@ -110,13 +111,26 @@ const submit = () => {
   });
 
   uploadProgress.value = 0;
+  
   uploadStatus.value = 'Uploading documents...';
+  interface InertiaProgress {
+    percentage?: number;
+  
+  }
+
+  interface InertiaErrors {
+    [key: string]: string | string[]; 
+  }
+  interface InertiaSuccessResponse {
+      type: 'success';
+      
+  }
 
   form.post(route('register.documents.store'), {
     forceFormData: true,
     preserveScroll: true,
     timeout: 300000,
-    onProgress: (progress) => {
+    onProgress: (progress: InertiaProgress) => {
       console.log('Upload progress:', progress);
       if (progress && progress.percentage) {
         uploadProgress.value = progress.percentage;
@@ -128,14 +142,14 @@ const submit = () => {
       uploadStatus.value = '';
       uploadProgress.value = 0;
     },
-    onError: (errors) => {
+    onError: (errors: InertiaErrors) => {
       console.error('Upload error:', errors);
       uploadStatus.value = 'Upload failed. Please check the error messages above.';
     },
-    onSuccess: (response) => {
+    onSuccess: (response: InertiaSuccessResponse) => {
       console.log('Upload success:', response);
     }
-  });
+  }as any);
 };
 
 const hasRequiredDocuments = () => {
