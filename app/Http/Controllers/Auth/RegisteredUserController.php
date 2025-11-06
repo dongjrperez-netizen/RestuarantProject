@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendVerificationEmail;
 use App\Models\Restaurant_Data;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
@@ -99,10 +100,8 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        // Send verification email asynchronously to avoid timeout
-        dispatch(function () use ($user) {
-            event(new Registered($user));
-        })->afterResponse();
+        // Queue verification email to be sent by queue worker
+        SendVerificationEmail::dispatch($user);
 
         return redirect()->route('register.documents');
     }
