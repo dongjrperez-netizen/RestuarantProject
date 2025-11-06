@@ -56,5 +56,6 @@ if (import.meta.env.VITE_REVERB_APP_KEY) {
     
     console.log('Laravel Echo initialized with Reverb');
 } else {
-    console.warn('Laravel Echo not initialized: Missing VITE_REVERB_APP_KEY environment variable');
+    // Real-time features disabled - this is normal if you haven't set up Reverb
+    console.info('Laravel Echo not initialized (real-time features disabled). This is expected if REVERB is not configured.');
 }
