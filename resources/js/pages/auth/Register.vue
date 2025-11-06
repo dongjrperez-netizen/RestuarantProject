@@ -5,12 +5,21 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import AuthBase from '@/layouts/AuthLayout.vue';
-import { Head, useForm } from '@inertiajs/vue3';
-import { LoaderCircle, XCircle } from 'lucide-vue-next';
+import { Head, useForm, router } from '@inertiajs/vue3';
+import { LoaderCircle, XCircle, AlertTriangle } from 'lucide-vue-next';
 import { ref, computed } from 'vue';
 
 const step = ref(1);
+const showErrorModal = ref(false);
 
 const form = useForm({
   last_name: '',
@@ -48,8 +57,23 @@ const submit = () => {
 
   form.post(route('register'), {
     onFinish: () => form.reset('password', 'password_confirmation'),
-
+    onError: (errors) => {
+      // Check if it's a timeout error
+      const errorString = JSON.stringify(errors).toLowerCase();
+      if (errorString.includes('timeout') || errorString.includes('maximum execution time')) {
+        showErrorModal.value = true;
+      }
+    },
   });
+};
+
+const proceedToDocuments = () => {
+  showErrorModal.value = false;
+  router.visit(route('register.documents'));
+};
+
+const closeModal = () => {
+  showErrorModal.value = false;
 };
 </script>
 
@@ -283,5 +307,46 @@ const submit = () => {
         <TextLink :href="route('login')" class="text-orange-500 hover:text-orange-600 font-medium">Sign in here</TextLink>
       </div>
     </form>
+
+    <!-- Timeout Error Modal -->
+    <Dialog :open="showErrorModal" @update:open="closeModal">
+      <DialogContent class="sm:max-w-[500px]">
+        <DialogHeader>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="rounded-full bg-yellow-100 p-2">
+              <AlertTriangle class="h-6 w-6 text-yellow-600" />
+            </div>
+            <DialogTitle class="text-xl">Registration Timeout</DialogTitle>
+          </div>
+          <DialogDescription class="text-base pt-2">
+            The server took too long to process your registration. However, your account may have been created successfully.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 my-4">
+          <p class="text-sm text-blue-800">
+            <strong>What happens next:</strong>
+          </p>
+          <p class="text-sm text-blue-700 mt-2">
+            Click "Proceed to Upload Documents" to continue with the document upload process. You can also skip this step and upload documents later from your dashboard.
+          </p>
+        </div>
+
+        <DialogFooter class="gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            @click="closeModal"
+          >
+            Cancel
+          </Button>
+          <Button
+            @click="proceedToDocuments"
+            class="bg-orange-500 hover:bg-orange-600"
+          >
+            Proceed to Upload Documents
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </AuthBase>
 </template>
