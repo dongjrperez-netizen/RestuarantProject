@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules;
 use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
@@ -108,6 +109,9 @@ class RegisteredUserController extends Controller
 
   public function store_doc(Request $request): RedirectResponse
     {
+        // Increase execution time for document uploads (max 5 minutes)
+        set_time_limit(300);
+
         try {
             $validated = $request->validate([
                 'documents' => 'required|array|min:1',
@@ -130,31 +134,44 @@ class RegisteredUserController extends Controller
             $documentTypes = $request->input('document_types', []);
 
             $supabaseUrl = env('SUPABASE_URL');
-            $supabaseKey = env('SUPABASE_KEY');
+            // Use service role key for better upload performance
+            $supabaseKey = env('SUPABASE_SERVICE_ROLE_KEY') ?? env('SUPABASE_KEY');
             $bucket = env('SUPABASE_BUCKET'); // Ensure this matches your actual bucket name
 
             if (!$supabaseUrl || !$supabaseKey || !$bucket) {
                 return back()->withErrors(['error' => 'Supabase configuration missing (URL, Key, or Bucket). Please check .env file.']);
             }
 
+            Log::info('Starting document upload', [
+                'file_count' => count($documents),
+                'restaurant_id' => $restaurantId,
+            ]);
+
             foreach ($documents as $index => $file) {
                 if ($file && $file->isValid()) {
                     // Generate a unique file name
-                    $fileName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                    $fileName = time() . '_' . $index . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                     // Define the storage path within the bucket (e.g., documents/123_unique.jpg)
                     $filePath = "documents/{$fileName}";
 
-                    // Upload to Supabase Storage using Laravel Http Client
-                    $response = Http::withHeaders([
-                        'apikey' => $supabaseKey,
-                        'Authorization' => 'Bearer ' . $supabaseKey,
-                        'Content-Type' => $file->getMimeType(),
-                        // Set X-Upsert header to true to ensure file upload is treated as a new object or update
-                        'X-Upsert' => 'true',
-                    ])->withBody(
-                        file_get_contents($file->getRealPath()),
-                        $file->getMimeType()
-                    )->post("{$supabaseUrl}/storage/v1/object/{$bucket}/{$filePath}");
+                    Log::info("Uploading file to Supabase", [
+                        'file' => $fileName,
+                        'size' => $file->getSize(),
+                    ]);
+
+                    // Upload to Supabase Storage using Laravel Http Client with timeout
+                    $response = Http::timeout(120) // 2 minute timeout per file
+                        ->withHeaders([
+                            'apikey' => $supabaseKey,
+                            'Authorization' => 'Bearer ' . $supabaseKey,
+                            'Content-Type' => $file->getMimeType(),
+                            'x-upsert' => 'true', // lowercase as per Supabase docs
+                        ])
+                        ->withBody(
+                            file_get_contents($file->getRealPath()),
+                            $file->getMimeType()
+                        )
+                        ->post("{$supabaseUrl}/storage/v1/object/{$bucket}/{$filePath}");
 
                     if ($response->successful()) {
                         // Store info in DB: file name and the full path within the bucket
@@ -167,6 +184,8 @@ class RegisteredUserController extends Controller
                             'updated_at' => now(),
                         ]);
                         $uploadedCount++;
+
+                        Log::info("File uploaded successfully", ['file' => $fileName]);
                     } else {
                         // Log detailed Supabase upload error
                         Log::error('Supabase upload failed', [
@@ -184,6 +203,8 @@ class RegisteredUserController extends Controller
             if ($uploadedCount === 0) {
                 return back()->withErrors(['error' => 'No valid documents were uploaded or Supabase upload failed for all files. Check logs for details.']);
             }
+
+            Log::info("Document upload completed", ['uploaded_count' => $uploadedCount]);
 
             return redirect()->route('login')->with('success', "{$uploadedCount} document(s) uploaded successfully.");
 
