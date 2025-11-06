@@ -18,6 +18,7 @@ class CustomerOrder extends Model
 
     protected $fillable = [
         'table_id',
+        'reservation_id',
         'employee_id',
         'restaurant_id',
         'order_number',
@@ -25,34 +26,46 @@ class CustomerOrder extends Model
         'status',
         'subtotal',
         'tax_amount',
+        'reservation_fee',
         'total_amount',
         'notes',
         'ordered_at',
         'prepared_at',
         'served_at',
         'completed_at',
+        'voided_by',
+        'voided_at',
+        'void_reason',
     ];
 
     protected $casts = [
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',
+        'reservation_fee' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'ordered_at' => 'datetime',
         'prepared_at' => 'datetime',
         'served_at' => 'datetime',
         'completed_at' => 'datetime',
+        'voided_at' => 'datetime',
     ];
 
     protected $attributes = [
         'status' => 'pending',
         'subtotal' => 0.00,
         'tax_amount' => 0.00,
+        'reservation_fee' => 0.00,
         'total_amount' => 0.00,
     ];
 
     public function table(): BelongsTo
     {
         return $this->belongsTo(Table::class, 'table_id', 'id');
+    }
+
+    public function reservation(): BelongsTo
+    {
+        return $this->belongsTo(TableReservation::class, 'reservation_id');
     }
 
     public function employee(): BelongsTo
@@ -73,6 +86,11 @@ class CustomerOrder extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(CustomerPayment::class, 'order_id', 'order_id');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'voided_by', 'employee_id');
     }
 
     public function scopePending($query)
@@ -103,6 +121,11 @@ class CustomerOrder extends Model
     public function scopeCancelled($query)
     {
         return $query->where('status', 'cancelled');
+    }
+
+    public function scopeVoided($query)
+    {
+        return $query->where('status', 'voided');
     }
 
     public function scopeByTable($query, $tableId)
@@ -137,11 +160,15 @@ class CustomerOrder extends Model
 
         $taxRate = 0.12; // 12% tax rate, can be configurable
         $taxAmount = $subtotal * $taxRate;
-        $total = $subtotal + $taxAmount;
+
+        // Include reservation fee in total if exists
+        $reservationFee = $this->reservation_fee ?? 0;
+        $total = $subtotal + $taxAmount + $reservationFee;
 
         $this->update([
             'subtotal' => $subtotal,
             'tax_amount' => $taxAmount,
+            'reservation_fee' => $reservationFee,
             'total_amount' => $total,
         ]);
     }

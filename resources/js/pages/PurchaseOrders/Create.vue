@@ -29,6 +29,7 @@ interface SupplierOffering {
   ingredient: {
     ingredient_id: number;
     ingredient_name: string;
+    base_unit: string;
   };
   supplier: {
     supplier_id: number;
@@ -188,7 +189,7 @@ const submit = () => {
   <Head title="Create Purchase Order" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-     <div class="mx-6 space-y-6">
+      <div class="space-y-6 mx-6">
       <!-- Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Create Purchase Order</h1>
@@ -306,7 +307,8 @@ const submit = () => {
                     <TableHead>Ingredient</TableHead>
                     <TableHead>Quantity</TableHead>
                     <TableHead>Unit Price</TableHead>
-                    <TableHead>Unit</TableHead>
+                    <TableHead>Package Unit</TableHead>
+                    <TableHead>Base Unit</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead class="w-12"></TableHead>
@@ -373,6 +375,12 @@ const submit = () => {
                         placeholder="kg, pcs, etc."
                         class="w-20"
                       />
+                    </TableCell>
+                    <TableCell>
+                      <span v-if="getSelectedOffering(index)" class="text-sm text-muted-foreground">
+                        {{ getSelectedOffering(index)?.ingredient.base_unit || '-' }}
+                      </span>
+                      <span v-else class="text-sm text-muted-foreground">-</span>
                     </TableCell>
                     <TableCell class="font-medium">
                       {{ formatCurrency(item.ordered_quantity * item.unit_price) }}

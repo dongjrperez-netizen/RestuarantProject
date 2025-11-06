@@ -6,7 +6,8 @@ import { ref } from 'vue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
-import { CreditCard, TrendingUp, ArrowLeft, Check, Star } from 'lucide-vue-next';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { CreditCard, TrendingUp, ArrowLeft, Check, Star, AlertTriangle } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -55,6 +56,7 @@ const props = defineProps<{
 
 const selectedPlan = ref<number | null>(null);
 const isProcessing = ref(false);
+const showConfirmModal = ref(false);
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-PH', {
@@ -65,6 +67,17 @@ const formatCurrency = (amount: number) => {
 
 const selectPlan = (planId: number) => {
   selectedPlan.value = planId;
+  showConfirmModal.value = true;
+};
+
+const confirmUpgrade = () => {
+  showConfirmModal.value = false;
+  processUpgrade();
+};
+
+const cancelUpgrade = () => {
+  showConfirmModal.value = false;
+  selectedPlan.value = null;
 };
 
 const processUpgrade = async () => {
@@ -226,5 +239,48 @@ const calculateUpgradeCost = (newPrice: number) => {
                 </Button>
             </div>
         </div>
+
+        <!-- Confirmation Modal -->
+        <Dialog v-model:open="showConfirmModal">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2">
+                        <AlertTriangle class="h-5 w-5 text-yellow-600" />
+                        Confirm Subscription Upgrade
+                    </DialogTitle>
+                    <DialogDescription class="pt-4 space-y-3">
+                        <p class="text-base">
+                            If you upgrade your subscription, your remaining days/time left will be replaced by your new subscription period.
+                        </p>
+                        <div v-if="props.currentSubscription" class="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                            <p class="text-sm font-medium text-yellow-800">
+                                Current remaining time: {{ props.currentSubscription.remaining_time }}
+                            </p>
+                            <p class="text-sm text-yellow-700 mt-1">
+                                This time will not be added to your new subscription.
+                            </p>
+                        </div>
+                        <p class="text-sm text-muted-foreground">
+                            Are you sure you want to proceed with the upgrade?
+                        </p>
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter class="gap-2 sm:gap-0">
+                    <Button
+                        @click="cancelUpgrade"
+                        variant="outline"
+                        type="button"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        @click="confirmUpgrade"
+                        type="button"
+                    >
+                        Yes, Upgrade Now
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>

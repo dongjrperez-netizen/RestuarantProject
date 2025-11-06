@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Models\Role;
+use App\Services\SubscriptionLimitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -48,24 +49,44 @@ class EmployeeController extends Controller
 
     public function create()
     {
+        $limitService = new SubscriptionLimitService();
+        $limitCheck = $limitService->canAddEmployee(Auth::user());
+
         $roles = Role::all();
 
         return Inertia::render('UserManagement/CreateEmployee', [
             'roles' => $roles,
+            'subscriptionLimits' => $limitCheck,
         ]);
     }
 
     public function store(Request $request)
     {
+        // Check subscription limits
+        $limitService = new SubscriptionLimitService();
+        $limitCheck = $limitService->canAddEmployee(Auth::user());
+
+        if (! $limitCheck['allowed']) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['subscription' => $limitCheck['message']]);
+        }
+
         $validated = $request->validate([
-            'firstname' => 'required|string|max:255',
-            'lastname' => 'required|string|max:255',
-            'middlename' => 'nullable|string|max:255',
+            'firstname' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
+            'lastname' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
+            'middlename' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
             'email' => 'required|string|email|max:255|unique:employees',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'date_of_birth' => 'required|date|before:today',
             'gender' => 'required|in:male,female,other',
             'role_id' => 'required|exists:roles,id',
+        ], [
+            'firstname.required' => 'First name is required.',
+            'firstname.regex' => 'First name can only contain letters, spaces, hyphens, and apostrophes.',
+            'lastname.required' => 'Last name is required.',
+            'lastname.regex' => 'Last name can only contain letters, spaces, hyphens, and apostrophes.',
+            'middlename.regex' => 'Middle name can only contain letters, spaces, hyphens, and apostrophes.',
         ]);
 
         $validated['password'] = Hash::make($validated['password']);

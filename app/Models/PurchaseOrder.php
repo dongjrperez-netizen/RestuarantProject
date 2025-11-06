@@ -49,6 +49,10 @@ class PurchaseOrder extends Model
         'approved_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'order_number',
+    ];
+
     public function restaurant()
     {
         return $this->belongsTo(Restaurant_Data::class, 'restaurant_id');
@@ -77,6 +81,12 @@ class PurchaseOrder extends Model
     public function approvedBy()
     {
         return $this->belongsTo(User::class, 'approved_by_user_id');
+    }
+
+    // Accessor for order_number to maintain compatibility with frontend
+    public function getOrderNumberAttribute()
+    {
+        return $this->po_number;
     }
 
     protected static function boot()

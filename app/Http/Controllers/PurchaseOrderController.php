@@ -475,9 +475,16 @@ class PurchaseOrderController extends Controller
                             $stockIncrease = $itemData['received_quantity'] * $packageQuantity;
                             $ingredient->current_stock += $stockIncrease;
 
+                            // Update cost_per_unit based on the package price
+                            // unit_price is the price per package, packageQuantity is units per package
+                            // Therefore: cost_per_unit = price_per_package / units_per_package
+                            if ($packageQuantity > 0) {
+                                $ingredient->cost_per_unit = $item->unit_price / $packageQuantity;
+                            }
+
                             $ingredient->save();
 
-                            \Log::info("Stock updated for ingredient {$ingredient->ingredient_name}: Packages: {$oldPackages} -> {$ingredient->packages} (+{$itemData['received_quantity']}), Stock: {$oldStock} -> {$ingredient->current_stock} (+{$stockIncrease})");
+                            \Log::info("Stock updated for ingredient {$ingredient->ingredient_name}: Packages: {$oldPackages} -> {$ingredient->packages} (+{$itemData['received_quantity']}), Stock: {$oldStock} -> {$ingredient->current_stock} (+{$stockIncrease}), Cost per unit: {$ingredient->cost_per_unit}");
                         } else {
                             \Log::error("Package quantity not found for ingredient {$ingredient->ingredient_name} with supplier {$purchaseOrder->supplier_id}");
                         }

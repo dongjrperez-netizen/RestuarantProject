@@ -84,6 +84,7 @@ class TableReservationController extends Controller
             'reservation_time' => ['required', 'date_format:H:i'],
             'actual_arrival_time' => ['nullable', 'date_format:H:i'],
             'duration_minutes' => ['required', 'integer', 'min:30', 'max:480'],
+            'reservation_fee' => ['nullable', 'numeric', 'min:0'],
             'special_requests' => ['nullable', 'string', 'max:1000'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
@@ -124,6 +125,7 @@ class TableReservationController extends Controller
             'reservation_time' => $validated['reservation_time'],
             'actual_arrival_time' => $actualArrivalTime,
             'duration_minutes' => $validated['duration_minutes'],
+            'reservation_fee' => $validated['reservation_fee'] ?? 0,
             'special_requests' => $validated['special_requests'],
             'notes' => $validated['notes'],
             'status' => 'pending',

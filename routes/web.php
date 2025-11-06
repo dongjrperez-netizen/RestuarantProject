@@ -8,8 +8,11 @@ use App\Http\Controllers\AdminSubscriptionController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CashierController;
+use App\Http\Controllers\DamageSpoilageController;
+use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\RegularEmployeeController;
 use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\KitchenController;
 use App\Http\Controllers\MenuController;
@@ -26,7 +29,9 @@ use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SupplierPaymentController;
 use App\Http\Controllers\SuppliersController;
 use App\Http\Controllers\UsersubscriptionController;
+use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -35,35 +40,138 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 })->name('home');
 
-Route::get('dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified', 'check.subscription'])->name('dashboard');
+// Custom broadcasting auth endpoint that supports multiple guards
+Route::post('/broadcasting-custom-auth', function (Illuminate\Http\Request $request) {
+    // Find authenticated user from any guard
+    $authenticatedUser = null;
+    $guardName = null;
+
+    foreach (['waiter', 'kitchen', 'cashier', 'web'] as $guard) {
+        if (Auth::guard($guard)->check()) {
+            $authenticatedUser = Auth::guard($guard)->user();
+            $guardName = $guard;
+            break;
+        }
+    }
+
+    if (!$authenticatedUser) {
+        \Log::warning('Broadcasting auth failed - no authenticated user');
+        return response()->json(['message' => 'Unauthenticated'], 403);
+    }
+
+    \Log::info('Broadcasting auth request', [
+        'guard' => $guardName,
+        'user_id' => $authenticatedUser->employee_id ?? $authenticatedUser->id,
+        'channel' => $request->input('channel_name'),
+    ]);
+
+    // Set the default guard to use this authenticated user
+    Auth::shouldUse($guardName);
+
+    // Call Laravel's broadcasting authorization
+    return Broadcast::auth($request);
+})->middleware('web');
+
+// Test route for broadcasting
+Route::get('/test-broadcast/{restaurantId}', function($restaurantId) {
+    $testOrder = (object) [
+        'order_id' => 999,
+        'order_number' => 'TEST-' . time(),
+        'status' => 'pending',
+        'restaurant_id' => $restaurantId,
+        'customer_name' => 'Test Customer',
+        'created_at' => now()->toISOString(),
+        'table' => (object) ['table_number' => '99', 'table_name' => 'Test Table'],
+        'order_items' => [(object) ['dish' => (object) ['dish_name' => 'Test Dish']]]
+    ];
+
+    broadcast(new \App\Events\OrderCreated((object) $testOrder))->toOthers();
+
+    return response()->json(['message' => 'Test event broadcasted', 'order' => $testOrder]);
+})->name('test.broadcast');
+
+// Test route for void order notification
+Route::get('/test-void-notification/{restaurantId}', function($restaurantId) {
+    // Get a real table from the database for realistic testing
+    $realTable = \App\Models\Table::where('user_id', $restaurantId)->first();
+
+    // Create a mock order object with all necessary relationships
+    $mockOrder = new \App\Models\CustomerOrder();
+    $mockOrder->order_id = 'TEST-VOID-' . time();
+    $mockOrder->order_number = 'ORD-TEST-' . time();
+    $mockOrder->status = 'voided';
+    $mockOrder->restaurant_id = $restaurantId;
+    $mockOrder->customer_name = 'Test Customer';
+    $mockOrder->total_amount = 1000;
+    $mockOrder->created_at = now();
+    $mockOrder->updated_at = now();
+
+    // Create mock table relationship (use real table if available)
+    if ($realTable) {
+        $mockTable = new \stdClass();
+        $mockTable->table_number = $realTable->table_number;
+        $mockTable->table_name = $realTable->table_name;
+        $mockTable->id = $realTable->id;
+    } else {
+        $mockTable = new \stdClass();
+        $mockTable->table_number = '5';
+        $mockTable->table_name = 'Table 5';
+        $mockTable->id = 5;
+    }
+
+    // Create mock employee relationship
+    $mockEmployee = new \stdClass();
+    $mockEmployee->employee_id = 1;
+    $mockEmployee->firstname = 'Test';
+    $mockEmployee->lastname = 'Waiter';
+
+    // Manually set relationships for the mock object
+    $mockOrder->setRelation('table', $mockTable);
+    $mockOrder->setRelation('employee', $mockEmployee);
+    $mockOrder->setRelation('orderItems', collect([]));
+
+    // Broadcast the void order event
+    broadcast(new \App\Events\OrderStatusUpdated($mockOrder, 'completed'));
+
+    \Log::info('Test void notification broadcasted', [
+        'order_id' => $mockOrder->order_id,
+        'order_number' => $mockOrder->order_number,
+        'restaurant_id' => $restaurantId,
+        'status' => $mockOrder->status,
+        'table_id' => $mockTable->id,
+    ]);
+
+    return response()->json([
+        'message' => 'Void order notification test broadcasted successfully!',
+        'instructions' => [
+            'Check the BELL ICON in the upper right corner of the waiter dashboard',
+            'Expected notification: "Order ' . $mockOrder->order_number . ' has been voided by cashier"',
+            'The notification should appear with a yellow warning icon',
+            'Click the notification to be redirected to the order details',
+            'The bell icon should show an unread count badge',
+        ],
+        'order' => [
+            'order_id' => $mockOrder->order_id,
+            'order_number' => $mockOrder->order_number,
+            'status' => $mockOrder->status,
+            'restaurant_id' => $restaurantId,
+            'table' => [
+                'id' => $mockTable->id,
+                'table_number' => $mockTable->table_number,
+                'table_name' => $mockTable->table_name,
+            ],
+        ]
+    ]);
+})->name('test.void.notification');
+
+Route::get('dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified', 'check.subscription'])
+    ->name('dashboard');
 
 Route::get('/admin/login', [AdministratorController::class, 'showLogin'])->name('admin.login');
 Route::post('/admin/login', [AdministratorController::class, 'login'])->name('admin.login.submit');
 Route::post('/admin/logout', [AdministratorController::class, 'logout'])->name('admin.logout');
 
-// Employee Authentication Routes - Redirected to unified login
-Route::prefix('employee')->name('employee.')->group(function () {
-    // Redirect employee login to unified login page
-    Route::get('/login', function () {
-        return redirect()->route('login');
-    })->middleware('guest:employee')->name('login');
-
-    // Redirect employee login POST to unified login (backup for forms still posting here)
-    Route::post('/login', function () {
-        return redirect()->route('login');
-    })->middleware('guest:employee')->name('login.submit');
-
-    // Employee logout - handled by unified logout
-    Route::post('/logout', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'destroy'])
-        ->middleware('auth:employee')
-        ->name('logout');
-
-    Route::get('/forgot-password', [\App\Http\Controllers\Auth\EmployeeLoginController::class, 'showForgotPasswordForm'])
-        ->middleware('guest:employee')
-        ->name('password.request');
-});
 
 // Employee-accessible routes (authenticated with employee guard)
 Route::middleware('auth:employee')->group(function () {
@@ -74,10 +182,13 @@ Route::middleware('auth:employee')->group(function () {
 // Waiter-specific routes (restricted to waiters only)
 Route::middleware(['auth:waiter', 'role:waiter'])->prefix('waiter')->name('waiter.')->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\WaiterController::class, 'dashboard'])->name('dashboard');
+    Route::get('/current-menu', [App\Http\Controllers\WaiterController::class, 'currentMenu'])->name('current-menu');
     Route::patch('/tables/{table}/status', [App\Http\Controllers\WaiterController::class, 'updateTableStatus'])->name('tables.update-status');
     Route::get('/take-order', [App\Http\Controllers\WaiterController::class, 'takeOrder'])->name('take-order');
     Route::get('/orders/create/{tableId}', [App\Http\Controllers\WaiterController::class, 'createOrder'])->name('orders.create');
     Route::post('/orders', [App\Http\Controllers\WaiterController::class, 'storeOrder'])->name('orders.store');
+    Route::get('/tables/{table}/orders', [App\Http\Controllers\WaiterController::class, 'getTableOrders'])->name('tables.orders');
+    Route::post('/orders/{orderId}/items/{itemId}/served', [App\Http\Controllers\WaiterController::class, 'updateItemServedStatus'])->name('orders.items.served');
 
     // Debug route to check recent orders
     Route::get('/debug/orders', function () {
@@ -134,10 +245,21 @@ Route::get('/debug/employees', function () {
 Route::middleware(['auth:cashier', 'role:cashier'])->prefix('cashier')->name('cashier.')->group(function () {
     Route::get('/successful-payments', [CashierController::class, 'successfulPayments'])->name('successful-payments');
     Route::get('/bills', [CashierController::class, 'bills'])->name('bills');
+    Route::get('/api/orders', [App\Http\Controllers\OrderPollingController::class, 'cashierOrders'])->name('api.orders');
     Route::get('/bills/{orderId}', [CashierController::class, 'viewBill'])->name('bills.view');
     Route::get('/bills/{orderId}/print', [CashierController::class, 'printBill'])->name('bills.print');
     Route::post('/bills/{orderId}/discount', [CashierController::class, 'applyDiscount'])->name('bills.discount');
     Route::delete('/bills/{orderId}/discount', [CashierController::class, 'removeDiscount'])->name('bills.discount.remove');
+    Route::post('/bills/{orderId}/void', [CashierController::class, 'voidOrder'])->name('bills.void');
+    // PayPal routes must come before generic {orderId} routes
+    Route::post('/payment/paypal', [CashierController::class, 'payWithPaypal'])->name('payment.paypal');
+    Route::get('/payment/paypal/success', [CashierController::class, 'paypalSuccess'])->name('payment.paypal.success');
+    Route::get('/payment/paypal/cancel', [CashierController::class, 'paypalCancel'])->name('payment.paypal.cancel');
+
+    // Payment success page (for cash/card payments)
+    Route::get('/payment-success', [CashierController::class, 'paymentSuccess'])->name('payment-success');
+
+    // Generic payment routes with orderId parameter
     Route::get('/payment/{orderId}', [CashierController::class, 'processPayment'])->name('process-payment');
     Route::post('/payment/{orderId}', [CashierController::class, 'updatePaymentStatus'])->name('update-payment');
 });
@@ -173,6 +295,12 @@ Route::middleware('admin.auth')->group(function () {
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
     Route::resource('employees', EmployeeController::class);
     Route::post('/employees/{employee}/toggle-status', [EmployeeController::class, 'toggleStatus'])->name('employees.toggle-status');
+
+    // Regular employees routes (non-account employees)
+    Route::resource('regular-employees', RegularEmployeeController::class);
+    Route::post('/regular-employees/{regularEmployee}/toggle-status', [RegularEmployeeController::class, 'toggleStatus'])->name('regular-employees.toggle-status');
+    Route::post('/regular-employees/{regularEmployee}/activate', [RegularEmployeeController::class, 'activate'])->name('regular-employees.activate');
+    Route::post('/regular-employees/{regularEmployee}/deactivate', [RegularEmployeeController::class, 'deactivate'])->name('regular-employees.deactivate');
 });
 
 Route::get('/register/documents', [RegisteredUserController::class, 'showDocumentUpload'])->middleware('auth')->name('register.documents');
@@ -330,7 +458,31 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
 
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
     Route::get('/kitchen', [KitchenController::class, 'Index'])->name('kitchen.index');
+});
 
+// Kitchen Staff Routes
+Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->name('kitchen.')->group(function () {
+    Route::get('/dashboard', [KitchenController::class, 'dashboard'])->name('dashboard');
+    Route::get('/api/orders', [App\Http\Controllers\OrderPollingController::class, 'kitchenOrders'])->name('api.orders');
+    Route::post('/preparation-orders/{id}/start', [KitchenController::class, 'startPreparationOrder'])->name('preparation-orders.start');
+    Route::post('/preparation-orders/{orderId}/items/{itemId}/start', [KitchenController::class, 'startPreparationItem'])->name('preparation-items.start');
+    Route::post('/preparation-orders/{orderId}/items/{itemId}/complete', [KitchenController::class, 'completePreparationItem'])->name('preparation-items.complete');
+    Route::post('/orders/{orderId}/status', [KitchenController::class, 'updateOrderStatus'])->name('orders.update-status');
+});
+
+// Damage and Spoilage Management Routes (accessible by kitchen staff via modal)
+Route::middleware(['auth:kitchen', 'role:kitchen'])->group(function () {
+    Route::post('/damage-spoilage', [DamageSpoilageController::class, 'store'])->name('damage-spoilage.store');
+});
+
+// Reports and Analytics Routes (accessible by restaurant owners/managers)
+Route::middleware(['auth', 'verified', 'check.subscription'])->prefix('reports')->name('reports.')->group(function () {
+    Route::get('/', [ReportsController::class, 'index'])->name('index');
+    Route::get('/sales', [ReportsController::class, 'sales'])->name('sales');
+    Route::get('/inventory', [ReportsController::class, 'inventory'])->name('inventory');
+    Route::get('/purchase-orders', [ReportsController::class, 'purchaseOrders'])->name('purchase-orders');
+    Route::get('/wastage', [ReportsController::class, 'wastage'])->name('wastage');
+    Route::get('/comprehensive', [ReportsController::class, 'comprehensiveReport'])->name('comprehensive');
 });
 
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
@@ -385,7 +537,7 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
     Route::get('/api/purchase-orders/{purchaseOrderId}/details', [StockInController::class, 'getPurchaseOrderDetails'])->name('purchase-orders.api-details');
 });
 
-Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
+Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/account/update', [AccountUpdateController::class, 'show'])->name('account.update.show');
     Route::post('/account/update', [AccountUpdateController::class, 'update'])->name('account.update');
     Route::get('/api/account/user', [AccountUpdateController::class, 'fetchUser']);
@@ -441,6 +593,7 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
     Route::post('/bills/{bill}/paypal', [SupplierBillController::class, 'payWithPaypal'])->name('bills.paypal.pay');
     Route::get('/bills/{bill}/paypal/success', [SupplierBillController::class, 'paypalSuccess'])->name('bills.paypal.success');
     Route::get('/bills/{bill}/paypal/cancel', [SupplierBillController::class, 'paypalCancel'])->name('bills.paypal.cancel');
+     Route::post('/payments/cash', [SupplierPaymentController::class, 'handleCashPayment'])->name('payments.cash');
 
     // Quick Payment Route (for Bills/Show page)
     Route::post('/bills/{bill}/quick-payment', [SupplierBillController::class, 'quickPayment'])->name('bills.quick-payment');
@@ -530,3 +683,14 @@ require __DIR__.'/billing.php';
 Route::prefix('supplier')->name('supplier.')->group(function () {
     require __DIR__.'/supplier.php';
 });
+// Debug route to check authentication status
+Route::get('/debug/auth-check', function() {
+    return response()->json([
+        'waiter_auth' => Auth::guard('waiter')->check(),
+        'waiter_user' => Auth::guard('waiter')->user(),
+        'web_auth' => Auth::guard('web')->check(),
+        'web_user' => Auth::guard('web')->user(),
+        'session_data' => session()->all(),
+        'cookies' => request()->cookies->all(),
+    ]);
+})->middleware('web');

@@ -171,7 +171,7 @@ const submit = () => {
             <div class="text-center">
               <p class="text-sm text-gray-600">
                 Already have an account?
-                <Link href="/supplier/login" class="font-medium text-primary hover:text-primary/80">
+                <Link href="/login" class="font-medium text-primary hover:text-primary/80">
                   Sign in here
                 </Link>
               </p>

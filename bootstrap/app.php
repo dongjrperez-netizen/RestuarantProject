@@ -1,12 +1,14 @@
 <?php
 
 use App\Http\Middleware\AdminAuth;
+use App\Http\Middleware\AuthenticateAnyGuard;
 use App\Http\Middleware\CheckDemoSubscription;
 use App\Http\Middleware\CheckSubscription;
 use App\Http\Middleware\EmployeeAuth;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RoleMiddleware;
+use App\Http\Middleware\SupplierAuth;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
+        channels: __DIR__.'/../routes/channels.php',
         health: '/up',
         then: function () {
             Route::prefix('supplier')
@@ -34,10 +37,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            'auth.any' => AuthenticateAnyGuard::class,
             'check.demo.subscription' => CheckDemoSubscription::class,
             'check.subscription' => CheckSubscription::class,
             'admin.auth' => AdminAuth::class,
             'employee.auth' => EmployeeAuth::class,
+            'supplier.auth' => SupplierAuth::class,
             'role' => RoleMiddleware::class,
         ]);
     })

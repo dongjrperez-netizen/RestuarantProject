@@ -22,6 +22,7 @@ return new class extends Migration
             $table->datetime('reservation_date');
             $table->time('reservation_time');
             $table->integer('duration_minutes')->default(120);
+            $table->decimal('reservation_fee', 10, 2)->default(0.00);
             $table->datetime('actual_arrival_time')->nullable(); // Default 2 hours
             $table->datetime('dining_start_time')->nullable();
             $table->enum('status', ['pending', 'confirmed', 'seated', 'completed', 'cancelled', 'no_show'])->default('pending');

@@ -41,6 +41,7 @@ class AdminSettingsController extends Controller
         Administrator::create([
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'is_active' => true,
         ]);
 
         return back()->with('success', 'Administrator created successfully.');

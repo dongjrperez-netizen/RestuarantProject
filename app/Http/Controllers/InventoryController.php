@@ -345,13 +345,14 @@ class InventoryController extends Controller
         try {
             $request->validate([
                 'reorder_level' => 'required|numeric|min:0',
+                'base_unit' => 'required|string|max:20',
             ]);
 
             $ingredient = \App\Models\Ingredients::findOrFail($ingredientId);
 
             // Check if ingredient belongs to user's restaurant
             $user = auth()->user();
-            $restaurantId = $user->restaurant_id;
+            $restaurantId = $user->id; // User ID is the restaurant ID
 
             // Restaurant authorization check
             // For now, we'll allow editing if user has no restaurant_id (likely admin/development)
@@ -367,10 +368,21 @@ class InventoryController extends Controller
             }
 
             $oldReorderLevel = $ingredient->reorder_level;
+            $oldBaseUnit = $ingredient->base_unit;
+
             $ingredient->reorder_level = $request->reorder_level;
+            $ingredient->base_unit = $request->base_unit;
             $ingredient->save();
 
-            return back()->with('success', "Reorder level for '{$ingredient->ingredient_name}' updated successfully from {$oldReorderLevel} to {$ingredient->reorder_level}");
+            $message = "'{$ingredient->ingredient_name}' updated successfully";
+            if ($oldReorderLevel != $ingredient->reorder_level) {
+                $message .= " - Reorder level: {$oldReorderLevel} → {$ingredient->reorder_level}";
+            }
+            if ($oldBaseUnit != $ingredient->base_unit) {
+                $message .= " - Unit: {$oldBaseUnit} → {$ingredient->base_unit}";
+            }
+
+            return back()->with('success', $message);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Validation failed for ingredient update', [

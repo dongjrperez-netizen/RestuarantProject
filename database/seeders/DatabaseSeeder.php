@@ -17,10 +17,17 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             RoleSeeder::class,
+            AdminSeeder::class,
+            RestaurantSeeder::class,
             SuppliersSeeder::class,
             IngredientsSeeder::class,
             IngredientSuppliersSeeder::class,
-        ]);
+            MenuCategorySeeder::class,
+            InventorySystemSeeder::class,
+            TableSeeder::class,
+            DamageSpoilageSeeder::class,
+            SubscriptionLimitsSeeder::class,
+]);
 
         User::factory()->create([
             'first_name' => 'Test',

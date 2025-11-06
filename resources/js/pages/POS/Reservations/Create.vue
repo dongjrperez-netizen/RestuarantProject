@@ -49,6 +49,7 @@ const form = useForm({
   reservation_time: '',
   actual_arrival_time: '',
   duration_minutes: 120,
+  reservation_fee: 0,
   special_requests: '',
   notes: '',
 });
@@ -401,6 +402,24 @@ if (tableId) {
               />
               <div v-if="form.errors.notes" class="text-sm text-destructive">
                 {{ form.errors.notes }}
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <Label for="reservation_fee">Reservation Fee (Optional)</Label>
+              <Input
+                id="reservation_fee"
+                v-model.number="form.reservation_fee"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+              />
+              <p class="text-sm text-muted-foreground">
+                Optional fee that will be automatically added to the bill when the customer orders
+              </p>
+              <div v-if="form.errors.reservation_fee" class="text-sm text-destructive">
+                {{ form.errors.reservation_fee }}
               </div>
             </div>
           </CardContent>

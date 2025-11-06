@@ -23,5 +23,13 @@ yarn-error.log
 /.vscode
 /.zed
 
+# Database files
+/database/*.sqlite
+/database/*.sqlite-journal
+
+# User uploaded files (optional - remove if you want to commit them)
+/storage/app/public/documents/*
+/storage/app/public/images/*
+
 # Claude Code configuration
 CLAUDE.md

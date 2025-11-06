@@ -136,9 +136,14 @@ const validateStockForDish = (dish: Dish, quantity: number) => {
   dish.ingredients.forEach(dishIngredient => {
     if (dishIngredient.pivot.is_optional) return;
 
-    // Calculate total needed including current plan + new dish
+    // Calculate total needed including current plan + new dish with unit conversion
     const currentRequirement = ingredientRequirements.value[dishIngredient.ingredient_id]?.total_needed || 0;
-    const additionalNeed = dishIngredient.pivot.quantity_needed * quantity;
+
+    // Convert recipe quantity to inventory base unit
+    const recipeQuantity = dishIngredient.pivot.quantity_needed * quantity;
+    const recipeUnit = dishIngredient.pivot.unit_of_measure || dishIngredient.base_unit;
+    const additionalNeed = convertToBaseUnit(recipeQuantity, recipeUnit, dishIngredient.base_unit);
+
     const totalNeeded = currentRequirement + additionalNeed;
 
     if (dishIngredient.current_stock < totalNeeded) {
@@ -249,6 +254,71 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString();
 };
 
+// Unit conversion utility
+const convertToBaseUnit = (quantity: number, fromUnit: string, toUnit: string): number => {
+  // Normalize units to lowercase for comparison
+  const from = fromUnit?.toLowerCase() || '';
+  const to = toUnit?.toLowerCase() || '';
+
+  // If units are the same, no conversion needed
+  if (from === to) return quantity;
+
+  // Weight conversions
+  const weightConversions: Record<string, number> = {
+    'g': 1,
+    'gram': 1,
+    'grams': 1,
+    'kg': 1000,
+    'kilogram': 1000,
+    'kilograms': 1000,
+    'mg': 0.001,
+    'milligram': 0.001,
+    'milligrams': 0.001,
+    'oz': 28.3495,
+    'ounce': 28.3495,
+    'ounces': 28.3495,
+    'lb': 453.592,
+    'pound': 453.592,
+    'pounds': 453.592,
+  };
+
+  // Volume conversions (in milliliters)
+  const volumeConversions: Record<string, number> = {
+    'ml': 1,
+    'milliliter': 1,
+    'milliliters': 1,
+    'l': 1000,
+    'liter': 1000,
+    'liters': 1000,
+    'cup': 236.588,
+    'cups': 236.588,
+    'tbsp': 14.7868,
+    'tablespoon': 14.7868,
+    'tablespoons': 14.7868,
+    'tsp': 4.92892,
+    'teaspoon': 4.92892,
+    'teaspoons': 4.92892,
+  };
+
+  // Try weight conversion
+  if (from in weightConversions && to in weightConversions) {
+    // Convert from source unit to grams, then to target unit
+    const inGrams = quantity * weightConversions[from];
+    return inGrams / weightConversions[to];
+  }
+
+  // Try volume conversion
+  if (from in volumeConversions && to in volumeConversions) {
+    // Convert from source unit to ml, then to target unit
+    const inMl = quantity * volumeConversions[from];
+    return inMl / volumeConversions[to];
+  }
+
+  // If no conversion available, return original quantity
+  console.warn(`Cannot convert from ${fromUnit} to ${toUnit}, using original quantity`);
+  return quantity;
+};
+
 // Group dishes for better display
 const groupedDishes = computed((): DishGroup[] => {
   const groups: { [key: string]: PlanDish[] } = {};
@@ -319,8 +389,13 @@ const ingredientRequirements = computed(() => {
         };
       }
 
-      // Add quantity needed (dish ingredient quantity * planned quantity)
-      requirements[ingredientId].total_needed += dishIngredient.pivot.quantity_needed * planDish.planned_quantity;
+      // Convert recipe quantity to inventory base unit before adding
+      const recipeQuantity = dishIngredient.pivot.quantity_needed * planDish.planned_quantity;
+      const recipeUnit = dishIngredient.pivot.unit_of_measure || dishIngredient.base_unit;
+      const convertedQuantity = convertToBaseUnit(recipeQuantity, recipeUnit, dishIngredient.base_unit);
+
+      // Add converted quantity needed
+      requirements[ingredientId].total_needed += convertedQuantity;
 
       // Update sufficient status
       requirements[ingredientId].sufficient =

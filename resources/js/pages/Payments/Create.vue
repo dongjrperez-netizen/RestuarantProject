@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Badge from '@/components/ui/badge/Badge.vue';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed } from 'vue';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 interface Supplier {
   supplier_id: number;
@@ -103,48 +104,155 @@ const payFullAmount = () => {
   }
 };
 
-const submit = () => {
-  form.post('/billing/payments/record-payment');
-};
 
-// PayPal payment functionality
-const payWithPaypal = async () => {
+const showModal = ref(false)
+const modalTitle = ref('')
+const modalMessage = ref('')
+const modalType = ref('success') 
+
+const dataRedirectUrl = ref('')
+
+const handleOk = () => {
+  showModal.value = false
+  if (modalType.value === 'success') {
+    // redirect only if success
+    window.location.href = dataRedirectUrl.value || route('bills.index')
+  }
+}
+
+
+const submit = async () => {
   if (!selectedBill.value) {
     alert('Please select a bill first');
     return;
   }
 
-  try {
-    const response = await fetch(route('bills.paypal.pay', selectedBill.value.bill_id), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-      },
-      body: JSON.stringify({
-        payment_amount: form.payment_amount,
-        notes: form.notes,
-      }),
-    });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Payment failed');
+   // Handle Cash payment
+   if (form.payment_method === 'cash') {
+    try {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+      const response = await fetch(route('payments.cash'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrfToken || '',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          bill_id: selectedBill.value.bill_id,
+          payment_amount: form.payment_amount,
+          payment_date: form.payment_date,
+          notes: form.notes,
+        }),
+      });
+
+      const data = await response.json();
+
+      dataRedirectUrl.value = data.redirect_url
+
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Cash payment failed');
+      }
+
+      // ✅ Show success modal
+      modalTitle.value = 'Payment Successful'
+      modalMessage.value = data.message
+      modalType.value = 'success'
+      showModal.value = true
+
+      // redirect after short delay
+      // setTimeout(() => {
+      //   window.location.href = data.redirect_url
+      // }, 2000)
+    } catch (error) {
+      console.error('Cash payment error:', error)
+      modalTitle.value = 'Payment Failed'
+      modalMessage.value = error instanceof Error ? error.message : 'Unknown error'
+      modalType.value = 'error'
+      showModal.value = true
     }
+    return;
+}
 
-    const data = await response.json();
 
-    if (data.success && data.approval_url) {
-      // Redirect to PayPal
-      window.location.href = data.approval_url;
-    } else {
-      throw new Error(data.message || 'PayPal payment failed');
+  // Handle PayPal payment
+  if (form.payment_method === 'paypal') {
+    try {
+      const response = await fetch(route('bills.paypal.pay', selectedBill.value.bill_id), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+        body: JSON.stringify({
+          payment_amount: form.payment_amount,
+          notes: form.notes,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Payment failed');
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.approval_url) {
+        window.location.href = data.approval_url;
+      } else {
+        throw new Error(data.message || 'PayPal payment failed');
+      }
+    } catch (error) {
+      console.error('PayPal payment error:', error);
+      alert('PayPal payment failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
-  } catch (error) {
-    console.error('PayPal payment error:', error);
-    alert('PayPal payment failed: ' + error.message);
+    return;
   }
+
+  // Handle GCash payment
+  if (form.payment_method === 'gcash') {
+    try {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+      const response = await fetch(route('bills.gcash.checkout'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrfToken || '',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          bill_id: selectedBill.value.bill_id,
+          payment_amount: form.payment_amount,
+          notes: form.notes,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'GCash payment processing failed');
+      }
+
+      const data = await response.json();
+
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (error) {
+      console.error('GCash payment error:', error);
+      alert('GCash payment failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+    return;
+  }
+
+  // Handle other payment methods (Cash, Check, etc.)
+  form.post('/billing/payments/record-payment');
 };
 </script>
 
@@ -152,7 +260,7 @@ const payWithPaypal = async () => {
   <Head title="Record Payment" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="space-y-6">
+      <div class="space-y-6 mx-6">
       <!-- Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Record Payment</h1>
@@ -282,12 +390,8 @@ const payWithPaypal = async () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="gcash">GCash</SelectItem>
                     <SelectItem value="paypal">PayPal</SelectItem>
-                    <SelectItem value="online">Online Payment</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
                 <div v-if="form.errors.payment_method" class="text-sm text-red-600 mt-1">
@@ -342,21 +446,13 @@ const payWithPaypal = async () => {
                   Cancel
                 </Button>
                 <Button
-                  type="button"
-                  @click="payWithPaypal"
-                  :disabled="!selectedBill || !form.payment_amount"
-                  class="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a9.124 9.124 0 0 1-.465 2.963c-1.127 5.731-5.139 7.12-9.928 7.12h-1.988a.641.641 0 0 0-.633.74l-.654 4.14-.186 1.179a.33.33 0 0 0 .325.381h2.735a.563.563 0 0 0 .555-.474l.023-.12.447-2.83.029-.156a.563.563 0 0 1 .555-.474h.35c3.828 0 6.822-1.553 7.702-6.05.37-1.896.18-3.476-.733-4.612a3.896 3.896 0 0 0-1.033-.778z"/>
-                  </svg>
-                  Pay with PayPal
-                </Button>
-                <Button
                   type="submit"
-                  :disabled="form.processing || !selectedBill"
+                  :disabled="form.processing || !selectedBill || !form.payment_amount"
                 >
-                  {{ form.processing ? 'Recording...' : 'Record Payment' }}
+                  {{ form.processing ? 'Processing...' :
+                     form.payment_method === 'paypal' ? 'Pay with PayPal' :
+                     form.payment_method === 'gcash' ? 'Pay with GCash' :
+                     'Record Payment' }}
                 </Button>
               </div>
             </form>
@@ -365,4 +461,35 @@ const payWithPaypal = async () => {
       </div>
     </div>
   </AppLayout>
+
+
+
+<Dialog v-model:open="showModal">
+  <DialogContent class="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle
+        :class="modalType === 'success' ? 'text-green-600' : 'text-red-600'"
+      >
+        {{ modalTitle }}
+      </DialogTitle>
+      <DialogDescription class="mt-2">
+        {{ modalMessage }}
+      </DialogDescription>
+    </DialogHeader>
+
+    <!-- Add OK button -->
+    <div class="mt-6 flex justify-end">
+      <button
+        type="button"
+        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        @click="handleOk"
+      >
+        OK
+      </button>
+    </div>
+  </DialogContent>
+</Dialog>
+
+
 </template>
+

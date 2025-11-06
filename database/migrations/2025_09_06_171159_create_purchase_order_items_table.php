@@ -21,6 +21,10 @@ return new class extends Migration
             $table->decimal('total_price', 12, 2);
             $table->string('unit_of_measure', 50);
             $table->text('notes')->nullable();
+            $table->enum('quality_rating', ['excellent', 'good', 'fair', 'poor'])->nullable();
+            $table->string('condition_notes', 500)->nullable();
+            $table->boolean('has_discrepancy')->default(false);
+            $table->text('discrepancy_reason')->nullable();
             $table->timestamps();
         });
     }

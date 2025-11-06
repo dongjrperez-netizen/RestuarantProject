@@ -19,6 +19,7 @@ class TableReservation extends Model
         'reservation_date',
         'reservation_time',
         'duration_minutes',
+        'reservation_fee',
         'actual_arrival_time',
         'dining_start_time',
         'status',
@@ -35,6 +36,7 @@ class TableReservation extends Model
         'cancelled_at' => 'datetime',
         'party_size' => 'integer',
         'duration_minutes' => 'integer',
+        'reservation_fee' => 'decimal:2',
     ];
 
     protected $dates = [

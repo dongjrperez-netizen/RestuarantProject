@@ -15,7 +15,9 @@ return new class extends Migration
             $table->id('item_id');
             $table->foreignId('order_id')->constrained('customer_orders', 'order_id')->onDelete('cascade');
             $table->foreignId('dish_id')->constrained('dishes', 'dish_id')->onDelete('cascade');
+            $table->unsignedBigInteger('variant_id')->nullable();
             $table->integer('quantity')->default(1);
+            $table->integer('served_quantity')->default(0);
             $table->decimal('unit_price', 10, 2);
             $table->decimal('total_price', 10, 2);
             $table->text('special_instructions')->nullable();
@@ -24,8 +26,10 @@ return new class extends Migration
             $table->timestamp('inventory_deducted_at')->nullable();
             $table->timestamps();
 
+            $table->foreign('variant_id')->references('variant_id')->on('dish_variants')->onDelete('set null');
             $table->index(['order_id', 'status']);
             $table->index('dish_id');
+            $table->index('variant_id');
         });
     }
 

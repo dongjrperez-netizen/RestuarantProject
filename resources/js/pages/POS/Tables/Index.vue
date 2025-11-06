@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed } from 'vue';
-import { Plus, Search, MoreVertical, Users, Edit, Trash2, Eye, Calendar, Clock, UserCheck, UserPlus } from 'lucide-vue-next';
+import { Plus, Search, MoreVertical, Users, Edit, Eye, Calendar, Clock, UserCheck, UserPlus } from 'lucide-vue-next';
 
 interface TableReservation {
   id: number;
@@ -80,6 +80,7 @@ const getStatusColor = (status: string) => {
 };
 
 const getStatusText = (status: string) => {
+  if (status === 'maintenance') return 'Not Available';
   return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
@@ -99,15 +100,6 @@ const tableStats = computed(() => {
   return stats;
 });
 
-const deleteTable = (table: Table) => {
-  if (confirm(`Are you sure you want to delete table ${table.table_number}? This action cannot be undone.`)) {
-    router.delete(`/pos/tables/${table.id}`, {
-      onSuccess: () => {
-        // Table deleted successfully
-      },
-    });
-  }
-};
 
 const markArrived = (reservation: TableReservation) => {
   if (confirm(`Mark ${reservation.customer_name} as arrived?`)) {
@@ -288,7 +280,7 @@ const formatNextReservation = (dateString: string | null | undefined, timeString
             <div class="flex items-center space-x-2">
               <div class="w-3 h-3 rounded-full bg-gray-500"></div>
               <div>
-                <p class="text-sm font-medium text-muted-foreground">Maintenance</p>
+                <p class="text-sm font-medium text-muted-foreground">Not Available</p>
                 <p class="text-2xl font-bold">{{ tableStats.maintenance }}</p>
               </div>
             </div>
@@ -296,11 +288,12 @@ const formatNextReservation = (dateString: string | null | undefined, timeString
         </Card>
       </div>
 
-      <!-- Search and Filters -->
+      <!-- Tables List -->
       <Card>
-        <CardContent class="p-4">
-          <div class="flex items-center space-x-4">
-            <div class="relative flex-1 max-w-sm">
+        <CardHeader>
+          <div class="flex items-center justify-between">
+            <CardTitle>All Tables ({{ filteredTables.length }})</CardTitle>
+            <div class="relative w-64">
               <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <Input
                 v-model="searchQuery"
@@ -309,13 +302,6 @@ const formatNextReservation = (dateString: string | null | undefined, timeString
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <!-- Tables List -->
-      <Card>
-        <CardHeader>
-          <CardTitle>All Tables ({{ filteredTables.length }})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -477,13 +463,6 @@ const formatNextReservation = (dateString: string | null | undefined, timeString
                           <Edit class="w-4 h-4 mr-2" />
                           Edit
                         </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        class="text-destructive"
-                        @click="deleteTable(table)"
-                      >
-                        <Trash2 class="w-4 h-4 mr-2" />
-                        Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

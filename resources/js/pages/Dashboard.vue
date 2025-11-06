@@ -42,7 +42,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-// Mock data - replace with real props from backend
+// Interface definitions
 interface DashboardStats {
   revenue: {
     today: number;
@@ -90,109 +90,54 @@ interface QuickAction {
   description: string;
 }
 
-// Mock dashboard data
-const stats = ref<DashboardStats>({
-  revenue: {
-    today: 1250.00,
-    thisMonth: 28500.00,
-    growth: 12.5
-  },
-  orders: {
-    today: 42,
-    pending: 8,
-    completed: 34
-  },
-  inventory: {
-    lowStock: 5,
-    totalItems: 125
-  },
-  employees: {
-    active: 8,
-    total: 12
-  }
-});
+interface WeeklyDataItem {
+  day: string;
+  revenue: number;
+  orders: number;
+  'Revenue (₱)': number;
+  'Orders': number;
+}
 
-const recentOrders = ref<RecentOrder[]>([
-  {
-    id: 1,
-    orderNumber: 'ORD-001',
-    customerName: 'John Doe',
-    total: 45.50,
-    status: 'pending',
-    items: 3,
-    time: '2 mins ago'
-  },
-  {
-    id: 2,
-    orderNumber: 'ORD-002',
-    customerName: 'Jane Smith',
-    total: 67.25,
-    status: 'preparing',
-    items: 5,
-    time: '5 mins ago'
-  },
-  {
-    id: 3,
-    orderNumber: 'ORD-003',
-    customerName: 'Mike Johnson',
-    total: 32.00,
-    status: 'ready',
-    items: 2,
-    time: '8 mins ago'
-  },
-  {
-    id: 4,
-    orderNumber: 'ORD-004',
-    customerName: 'Sarah Wilson',
-    total: 89.75,
-    status: 'completed',
-    items: 7,
-    time: '15 mins ago'
-  }
-]);
+interface OrderStatusItem {
+  status: string;
+  count: number;
+  percentage: number;
+}
 
-const lowStockItems = ref<LowStockItem[]>([
-  {
-    id: 1,
-    name: 'Tomatoes',
-    currentStock: 2,
-    minStock: 10,
-    unit: 'kg'
-  },
-  {
-    id: 2,
-    name: 'Chicken Breast',
-    currentStock: 1,
-    minStock: 5,
-    unit: 'kg'
-  },
-  {
-    id: 3,
-    name: 'Flour',
-    currentStock: 3,
-    minStock: 15,
-    unit: 'kg'
-  }
-]);
+// Props from backend
+interface DashboardProps {
+  stats: DashboardStats;
+  recentOrders: RecentOrder[];
+  lowStockItems: LowStockItem[];
+  weeklyData: WeeklyDataItem[];
+  orderStatusData: OrderStatusItem[];
+}
+
+const props = defineProps<DashboardProps>();
+
+// Use real data from props
+const stats = ref<DashboardStats>(props.stats);
+const recentOrders = ref<RecentOrder[]>(props.recentOrders);
+const lowStockItems = ref<LowStockItem[]>(props.lowStockItems);
 
 const quickActions = ref<QuickAction[]>([
   {
-    title: 'New Order',
-    href: '/pos/new-order',
+    title: 'Menu Planning',
+    href: '/menu-planning',
     icon: Plus,
     color: 'bg-blue-500 hover:bg-blue-600',
-    description: 'Create a new order'
+    description: 'Plan your weekly menu'
   },
   {
     title: 'Menu Management',
-    href: '/menu/list',
+    href: '/menu',
     icon: UtensilsCrossed,
     color: 'bg-green-500 hover:bg-green-600',
     description: 'Manage menu items'
   },
   {
     title: 'Inventory',
-    href: '/stock-list',
+    href: '/inventory',
     icon: Package,
     color: 'bg-purple-500 hover:bg-purple-600',
     description: 'Check stock levels'
@@ -206,82 +151,9 @@ const quickActions = ref<QuickAction[]>([
   }
 ]);
 
-// Chart data for weekly performance
-const chartData = ref([
-  {
-    day: 'Mon',
-    revenue: 1250,
-    orders: 35,
-    'Revenue (₱)': 1250,
-    'Orders': 35
-  },
-  {
-    day: 'Tue',
-    revenue: 1100,
-    orders: 28,
-    'Revenue (₱)': 1100,
-    'Orders': 28
-  },
-  {
-    day: 'Wed',
-    revenue: 1450,
-    orders: 42,
-    'Revenue (₱)': 1450,
-    'Orders': 42
-  },
-  {
-    day: 'Thu',
-    revenue: 1320,
-    orders: 38,
-    'Revenue (₱)': 1320,
-    'Orders': 38
-  },
-  {
-    day: 'Fri',
-    revenue: 1680,
-    orders: 52,
-    'Revenue (₱)': 1680,
-    'Orders': 52
-  },
-  {
-    day: 'Sat',
-    revenue: 2150,
-    orders: 68,
-    'Revenue (₱)': 2150,
-    'Orders': 68
-  },
-  {
-    day: 'Sun',
-    revenue: 1890,
-    orders: 59,
-    'Revenue (₱)': 1890,
-    'Orders': 59
-  }
-]);
-
-// Donut chart data for order status distribution
-const donutData = ref([
-  {
-    status: 'Completed',
-    count: 145,
-    percentage: 65
-  },
-  {
-    status: 'Pending',
-    count: 35,
-    percentage: 15
-  },
-  {
-    status: 'Preparing',
-    count: 25,
-    percentage: 11
-  },
-  {
-    status: 'Ready',
-    count: 20,
-    percentage: 9
-  }
-]);
+// Chart data from backend
+const chartData = ref(props.weeklyData);
+const donutData = ref(props.orderStatusData);
 
 const getOrderStatusBadge = (status: string) => {
   switch (status) {
@@ -318,9 +190,9 @@ const getOrderStatusIcon = (status: string) => {
 };
 
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-PH', {
     style: 'currency',
-    currency: 'USD'
+    currency: 'PHP'
   }).format(amount);
 };
 
@@ -440,83 +312,110 @@ setInterval(() => {
             </Card>
 
             <!-- Analytics Charts -->
-            <div class="grid gap-6 lg:grid-cols-3">
-                <!-- Weekly Performance Chart -->
-                <Card class="lg:col-span-2">
+            <div class="grid gap-6 lg:grid-cols-2">
+                <!-- Weekly Revenue Chart -->
+                <Card>
                     <CardHeader>
                         <CardTitle class="flex items-center gap-2">
-                            <BarChart3 class="h-5 w-5" />
-                            Weekly Performance
+                            <DollarSign class="h-5 w-5" />
+                            Weekly Revenue
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <BarChart
                             :data="chartData"
                             index="day"
-                            :categories="['Revenue (₱)', 'Orders']"
-                            :colors="['rgb(59, 130, 246)', 'rgb(16, 185, 129)']"
-                            type="grouped"
+                            :categories="['Revenue (₱)']"
+                            :colors="['rgb(59, 130, 246)']"
                             :rounded-corners="4"
                             :y-formatter="(value) => {
-                                return typeof value === 'number' && value >= 1000 ? `$${value}` : `${value}`;
+                                return typeof value === 'number' ? `₱${value}` : `${value}`;
                             }"
-                            class="h-80"
+                            class="h-64"
                         />
                     </CardContent>
                 </Card>
 
-                <!-- Order Status Distribution -->
+                <!-- Weekly Orders Chart -->
                 <Card>
                     <CardHeader>
                         <CardTitle class="flex items-center gap-2">
                             <ShoppingCart class="h-5 w-5" />
-                            Order Status
+                            Weekly Orders
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <DonutChart
-                            :data="donutData"
-                            index="status"
-                            category="count"
-                            :colors="['rgb(34, 197, 94)', 'rgb(251, 191, 36)', 'rgb(59, 130, 246)', 'rgb(16, 185, 129)']"
-                            :value-formatter="(value) => `${value} orders`"
-                            class="h-80"
+                        <BarChart
+                            :data="chartData"
+                            index="day"
+                            :categories="['Orders']"
+                            :colors="['rgb(16, 185, 129)']"
+                            :rounded-corners="4"
+                            :y-formatter="(value) => {
+                                return `${value}`;
+                            }"
+                            class="h-64"
                         />
+                    </CardContent>
+                </Card>
+
+            </div>
+
+            <!-- Order Status Distribution -->
+            <Card>
+                <CardHeader>
+                    <CardTitle class="flex items-center gap-2">
+                        <ShoppingCart class="h-5 w-5" />
+                        Order Status Distribution
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <DonutChart
+                                :data="donutData"
+                                index="status"
+                                category="count"
+                                :colors="['rgb(34, 197, 94)', 'rgb(251, 191, 36)', 'rgb(59, 130, 246)', 'rgb(16, 185, 129)']"
+                                :value-formatter="(value) => `${value} orders`"
+                                class="h-64"
+                            />
+                        </div>
                         
                         <!-- Order Status Summary -->
-                        <div class="mt-4 space-y-2">
-                            <div v-for="item in donutData" :key="item.status" class="flex items-center justify-between text-sm">
-                                <div class="flex items-center gap-2">
-                                    <div 
-                                        class="w-3 h-3 rounded-full"
-                                        :style="{ 
-                                            backgroundColor: item.status === 'Completed' ? 'rgb(34, 197, 94)' : 
-                                                             item.status === 'Pending' ? 'rgb(251, 191, 36)' : 
-                                                             item.status === 'Preparing' ? 'rgb(59, 130, 246)' : 
-                                                             'rgb(16, 185, 129)' 
-                                        }"
-                                    ></div>
-                                    <span>{{ item.status }}</span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="font-medium">{{ item.count }}</span>
-                                    <span class="text-muted-foreground">({{ item.percentage }}%)</span>
+                        <div class="space-y-4">
+                            <h3 class="font-semibold">Status Breakdown</h3>
+                            <div class="space-y-3">
+                                <div v-for="item in donutData" :key="item.status" class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <div
+                                            class="w-3 h-3 rounded-full"
+                                            :style="{
+                                                backgroundColor: item.status === 'Completed' ? 'rgb(34, 197, 94)' :
+                                                                 item.status === 'Pending' ? 'rgb(251, 191, 36)' :
+                                                                 item.status === 'Preparing' ? 'rgb(59, 130, 246)' :
+                                                                 'rgb(16, 185, 129)'
+                                            }"
+                                        ></div>
+                                        <span class="text-sm">{{ item.status }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-medium">{{ item.count }}</span>
+                                        <span class="text-xs text-muted-foreground">({{ item.percentage }}%)</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
-            </div>
+                    </div>
+                </CardContent>
+            </Card>
 
             <!-- Main Content Grid -->
             <div class="grid gap-6 md:grid-cols-2">
                 <!-- Recent Orders -->
                 <Card>
-                    <CardHeader class="flex flex-row items-center justify-between">
+                    <CardHeader>
                         <CardTitle>Recent Orders</CardTitle>
-                        <Link href="/orders" class="text-sm text-muted-foreground hover:text-foreground">
-                            View all
-                        </Link>
                     </CardHeader>
                     <CardContent>
                         <div class="space-y-4">

@@ -12,10 +12,13 @@ class AdminUserController extends Controller
 {
     public function index(): Response
     {
-        $users = User::with(['restaurantData', 'subscription'])
+        $users = User::with(['restaurantData.documents', 'subscription'])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($user) {
+                // Check if user has documents uploaded
+                $hasDocuments = $user->restaurantData && $user->restaurantData->documents->isNotEmpty();
+
                 return [
                     'id' => $user->id,
                     'name' => $user->first_name.' '.$user->last_name,
@@ -27,6 +30,7 @@ class AdminUserController extends Controller
                     'subscription_status' => $user->subscription->subscription_status ?? 'none',
                     'created_at' => $user->created_at,
                     'last_login' => $user->updated_at, // Approximation
+                    'has_documents' => $hasDocuments,
                 ];
             });
 

@@ -4,15 +4,21 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use App\Models\Administrator;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AdministratorController extends Controller
 {
-    public function showLogin(): Response
+    public function showLogin()
     {
-        return Inertia::render('auth/LoginAsAdministrator');
+        $admin = Auth::guard('admin')->user();
+        if ($admin) {
+            return redirect()->route('admin.dashboard');
+        }
+
+        return redirect()->route('login');
     }
 
     public function login(Request $request): RedirectResponse
@@ -40,6 +46,6 @@ class AdministratorController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('admin.login');
+        return redirect()->route('login');
     }
 }

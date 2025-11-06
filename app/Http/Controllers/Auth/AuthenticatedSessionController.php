@@ -55,6 +55,9 @@ class AuthenticatedSessionController extends Controller
             return back()->withErrors($result['errors']);
         }
 
+        // Clean up any existing sessions from other guards before establishing new session
+        // $this->cleanupAllGuardSessions($request);
+
         // Regenerate session
         $request->session()->regenerate();
 
@@ -70,16 +73,72 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
-        // Determine which guard is currently authenticated and logout
+        // Determine which guard is currently authenticated and logout from all possible guards
         if (Auth::guard('web')->check()) {
             Auth::guard('web')->logout();
-        } elseif (Auth::guard('employee')->check()) {
+        }
+
+        if (Auth::guard('employee')->check()) {
             Auth::guard('employee')->logout();
         }
 
+        if (Auth::guard('waiter')->check()) {
+            Auth::guard('waiter')->logout();
+        }
+
+        if (Auth::guard('cashier')->check()) {
+            Auth::guard('cashier')->logout();
+        }
+
+        if (Auth::guard('kitchen')->check()) {
+            Auth::guard('kitchen')->logout();
+        }
+
+        if (Auth::guard('supplier')->check()) {
+            Auth::guard('supplier')->logout();
+        }
+         if (Auth::guard('admin')->check()) {
+            Auth::guard('admin')->logout();
+        }
+
+        // Clear all session data
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
+        // Clear any additional session data that might cause conflicts
+        $request->session()->flush();
+
+        // Clear any PayPal session data that might cause conflicts
+        $request->session()->forget([
+            'paypal_order_payment',
+            'paypal_bill_payment',
+            'gcash_payment_data',
+            'payment_session'
+        ]);
+
         return redirect('/');
+    }
+
+    /**
+     * Clean up sessions from all authentication guards to prevent conflicts
+     */
+    private function cleanupAllGuardSessions(Request $request): void
+    {
+        // Logout from all guards without checking if they're active
+        // This prevents session conflicts when switching between user types
+        Auth::guard('web')->logout();
+        Auth::guard('employee')->logout();
+        Auth::guard('waiter')->logout();
+        Auth::guard('cashier')->logout();
+        Auth::guard('kitchen')->logout();
+        Auth::guard('supplier')->logout();
+
+        // Clear specific payment session data that might cause component conflicts
+        $request->session()->forget([
+            'paypal_order_payment',
+            'paypal_bill_payment',
+            'gcash_payment_data',
+            'payment_session'
+        ]);
     }
 }

@@ -129,16 +129,22 @@ class SetupPayPalPlans extends Command
                 'plan_name' => 'Basic',
                 'plan_price' => 299,
                 'plan_duration' => 30,
+                'employee_limit' => 5,
+                'supplier_limit' => 10,
             ]),
             Subscriptionpackage::create([
                 'plan_name' => 'Premium',
                 'plan_price' => 599,
                 'plan_duration' => 60,
+                'employee_limit' => 10,
+                'supplier_limit' => 15,
             ]),
             Subscriptionpackage::create([
                 'plan_name' => 'Enterprise',
                 'plan_price' => 999,
                 'plan_duration' => 90,
+                'employee_limit' => null,
+                'supplier_limit' => null,
             ]),
         ]);
     }

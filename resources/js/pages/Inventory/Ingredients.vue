@@ -24,7 +24,15 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Edit } from 'lucide-vue-next';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { router } from '@inertiajs/vue3';
+
+// Declare Echo type for TypeScript
+declare global {
+  interface Window {
+    Echo: any;
+  }
+}
 
 interface Supplier {
   supplier_id: number;
@@ -47,14 +55,39 @@ interface Stats {
   low_stock_count: number;
 }
 
-defineProps<{
+const props = defineProps<{
   ingredients: Ingredient[];
   stats: Stats;
+  user?: any;
 }>();
+
+// Make ingredients reactive so we can update them in real-time
+const ingredients = ref<Ingredient[]>([...props.ingredients]);
+const stats = ref({ ...props.stats });
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Inventory', href: '/inventory' },
 ];
+
+// Pagination
+const currentPage = ref(1);
+const itemsPerPage = 6;
+
+const paginatedIngredients = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  return ingredients.value.slice(start, end);
+});
+
+const totalPages = computed(() => {
+  return Math.ceil(ingredients.value.length / itemsPerPage);
+});
+
+const goToPage = (page: number) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page;
+  }
+};
 
 const formatNumber = (num: number): string => {
   return new Intl.NumberFormat().format(num);
@@ -70,11 +103,13 @@ const showEditModal = ref(false);
 const currentIngredient = ref<Ingredient | null>(null);
 const editForm = useForm({
   reorder_level: 0,
+  base_unit: '',
 });
 
 const startEdit = (ingredient: Ingredient) => {
   currentIngredient.value = ingredient;
   editForm.reorder_level = ingredient.reorder_level;
+  editForm.base_unit = ingredient.base_unit;
   showEditModal.value = true;
 };
 
@@ -99,6 +134,57 @@ const saveEdit = () => {
     },
   });
 };
+
+// Real-time inventory updates
+onMounted(() => {
+  const user = (page.props as any).auth?.user;
+
+  if (window.Echo && user) {
+    const restaurantId = user.id; // User ID is the restaurant ID
+
+    console.log('Setting up inventory real-time listener for restaurant:', restaurantId);
+
+    // Listen for inventory updates for this restaurant
+    window.Echo.private(`restaurant.${restaurantId}.inventory`)
+      .listen('.inventory.updated', (event: any) => {
+        console.log('Inventory update received:', event);
+
+        // Find and update the ingredient in the list
+        const index = ingredients.value.findIndex(
+          (ing) => ing.ingredient_id === event.ingredient.ingredient_id
+        );
+
+        if (index !== -1) {
+          // Update the existing ingredient
+          ingredients.value[index] = {
+            ...ingredients.value[index],
+            current_stock: event.ingredient.current_stock,
+            is_low_stock: event.ingredient.current_stock <= ingredients.value[index].reorder_level,
+          };
+
+          // Update low stock count
+          const lowStockCount = ingredients.value.filter(
+            (ing) => ing.is_low_stock
+          ).length;
+          stats.value.low_stock_count = lowStockCount;
+
+          console.log(`Updated ${event.ingredient.ingredient_name}: ${event.previous_stock} → ${event.new_stock}`);
+        }
+      });
+
+    console.log('Inventory real-time updates enabled');
+  }
+});
+
+onUnmounted(() => {
+  const user = (page.props as any).auth?.user;
+
+  if (window.Echo && user) {
+    const restaurantId = user.id;
+    window.Echo.leave(`restaurant.${restaurantId}.inventory`);
+    console.log('Inventory real-time listener disconnected');
+  }
+});
 </script>
 
 <template>
@@ -166,7 +252,7 @@ const saveEdit = () => {
             </TableHeader>
             <TableBody>
               <TableRow
-                v-for="ingredient in ingredients"
+                v-for="ingredient in paginatedIngredients"
                 :key="ingredient.ingredient_id"
                 :class="{ 'bg-yellow-50 border-l-4 border-yellow-400': ingredient.is_low_stock }"
               >
@@ -211,17 +297,54 @@ const saveEdit = () => {
             </TableBody>
           </Table>
         </CardContent>
+
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="flex items-center justify-between px-6 py-4 border-t">
+          <div class="text-sm text-muted-foreground">
+            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, ingredients.length) }} of {{ ingredients.length }} ingredients
+          </div>
+          <div class="flex items-center gap-2">
+            <Button
+              @click="goToPage(currentPage - 1)"
+              :disabled="currentPage === 1"
+              variant="outline"
+              size="sm"
+            >
+              Previous
+            </Button>
+            <div class="flex items-center gap-1">
+              <Button
+                v-for="page in totalPages"
+                :key="page"
+                @click="goToPage(page)"
+                :variant="currentPage === page ? 'default' : 'outline'"
+                size="sm"
+                class="w-10"
+              >
+                {{ page }}
+              </Button>
+            </div>
+            <Button
+              @click="goToPage(currentPage + 1)"
+              :disabled="currentPage === totalPages"
+              variant="outline"
+              size="sm"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
       </Card>
     </div>
 
-    <!-- Edit Reorder Level Modal -->
+    <!-- Edit Ingredient Details Modal -->
     <Dialog v-model:open="showEditModal">
       <DialogContent class="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Edit Reorder Level</DialogTitle>
+          <DialogTitle>Edit Ingredient Details</DialogTitle>
           <DialogDescription>
-            Update the reorder level for <strong>{{ currentIngredient?.ingredient_name }}</strong>.
-            This determines when you'll be notified to restock this ingredient.
+            Update the reorder level and unit for <strong>{{ currentIngredient?.ingredient_name }}</strong>.
+            The reorder level determines when you'll be notified to restock this ingredient.
           </DialogDescription>
         </DialogHeader>
 
@@ -246,15 +369,52 @@ const saveEdit = () => {
                 type="number"
                 min="0"
                 step="0.01"
-                :placeholder="`Enter reorder level in ${currentIngredient?.base_unit}`"
+                :placeholder="`Enter reorder level`"
                 :class="{ 'border-red-500': editForm.errors.reorder_level }"
                 required
               />
               <p v-if="editForm.errors.reorder_level" class="text-red-500 text-xs mt-1">
                 {{ editForm.errors.reorder_level }}
               </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 items-center gap-4">
+            <Label for="base-unit" class="text-right">
+              Unit
+            </Label>
+            <div class="col-span-3">
+              <Input
+                id="base-unit"
+                v-model="editForm.base_unit"
+                type="text"
+                placeholder="e.g., kg, lbs, pcs, ml, etc."
+                list="unit-options"
+                :class="{ 'border-red-500': editForm.errors.base_unit }"
+                required
+              />
+              <datalist id="unit-options">
+                <option value="kg">kg - Kilogram</option>
+                <option value="g">g - Gram</option>
+                <option value="lbs">lbs - Pounds</option>
+                <option value="oz">oz - Ounces</option>
+                <option value="pcs">pcs - Pieces</option>
+                <option value="ml">ml - Milliliter</option>
+                <option value="L">L - Liter</option>
+                <option value="cups">cups - Cups</option>
+                <option value="tbsp">tbsp - Tablespoon</option>
+                <option value="tsp">tsp - Teaspoon</option>
+                <option value="boxes">boxes - Boxes</option>
+                <option value="bottles">bottles - Bottles</option>
+                <option value="cans">cans - Cans</option>
+                <option value="bags">bags - Bags</option>
+                <option value="packets">packets - Packets</option>
+              </datalist>
+              <p v-if="editForm.errors.base_unit" class="text-red-500 text-xs mt-1">
+                {{ editForm.errors.base_unit }}
+              </p>
               <p class="text-xs text-muted-foreground mt-1">
-                Unit: {{ currentIngredient?.base_unit }}
+                Common units: kg, g, lbs, oz, pcs, ml, L, etc.
               </p>
             </div>
           </div>

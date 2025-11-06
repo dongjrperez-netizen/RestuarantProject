@@ -4,7 +4,7 @@ import { Link } from '@inertiajs/vue3'
 import {
   Users, UserRound, Box, ClipboardList,
   UtensilsCrossed, ShoppingCart, Truck, Receipt,
-  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar
+  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar, BarChart3, ChevronRight
 } from "lucide-vue-next"
 
 import {
@@ -32,6 +32,7 @@ const navItems = [
     icon: Users,
     children: [
       { title: "Employees", href: '/employees', icon: UserRound },
+      { title: "Regular Employees", href: '/regular-employees', icon: Users },
       { title: "My Subscriptions", href: '/user-management/subscriptions', icon: CreditCard },
     ]
   },
@@ -53,21 +54,14 @@ const navItems = [
     ]
   },
   {
-    title: "POS Management",
-    icon: ShoppingCart,
-    children: [
-      { title: "Tables", href: "/pos/tables", icon: Box },
-      { title: "Customer Order", href: "/pos/customer-order", icon: FileText },
-    ]
-  },
-    {
     title: "Inventory",
     icon: Warehouse,
     children: [
       { title: "Ingredients", href: "/inventory", icon: ChefHat },
-      { title: "Stock-List", href: "/stock-list", icon: Users },
     ]
   },
+  { title: "Tables", href: "/pos/tables", icon: Box },
+  { title: "Generate reports", href: "/reports", icon: BarChart3 },
 ]
 
 
@@ -124,6 +118,10 @@ watch(openCollapsibles, (val) => {
                     <SidebarMenuButton>
                       <component :is="item.icon" class="mr-2 h-4 w-4" />
                       <span>{{ item.title }}</span>
+                      <ChevronRight
+                        class="ml-auto h-4 w-4 transition-transform duration-200"
+                        :class="{ 'rotate-90': openCollapsibles[item.title] }"
+                      />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
 

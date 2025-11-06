@@ -9,6 +9,16 @@ import { router } from '@inertiajs/vue3';
 import { type BreadcrumbItem } from '@/types';
 import { ref, watch } from 'vue';
 import { Eye, Edit, Mail, Copy, UserCheck, UserX, CheckCircle, X } from 'lucide-vue-next';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogOverlay,
+} from '@/components/ui/dialog'
+
 
 interface Supplier {
   supplier_id: number;
@@ -33,6 +43,9 @@ const processing = ref(false);
 const showNotification = ref(false);
 const notificationMessage = ref('');
 const notificationType = ref<'success' | 'error'>('success');
+const showModal = ref(false)
+const showInviteModal = ref(false);
+const selectedSupplier = ref<Supplier | null>(null);
 
 const page = usePage();
 
@@ -109,25 +122,33 @@ const toggleSupplierStatus = (supplier: Supplier) => {
   });
 };
 
-const sendSupplierInvitation = (supplier: Supplier) => {
+const openInviteModal = (supplier: Supplier) => {
   if (!supplier.email) {
     showErrorNotification('Supplier must have an email address to send invitation');
     return;
   }
 
-  if (processing.value) return;
-
-  if (!confirm(`Send invitation email to ${supplier.email}?`)) {
-    return;
-  }
-
-  processing.value = true;
-  router.post(`/suppliers/${supplier.supplier_id}/send-invitation`, {}, {
-    onFinish: () => {
-      processing.value = false;
-    }
-  });
+  selectedSupplier.value = supplier;
+  showInviteModal.value = true;
 };
+
+
+const openModal = (supplier: any) => {
+  selectedSupplier.value = supplier
+  showModal.value = true
+}
+const confirmSendInvitation = () => {
+  if (!selectedSupplier.value) return
+  processing.value = true
+
+  router.post(`/suppliers/${selectedSupplier.value.supplier_id}/send-invitation`, {}, {
+    onFinish: () => {
+      processing.value = false
+      showModal.value = false
+    }
+  })
+}
+
 
 const getInvitationLink = (supplier: Supplier) => {
   return route('supplier.register', {
@@ -185,17 +206,16 @@ const copyInvitationLink = async (supplier: Supplier) => {
 
     <div class="space-y-6 mx-8">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between mt-6">
         <div>
-          <h1 class="text-3xl font-bold tracking-tight">Suppliers</h1>
-          <p class="text-muted-foreground">Manage your suppliers and their contact information</p>
+        
         </div>
         <Link href="/suppliers/create">
           <Button>Add Supplier</Button>
         </Link>
       </div>
 
-      <!-- Summary Cards -->
+      <!-- Summary Cards
       <div class="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -223,7 +243,7 @@ const copyInvitationLink = async (supplier: Supplier) => {
             <div class="text-2xl font-bold">{{ suppliers.filter(s => s.email).length }}</div>
           </CardContent>
         </Card>
-      </div>
+      </div> -->
 
       <!-- Suppliers Table -->
       <Card>
@@ -294,12 +314,12 @@ const copyInvitationLink = async (supplier: Supplier) => {
                         <Edit class="h-4 w-4" />
                       </Button>
                     </Link>
-                    <Button
+                   <Button
                       v-if="supplier.email"
                       variant="ghost"
                       size="sm"
                       class="h-8 w-8 p-0"
-                      @click="sendSupplierInvitation(supplier)"
+                      @click="openModal(supplier)"
                       :disabled="processing"
                       title="Send Email Invitation"
                     >
@@ -314,18 +334,7 @@ const copyInvitationLink = async (supplier: Supplier) => {
                     >
                       <Copy class="h-4 w-4" />
                     </Button>
-                    <Button
-                      :variant="supplier.is_active ? 'ghost' : 'ghost'"
-                      size="sm"
-                      class="h-8 w-8 p-0"
-                      @click="toggleSupplierStatus(supplier)"
-                      :disabled="processing"
-                      :title="supplier.is_active ? 'Deactivate Supplier' : 'Activate Supplier'"
-                      :class="supplier.is_active ? 'text-red-600 hover:text-red-700 hover:bg-red-50' : 'text-green-600 hover:text-green-700 hover:bg-green-50'"
-                    >
-                      <UserX v-if="supplier.is_active" class="h-4 w-4" />
-                      <UserCheck v-else class="h-4 w-4" />
-                    </Button>
+                   
                   </div>
                 </TableCell>
               </TableRow>
@@ -343,4 +352,29 @@ const copyInvitationLink = async (supplier: Supplier) => {
       </Card>
     </div>
   </AppLayout>
+
+<template>
+  <Dialog v-model:open="showModal">
+    <DialogOverlay class="fixed inset-0 bg-transparent" />
+    <DialogContent
+      class="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2
+             bg-white rounded-lg shadow-lg p-6 z-50"
+    >
+      <DialogHeader>
+        <DialogTitle>Send Invitation</DialogTitle>
+        <DialogDescription>
+          Send invitation email to {{ selectedSupplier?.email }}?
+        </DialogDescription>
+      </DialogHeader>
+
+      <DialogFooter class="flex justify-end gap-2 mt-4">
+        <Button variant="outline" @click="showModal = false">Cancel</Button>
+        <Button :disabled="processing" @click="confirmSendInvitation">
+          Send
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+</template>
+
 </template>

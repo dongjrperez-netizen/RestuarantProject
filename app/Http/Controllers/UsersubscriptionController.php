@@ -158,8 +158,11 @@ class UsersubscriptionController extends Controller
             ];
         }
 
-        // Get available subscription plans (excluding free trial)
-        $availablePlans = \App\Models\Subscriptionpackage::where('plan_id', '!=', 4)->get();
+        // Get only the current subscription plan for renewal
+        $availablePlans = [];
+        if ($currentSubscription && $currentSubscription->subscriptionPackage) {
+            $availablePlans = [\App\Models\Subscriptionpackage::find($currentSubscription->subscriptionPackage->plan_id)];
+        }
 
         return inertia('UserManagement/RenewSubscription', [
             'currentSubscription' => $currentSubscriptionData,
@@ -333,9 +336,11 @@ class UsersubscriptionController extends Controller
                 $currentSubscription->update(['subscription_status' => 'archive']);
             }
 
-            // Handle upgrade logic - expire current subscription
+            // Handle upgrade logic - expire current subscription WITHOUT adding remaining days
+            // The remaining time from the old subscription will NOT be transferred to the new subscription
             if ($actionType === 'upgrade' && $currentSubscription) {
                 $currentSubscription->update(['subscription_status' => 'expired']);
+                // Note: $remainingDaysToAdd stays at 0 for upgrades
             }
 
             // Create new subscription (remaining_days will be auto-calculated by the model)

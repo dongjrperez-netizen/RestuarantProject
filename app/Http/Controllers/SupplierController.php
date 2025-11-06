@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Ingredients;
 use App\Models\Supplier;
+use App\Services\SubscriptionLimitService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -24,7 +25,7 @@ class SupplierController extends Controller
 
     public function show($id)
     {
-        $supplier = Supplier::with(['ingredients.pivot', 'purchaseOrders', 'bills.payments'])
+        $supplier = Supplier::with(['ingredients', 'purchaseOrders', 'bills.payments'])
             ->findOrFail($id);
 
         return Inertia::render('Suppliers/Show', [
@@ -34,17 +35,31 @@ class SupplierController extends Controller
 
     public function create()
     {
+        $limitService = new SubscriptionLimitService();
+        $limitCheck = $limitService->canAddSupplier(auth()->user());
+
         $ingredients = Ingredients::where('restaurant_id', auth()->user()->restaurantData->id)
             ->orderBy('ingredient_name')
             ->get();
 
         return Inertia::render('Suppliers/Create', [
             'ingredients' => $ingredients,
+            'subscriptionLimits' => $limitCheck,
         ]);
     }
 
     public function store(Request $request)
     {
+        // Check subscription limits
+        $limitService = new SubscriptionLimitService();
+        $limitCheck = $limitService->canAddSupplier(auth()->user());
+
+        if (! $limitCheck['allowed']) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['subscription' => $limitCheck['message']]);
+        }
+
         $validated = $request->validate([
             'supplier_name' => 'required|string|max:150',
             'contact_number' => 'nullable|string|max:20',
@@ -92,7 +107,7 @@ class SupplierController extends Controller
 
     public function edit($id)
     {
-        $supplier = Supplier::with(['ingredients.pivot'])->findOrFail($id);
+        $supplier = Supplier::with(['ingredients'])->findOrFail($id);
         $allIngredients = Ingredients::where('restaurant_id', auth()->user()->restaurantData->id)
             ->orderBy('ingredient_name')
             ->get();

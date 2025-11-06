@@ -37,11 +37,17 @@ class AdminDashboardController extends Controller
 
     private function calculateTotalRevenue(): float
     {
-        // This would calculate based on your subscription payments
-        // For now, returning a placeholder calculation
-        $activeSubscriptions = UserSubscription::where('subscription_status', 'active')->count();
+        // Calculate actual total revenue received this month
+        $currentMonth = Carbon::now()->startOfMonth();
 
-        return $activeSubscriptions * 29.99; // Assuming base price
+        $totalRevenue = UserSubscription::where('created_at', '>=', $currentMonth)
+            ->with('subscriptionPackage')
+            ->get()
+            ->sum(function ($subscription) {
+                return $subscription->subscriptionPackage->plan_price ?? 0;
+            });
+
+        return $totalRevenue;
     }
 
     private function getMonthlyStats(): array

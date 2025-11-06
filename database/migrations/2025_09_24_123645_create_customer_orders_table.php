@@ -14,13 +14,15 @@ return new class extends Migration
         Schema::create('customer_orders', function (Blueprint $table) {
             $table->id('order_id');
             $table->foreignId('table_id')->constrained('tables')->onDelete('cascade');
+            $table->foreignId('reservation_id')->nullable()->constrained('table_reservations')->onDelete('set null');
             $table->foreignId('employee_id')->constrained('employees', 'employee_id')->onDelete('cascade');
             $table->foreignId('restaurant_id')->constrained('users')->onDelete('cascade');
             $table->string('order_number')->unique();
             $table->string('customer_name')->nullable();
-            $table->enum('status', ['pending', 'in_progress', 'ready', 'served', 'completed', 'cancelled'])->default('pending');
+            $table->enum('status', ['pending', 'in_progress', 'ready', 'served', 'completed', 'cancelled', 'paid'])->default('pending');
             $table->decimal('subtotal', 10, 2)->default(0.00);
             $table->decimal('tax_amount', 10, 2)->default(0.00);
+            $table->decimal('reservation_fee', 10, 2)->default(0.00);
             $table->decimal('total_amount', 10, 2)->default(0.00);
             $table->text('notes')->nullable();
             $table->timestamp('ordered_at')->useCurrent();

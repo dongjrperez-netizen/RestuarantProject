@@ -117,7 +117,8 @@ class BillingService
     public function recordPayment(int $billId, array $paymentData): array
     {
         return DB::transaction(function () use ($billId, $paymentData) {
-            $bill = SupplierBill::with('supplier')->findOrFail($billId);
+            // Lock the bill row to prevent race conditions
+            $bill = SupplierBill::with('supplier')->lockForUpdate()->findOrFail($billId);
 
             Log::info('Recording payment - Before payment', [
                 'bill_id' => $billId,
@@ -127,13 +128,17 @@ class BillingService
                 'payment_amount' => $paymentData['payment_amount'],
             ]);
 
-            // Validate payment amount
+            // Validate payment amount (prevent overpayments)
             if ($paymentData['payment_amount'] > $bill->outstanding_amount) {
-                throw new \Exception('Payment amount cannot exceed outstanding amount');
+                throw new \Exception('Payment amount (₱'.number_format($paymentData['payment_amount'], 2).') cannot exceed outstanding amount (₱'.number_format($bill->outstanding_amount, 2).')');
+            }
+
+            if ($paymentData['payment_amount'] <= 0) {
+                throw new \Exception('Payment amount must be greater than zero');
             }
 
             if (! $bill->canReceivePayment()) {
-                throw new \Exception('This bill cannot receive payments');
+                throw new \Exception('This bill cannot receive payments (Status: '.$bill->status.')');
             }
 
             // Create payment record
@@ -361,6 +366,14 @@ class BillingService
 
         $newPaidAmount = $bill->paid_amount + $paymentAmount;
         $newOutstandingAmount = $bill->total_amount - $newPaidAmount;
+
+        // Ensure outstanding amount doesn't go negative (cap at 0)
+        $newOutstandingAmount = max(0, $newOutstandingAmount);
+
+        // If outstanding is 0 but paid exceeds total, adjust paid amount
+        if ($newOutstandingAmount == 0 && $newPaidAmount > $bill->total_amount) {
+            $newPaidAmount = $bill->total_amount;
+        }
 
         $newStatus = match (true) {
             $newOutstandingAmount <= 0 => 'paid',

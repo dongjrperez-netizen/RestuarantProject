@@ -45,9 +45,9 @@ const props = defineProps<{
 }>();
 
 const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-PH', {
         style: 'currency',
-        currency: 'USD'
+        currency: 'PHP'
     }).format(amount);
 };
 
@@ -128,13 +128,13 @@ const getActivityBadgeVariant = (status: string) => {
                 <!-- Total Revenue -->
                 <Card>
                     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle class="text-sm font-medium">Est. Monthly Revenue</CardTitle>
+                        <CardTitle class="text-sm font-medium">Total Revenue This Month</CardTitle>
                         <TrendingUp class="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div class="text-2xl font-bold">{{ formatCurrency(analytics.totalRevenue) }}</div>
                         <p class="text-xs text-muted-foreground">
-                            Based on active subscriptions
+                            Revenue from new subscriptions
                         </p>
                     </CardContent>
                 </Card>

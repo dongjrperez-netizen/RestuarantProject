@@ -88,7 +88,8 @@ const formatCurrency = (amount: number) => {
 
 const getPaymentProgress = (bill: Bill) => {
   if (bill.total_amount === 0) return 0;
-  return Math.round((bill.paid_amount / bill.total_amount) * 100);
+  const progress = Math.round((bill.paid_amount / bill.total_amount) * 100);
+  return Math.min(progress, 100); // Cap at 100%
 };
 </script>
 
@@ -174,8 +175,8 @@ const getPaymentProgress = (bill: Bill) => {
               {{
                 formatCurrency(
                   bills
-                    .filter(b => b.status === 'paid')
-                    .reduce((sum, b) => sum + b.paid_amount, 0)
+                    .filter(b => ['paid', 'partially_paid'].includes(b.status))
+                    .reduce((sum, b) => sum + Number(b.paid_amount || 0), 0)
                 )
               }}
             </div>
@@ -250,9 +251,10 @@ const getPaymentProgress = (bill: Bill) => {
                 </TableCell>
                 <TableCell>
                   <div class="space-y-1">
-                    <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                       <div
-                        class="bg-green-600 h-2 rounded-full"
+                        class="h-2 rounded-full transition-all"
+                        :class="getPaymentProgress(bill) === 100 ? 'bg-green-600' : 'bg-blue-600'"
                         :style="{ width: `${getPaymentProgress(bill)}%` }"
                       ></div>
                     </div>

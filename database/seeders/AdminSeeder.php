@@ -13,6 +13,7 @@ class AdminSeeder extends Seeder
         Administrator::create([
             'email' => 'Admin@gmail.com',
             'password' => Hash::make('Admin123'),
+            'is_active' => true,
         ]);
     }
 }

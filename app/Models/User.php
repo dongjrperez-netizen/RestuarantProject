@@ -26,6 +26,7 @@ class User extends Authenticatable implements MustVerifyEmailContract
         'email',
         'phonenumber',
         'password',
+        'manager_access_code',
         'status',
         'role_id',
     ];
@@ -74,6 +75,7 @@ class User extends Authenticatable implements MustVerifyEmailContract
     protected $hidden = [
         'password',
         'remember_token',
+        'manager_access_code',
     ];
 
     /**
