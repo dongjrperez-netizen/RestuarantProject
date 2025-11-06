@@ -81,6 +81,9 @@ const handleFileChange = (e: Event, id: number) => {
   }
 };
 
+const uploadProgress = ref(0);
+const uploadStatus = ref('');
+
 const submit = () => {
   // Reset form before filling
   form.documents = [];
@@ -94,11 +97,26 @@ const submit = () => {
     }
   });
 
+  uploadProgress.value = 0;
+  uploadStatus.value = 'Uploading documents...';
+
   form.post(route('register.documents.store'), {
     forceFormData: true, // <-- ensures multipart/form-data is sent
-    onFinish: () => {
-      // Don't reset on success, let the redirect handle it
+    timeout: 300000, // 5 minutes timeout (300 seconds)
+    onProgress: (progress) => {
+      // Update progress if available
+      if (progress && progress.percentage) {
+        uploadProgress.value = progress.percentage;
+        uploadStatus.value = `Uploading... ${Math.round(progress.percentage)}%`;
+      }
     },
+    onFinish: () => {
+      uploadStatus.value = '';
+      uploadProgress.value = 0;
+    },
+    onError: () => {
+      uploadStatus.value = 'Upload failed. Please try again.';
+    }
   });
 };
 
@@ -168,6 +186,23 @@ const hasRequiredDocuments = () => {
           <Plus class="h-4 w-4" />
           Add Optional Document
         </Button>
+
+        <!-- Upload Progress -->
+        <div v-if="form.processing" class="space-y-2">
+          <div class="flex justify-between text-sm text-muted-foreground">
+            <span>{{ uploadStatus }}</span>
+            <span v-if="uploadProgress > 0">{{ Math.round(uploadProgress) }}%</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2.5">
+            <div
+              class="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+              :style="{ width: uploadProgress + '%' }"
+            ></div>
+          </div>
+          <p class="text-xs text-muted-foreground text-center">
+            This may take a few moments. Please don't close this page.
+          </p>
+        </div>
 
         <Button
           type="submit"
