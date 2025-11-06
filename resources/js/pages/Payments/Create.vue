@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Badge from '@/components/ui/badge/Badge.vue';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed } from 'vue';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 interface Supplier {
   supplier_id: number;
@@ -103,11 +104,79 @@ const payFullAmount = () => {
   }
 };
 
+
+const showModal = ref(false)
+const modalTitle = ref('')
+const modalMessage = ref('')
+const modalType = ref('success') 
+
+const dataRedirectUrl = ref('')
+
+const handleOk = () => {
+  showModal.value = false
+  if (modalType.value === 'success') {
+    // redirect only if success
+    window.location.href = dataRedirectUrl.value || route('bills.index')
+  }
+}
+
+
 const submit = async () => {
   if (!selectedBill.value) {
     alert('Please select a bill first');
     return;
   }
+
+
+   // Handle Cash payment
+   if (form.payment_method === 'cash') {
+    try {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+      const response = await fetch(route('payments.cash'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrfToken || '',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          bill_id: selectedBill.value.bill_id,
+          payment_amount: form.payment_amount,
+          payment_date: form.payment_date,
+          notes: form.notes,
+        }),
+      });
+
+      const data = await response.json();
+
+      dataRedirectUrl.value = data.redirect_url
+
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Cash payment failed');
+      }
+
+      // ✅ Show success modal
+      modalTitle.value = 'Payment Successful'
+      modalMessage.value = data.message
+      modalType.value = 'success'
+      showModal.value = true
+
+      // redirect after short delay
+      // setTimeout(() => {
+      //   window.location.href = data.redirect_url
+      // }, 2000)
+    } catch (error) {
+      console.error('Cash payment error:', error)
+      modalTitle.value = 'Payment Failed'
+      modalMessage.value = error instanceof Error ? error.message : 'Unknown error'
+      modalType.value = 'error'
+      showModal.value = true
+    }
+    return;
+}
+
 
   // Handle PayPal payment
   if (form.payment_method === 'paypal') {
@@ -322,7 +391,6 @@ const submit = async () => {
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="gcash">GCash</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
                     <SelectItem value="paypal">PayPal</SelectItem>
                   </SelectContent>
                 </Select>
@@ -393,4 +461,35 @@ const submit = async () => {
       </div>
     </div>
   </AppLayout>
+
+
+
+<Dialog v-model:open="showModal">
+  <DialogContent class="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle
+        :class="modalType === 'success' ? 'text-green-600' : 'text-red-600'"
+      >
+        {{ modalTitle }}
+      </DialogTitle>
+      <DialogDescription class="mt-2">
+        {{ modalMessage }}
+      </DialogDescription>
+    </DialogHeader>
+
+    <!-- Add OK button -->
+    <div class="mt-6 flex justify-end">
+      <button
+        type="button"
+        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        @click="handleOk"
+      >
+        OK
+      </button>
+    </div>
+  </DialogContent>
+</Dialog>
+
+
 </template>
+

@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -105,11 +106,12 @@ class RegisteredUserController extends Controller
         return Inertia::render('auth/Document');
     }
 
-    public function store_doc(Request $request): RedirectResponse
+  public function store_doc(Request $request): RedirectResponse
     {
         try {
             $validated = $request->validate([
                 'documents' => 'required|array|min:1',
+                // Assuming you have the required mime types for images and PDF
                 'documents.*' => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
                 'document_types' => 'required|array|min:1',
                 'document_types.*' => 'string|max:255',
@@ -120,48 +122,78 @@ class RegisteredUserController extends Controller
                 ->value('id');
 
             if (! $restaurantId) {
-                return redirect()->back()->withErrors([
-                    'error' => 'No restaurant linked to your account.',
-                ]);
+                return back()->withErrors(['error' => 'No restaurant linked to your account.']);
             }
 
             $uploadedCount = 0;
             $documents = $request->file('documents');
             $documentTypes = $request->input('document_types', []);
 
+            $supabaseUrl = env('SUPABASE_URL');
+            $supabaseKey = env('SUPABASE_KEY');
+            $bucket = env('SUPABASE_BUCKET'); // Ensure this matches your actual bucket name
+
+            if (!$supabaseUrl || !$supabaseKey || !$bucket) {
+                return back()->withErrors(['error' => 'Supabase configuration missing (URL, Key, or Bucket). Please check .env file.']);
+            }
+
             foreach ($documents as $index => $file) {
                 if ($file && $file->isValid()) {
-                    $path = $file->store('documents', 'public');
+                    // Generate a unique file name
+                    $fileName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                    // Define the storage path within the bucket (e.g., documents/123_unique.jpg)
+                    $filePath = "documents/{$fileName}";
 
-                    $docType = isset($documentTypes[$index])
-                        ? $documentTypes[$index]
-                        : $file->getClientOriginalExtension();
+                    // Upload to Supabase Storage using Laravel Http Client
+                    $response = Http::withHeaders([
+                        'apikey' => $supabaseKey,
+                        'Authorization' => 'Bearer ' . $supabaseKey,
+                        'Content-Type' => $file->getMimeType(),
+                        // Set X-Upsert header to true to ensure file upload is treated as a new object or update
+                        'X-Upsert' => 'true',
+                    ])->withBody(
+                        file_get_contents($file->getRealPath()),
+                        $file->getMimeType()
+                    )->post("{$supabaseUrl}/storage/v1/object/{$bucket}/{$filePath}");
 
-                    DB::table('restaurant_documents')->insert([
-                        'restaurant_id' => $restaurantId,
-                        'doc_type' => $docType,
-                        'doc_file' => $file->getClientOriginalName(),
-                        'doc_path' => $path,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-
-                    $uploadedCount++;
+                    if ($response->successful()) {
+                        // Store info in DB: file name and the full path within the bucket
+                        DB::table('restaurant_documents')->insert([
+                            'restaurant_id' => $restaurantId,
+                            'doc_type' => $documentTypes[$index] ?? 'Other',
+                            'doc_file' => $fileName,
+                            'doc_path' => $filePath, // This stores 'documents/123_unique.jpg'
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        $uploadedCount++;
+                    } else {
+                        // Log detailed Supabase upload error
+                        Log::error('Supabase upload failed', [
+                            'status' => $response->status(),
+                            'response_body' => $response->body(),
+                            'file' => $fileName,
+                            'path_attempted' => $filePath,
+                        ]);
+                        // Add a specific message about the failed file
+                        $request->session()->flash('file_error_' . $index, "Failed to upload file: " . $file->getClientOriginalName() . ". Server returned " . $response->status());
+                    }
                 }
             }
 
             if ($uploadedCount === 0) {
-                return redirect()->back()->withErrors([
-                    'error' => 'No valid documents were uploaded.',
-                ]);
+                return back()->withErrors(['error' => 'No valid documents were uploaded or Supabase upload failed for all files. Check logs for details.']);
             }
 
-            return redirect()->route('login')->with('success', $uploadedCount.' document(s) uploaded successfully.');
+            return redirect()->route('login')->with('success', "{$uploadedCount} document(s) uploaded successfully.");
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
-            return redirect()->back()->withErrors([
-                'error' => 'Upload failed: '.$e->getMessage(),
-            ]);
+            Log::error('Document upload exception', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return back()->withErrors(['error' => 'An unexpected error occurred during upload.'])->withInput();
         }
     }
+
+
 }

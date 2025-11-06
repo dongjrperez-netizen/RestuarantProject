@@ -386,9 +386,9 @@ const payFullAmountPaypal = () => {
           </Badge>
 
           <!-- Payment Buttons -->
-          <div v-if="bill.outstanding_amount > 0" class="flex space-x-2">
-            <!-- Manual Payment Dialog -->
-            <Dialog v-model:open="showPaymentDialog">
+          <!-- <div v-if="bill.outstanding_amount > 0" class="flex space-x-2"> -->
+             <!-- Manual Payment Dialog -->
+            <!-- <Dialog v-model:open="showPaymentDialog">
               <DialogTrigger as-child>
                 <Button variant="outline">Record Payment</Button>
               </DialogTrigger>
@@ -483,10 +483,10 @@ const payFullAmountPaypal = () => {
                   </div>
                 </form>
               </DialogContent>
-            </Dialog>
+            </Dialog> -->
 
             <!-- PayPal Payment Dialog -->
-            <Dialog v-model:open="showPaypalDialog">
+            <!-- <Dialog v-model:open="showPaypalDialog">
               <DialogTrigger as-child>
                 <Button class="bg-blue-600 hover:bg-blue-700">
                   <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -567,9 +567,9 @@ const payFullAmountPaypal = () => {
                 </form>
               </DialogContent>
             </Dialog>
-          </div>
+          </div> -->
         </div>
-      </div>
+      </div> 
 
       <div class="grid gap-6 md:grid-cols-2">
         <!-- Bill Information -->

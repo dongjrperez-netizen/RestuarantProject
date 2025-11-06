@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
+use Illuminate\Support\Str;
 
 class SupplierPaymentController extends Controller
 {
@@ -559,4 +560,102 @@ class SupplierPaymentController extends Controller
         return redirect()->route('bills.show', $billId)
             ->with('error', 'GCash payment was cancelled or failed. Please try again.');
     }
+
+
+     /**
+     * Handle Cash payment failure callback
+     */
+   public function handleCashPayment(Request $request)
+{
+    $validated = $request->validate([
+        'bill_id' => 'required|exists:supplier_bills,bill_id',
+        'payment_amount' => 'required|numeric|min:0.01',
+        'payment_date' => 'required|date',
+        'notes' => 'nullable|string|max:500',
+    ]);
+
+    $bill = SupplierBill::findOrFail($validated['bill_id']);
+
+    if ($validated['payment_amount'] > $bill->outstanding_amount) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Payment amount cannot exceed outstanding amount.',
+        ], 422);
+    }
+
+    try {
+        DB::beginTransaction();
+
+        // ✅ Generate unique payment reference safely (no infinite loop)
+        $latestPayment = SupplierPayment::whereNotNull('payment_reference')
+            ->orderByDesc('payment_id')
+            ->first();
+
+        if ($latestPayment && preg_match('/\d+$/', $latestPayment->payment_reference)) {
+            $nextNumber = intval(substr($latestPayment->payment_reference, -6)) + 1;
+        } else {
+            $nextNumber = 1;
+        }
+
+        $paymentReference = 'PAY-' . date('Y') . '-' . str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
+
+        // Double-check uniqueness just once
+        if (SupplierPayment::where('payment_reference', $paymentReference)->exists()) {
+            $paymentReference .= '-' . strtoupper(Str::random(3));
+        }
+
+        // ✅ Create the cash payment
+        $payment = SupplierPayment::create([
+            'bill_id' => $bill->bill_id,
+            'restaurant_id' => $bill->restaurant_id,
+            'supplier_id' => $bill->supplier_id,
+            'payment_date' => $validated['payment_date'],
+            'payment_amount' => $validated['payment_amount'],
+            'payment_method' => 'cash',
+            'transaction_reference' => 'CASH-' . strtoupper(uniqid()),
+            'payment_reference' => $paymentReference,
+            'notes' => $validated['notes'] ?? '',
+            'created_by_user_id' => auth()->id(),
+            'status' => 'completed',
+        ]);
+
+        // ✅ Update bill totals and status
+        $newPaidAmount = $bill->paid_amount + $validated['payment_amount'];
+        $newOutstandingAmount = $bill->total_amount - $newPaidAmount;
+
+        $newStatus = 'pending';
+        if ($newOutstandingAmount <= 0) {
+            $newStatus = 'paid';
+        } elseif ($newPaidAmount > 0) {
+            $newStatus = 'partially_paid';
+        }
+
+        $bill->update([
+            'paid_amount' => $newPaidAmount,
+            'outstanding_amount' => $newOutstandingAmount,
+            'status' => $newStatus,
+        ]);
+
+        DB::commit();
+
+       return response()->json([
+            'success' => true,
+            'message' => 'Cash payment recorded successfully!',
+            'redirect_url' => route('bills.show', $bill->bill_id),
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+
+        if ($request->expectsJson() === false) {
+            return redirect()->back()->with('error', 'Error processing cash payment: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error processing cash payment: ' . $e->getMessage(),
+        ], 500);
+    }
+}
+
 }

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+
 use Inertia\Inertia;
 
 class DocumentController extends Controller
@@ -18,6 +20,43 @@ class DocumentController extends Controller
         ]);
     }
 
+      /**
+     * Generate Supabase public URL for a file
+     */
+       private function getSupabasePublicUrl($path)
+    {
+        // 1. Ensure the path is not null and configurations are set
+        if (!$path) {
+            return null;
+        }
+
+        $supabaseUrl = env('SUPABASE_URL');
+        $bucket = env('SUPABASE_BUCKET'); // CRITICAL: Must match the bucket name on Supabase
+
+        if (!$supabaseUrl || !$bucket) {
+            Log::error('Supabase URL or BUCKET is missing when trying to generate public URL.');
+            return null;
+        }
+        
+        $url = rtrim($supabaseUrl, '/');
+        
+        // Ensure the path does not have a leading slash, as it's already included
+        // in the URL structure. Your doc_path should already be clean, but this ensures robustness.
+        $cleanPath = ltrim($path, '/');
+
+        // 2. Construct the URL in the standard Supabase public format:
+        // [SUPABASE_URL]/storage/v1/object/public/[BUCKET_NAME]/[FILE_PATH]
+        $publicUrl = "{$url}/storage/v1/object/public/{$bucket}/{$cleanPath}";
+
+        // Log the generated URL for debugging purposes
+        // Log::info('Generated Supabase Public URL: ' . $publicUrl);
+        
+        return $publicUrl;
+    }
+
+    /**
+     * Fetches applications and maps documents to their public Supabase URLs.
+     */
     private function getApplicationsByStatus($status = null)
     {
         $query = DB::table('restaurant_documents')
@@ -39,7 +78,7 @@ class DocumentController extends Controller
             ->get()
             ->groupBy('restaurant_id');
 
-        // Get documents for each restaurant
+        // Fetch documents per restaurant
         $restaurantIds = $applications->keys();
         $documents = DB::table('restaurant_documents')
             ->whereIn('restaurant_id', $restaurantIds)
@@ -62,13 +101,16 @@ class DocumentController extends Controller
                         'id' => $doc->id,
                         'type' => $doc->doc_type,
                         'file_name' => $doc->doc_file,
-                        'file_path' => asset("storage/{$doc->doc_path}"),
+                        // This uses the stored doc_path (e.g., 'documents/123_image.jpg')
+                        'file_path' => $this->getSupabasePublicUrl($doc->doc_path),
                         'uploaded_at' => $doc->created_at,
                     ];
                 }),
             ];
         })->values();
     }
+
+  
 
     public function approve($restaurantId)
     {
@@ -80,9 +122,10 @@ class DocumentController extends Controller
 
             return back()->with('success', 'Restaurant approved successfully');
         } catch (\Exception $e) {
-            return back()->with('error', 'Approval failed: '.$e->getMessage());
+            return back()->with('error', 'Approval failed: ' . $e->getMessage());
         }
     }
+
 
     public function reject($restaurantId)
     {
@@ -94,7 +137,7 @@ class DocumentController extends Controller
 
             return back()->with('success', 'Restaurant rejected');
         } catch (\Exception $e) {
-            return back()->with('error', 'Rejection failed: '.$e->getMessage());
+            return back()->with('error', 'Rejection failed: ' . $e->getMessage());
         }
     }
 }

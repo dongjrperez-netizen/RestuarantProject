@@ -175,8 +175,8 @@ const getPaymentProgress = (bill: Bill) => {
               {{
                 formatCurrency(
                   bills
-                    .filter(b => b.status === 'paid')
-                    .reduce((sum, b) => sum + b.paid_amount, 0)
+                    .filter(b => ['paid', 'partially_paid'].includes(b.status))
+                    .reduce((sum, b) => sum + Number(b.paid_amount || 0), 0)
                 )
               }}
             </div>

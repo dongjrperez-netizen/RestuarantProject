@@ -69,8 +69,8 @@ const form = useForm({
   payment_terms: props.supplier.payment_terms,
   credit_limit: props.supplier.credit_limit || '',
   notes: props.supplier.notes || '',
-  is_active: props.supplier.is_active,
-  ingredients: props.supplier.ingredients.map((ingredient) => ({
+  is_active: !!props.supplier.is_active,
+  ingredients: (props.supplier.ingredients || []).map((ingredient) => ({
     ingredient_id: ingredient.ingredient_id,
     package_unit: ingredient.pivot.package_unit,
     package_quantity: ingredient.pivot.package_quantity,
@@ -126,7 +126,7 @@ const submit = () => {
           <form @submit.prevent="submit" class="space-y-6">
             <!-- Active Status -->
             <div class="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-              <Switch v-model:checked="form.is_active" />
+              <Switch v-model="form.is_active" />
               <div>
                 <Label class="font-medium">Active Status</Label>
                 <p class="text-sm text-gray-600">

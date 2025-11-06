@@ -182,13 +182,25 @@
     <div class="receipt">
         <!-- Restaurant Header -->
         <div class="restaurant-name">{{ $restaurant->restaurant_name ?? 'RESTAURANT NAME' }}</div>
-        <div class="restaurant-info">{{ $restaurant->restaurant_address ?? 'Restaurant Address' }}</div>
-        <div class="restaurant-info">{{ $restaurant->restaurant_phone ?? '000-000-0000' }}</div>
+        <div class="restaurant-info">{{ $restaurant->address ?? 'Restaurant Address' }}</div>
+        <div class="restaurant-info">{{ $restaurant->contact_number ?? '000-000-0000' }}</div>
 
         <div class="divider"></div>
 
         <!-- Order Type -->
         <div class="section-title">{{ $order->order_type ?? 'DINE IN' }}</div>
+
+        <!-- Table Info -->
+        @if($order->table)
+        <div class="info-row">
+            <span class="bold">Table: {{ $order->table->table_name ?? 'N/A' }}</span>
+        </div>
+        <div class="info-row">
+            <span>Table #{{ $order->table->table_number ?? 'N/A' }}</span>
+        </div>
+        @endif
+
+        <div class="divider"></div>
 
         <!-- Server & Order Info -->
         <div class="info-row">
@@ -290,23 +302,14 @@
         @endif
 
         <div class="divider"></div>
-
-        <div class="footer-message">
-            You've earned 6 points for this purchase.
-        </div>
-        <div class="footer-message">
-            Redeem them by signing up for our rewards program.
-        </div>
-
-        <div class="divider"></div>
         @endif
 
         <!-- Website/Contact -->
         <div class="footer-message bold highlight">
-            {{ $restaurant->restaurant_website ?? 'www.restaurant.com' }}
+            {{ $restaurant->contact_number ?? 'Contact Us' }}
         </div>
         <div class="footer-message" style="font-size: 10px;">
-            Email Address
+            {{ $restaurant->address ?? '' }}
         </div>
 
         <div class="asterisks">
