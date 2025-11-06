@@ -112,14 +112,24 @@ class RegisteredUserController extends Controller
         // Increase execution time for document uploads (max 5 minutes)
         set_time_limit(300);
 
+        Log::info('Document upload request received', [
+            'user_id' => auth()->id(),
+            'has_files' => $request->hasFile('documents'),
+            'files_count' => $request->hasFile('documents') ? count($request->file('documents')) : 0,
+            'request_all' => $request->all(),
+            'files' => $request->file('documents'),
+        ]);
+
         try {
+            // Temporarily simplified validation to debug
             $validated = $request->validate([
                 'documents' => 'required|array|min:1',
-                // Assuming you have the required mime types for images and PDF
-                'documents.*' => 'file|mimes:jpg,jpeg,png,pdf|max:5120',
+                'documents.*' => 'required', // Simplified - just check if exists
                 'document_types' => 'required|array|min:1',
                 'document_types.*' => 'string|max:255',
             ]);
+
+            Log::info('Validation passed!', ['validated' => $validated]);
 
             $restaurantId = DB::table('restaurant_data')
                 ->where('user_id', auth()->id())
@@ -134,12 +144,17 @@ class RegisteredUserController extends Controller
             $documentTypes = $request->input('document_types', []);
 
             $supabaseUrl = env('SUPABASE_URL');
-            // Use service role key for better upload performance
-            $supabaseKey = env('SUPABASE_SERVICE_ROLE_KEY') ?? env('SUPABASE_KEY');
-            $bucket = env('SUPABASE_BUCKET'); // Ensure this matches your actual bucket name
+            // Use service role key for uploads (anon key doesn't have upload permissions)
+            $supabaseKey = env('SUPABASE_SERVICE_ROLE_KEY');
+            $bucket = env('SUPABASE_BUCKET');
 
             if (!$supabaseUrl || !$supabaseKey || !$bucket) {
-                return back()->withErrors(['error' => 'Supabase configuration missing (URL, Key, or Bucket). Please check .env file.']);
+                Log::error('Supabase configuration missing', [
+                    'SUPABASE_URL' => $supabaseUrl ? 'SET' : 'MISSING',
+                    'SUPABASE_KEY' => $supabaseKey ? 'SET' : 'MISSING',
+                    'SUPABASE_BUCKET' => $bucket ?? 'MISSING',
+                ]);
+                return back()->withErrors(['error' => 'Supabase configuration missing. Please set SUPABASE_URL, SUPABASE_KEY, and SUPABASE_BUCKET in .env file.']);
             }
 
             Log::info('Starting document upload', [
@@ -159,13 +174,12 @@ class RegisteredUserController extends Controller
                         'size' => $file->getSize(),
                     ]);
 
-                    // Upload to Supabase Storage using Laravel Http Client with timeout
-                    $response = Http::timeout(120) // 2 minute timeout per file
-                        ->withHeaders([
+                    // Upload to Supabase Storage using Laravel Http Client
+                    $response = Http::withHeaders([
                             'apikey' => $supabaseKey,
                             'Authorization' => 'Bearer ' . $supabaseKey,
                             'Content-Type' => $file->getMimeType(),
-                            'x-upsert' => 'true', // lowercase as per Supabase docs
+                            'x-upsert' => 'true',
                         ])
                         ->withBody(
                             file_get_contents($file->getRealPath()),
@@ -188,14 +202,24 @@ class RegisteredUserController extends Controller
                         Log::info("File uploaded successfully", ['file' => $fileName]);
                     } else {
                         // Log detailed Supabase upload error
+                        $errorBody = $response->body();
                         Log::error('Supabase upload failed', [
                             'status' => $response->status(),
-                            'response_body' => $response->body(),
+                            'response_body' => $errorBody,
                             'file' => $fileName,
                             'path_attempted' => $filePath,
+                            'bucket' => $bucket,
+                            'supabase_url' => $supabaseUrl,
                         ]);
-                        // Add a specific message about the failed file
-                        $request->session()->flash('file_error_' . $index, "Failed to upload file: " . $file->getClientOriginalName() . ". Server returned " . $response->status());
+
+                        // Return with detailed error for debugging
+                        return back()->withErrors([
+                            'error' => "Failed to upload file: " . $file->getClientOriginalName() .
+                                      "\nHTTP Status: " . $response->status() .
+                                      "\nError: " . $errorBody .
+                                      "\nBucket: " . $bucket .
+                                      "\nPath: " . $filePath
+                        ]);
                     }
                 }
             }
@@ -204,9 +228,13 @@ class RegisteredUserController extends Controller
                 return back()->withErrors(['error' => 'No valid documents were uploaded or Supabase upload failed for all files. Check logs for details.']);
             }
 
-            Log::info("Document upload completed", ['uploaded_count' => $uploadedCount]);
+            Log::info("Document upload completed successfully", [
+                'uploaded_count' => $uploadedCount,
+                'user_id' => auth()->id(),
+                'restaurant_id' => $restaurantId,
+            ]);
 
-            return redirect()->route('login')->with('success', "{$uploadedCount} document(s) uploaded successfully.");
+            return redirect()->route('login')->with('success', "{$uploadedCount} document(s) uploaded successfully. You can now login.");
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();

@@ -85,37 +85,55 @@ const uploadProgress = ref(0);
 const uploadStatus = ref('');
 
 const submit = () => {
-  // Reset form before filling
+  // Reset form data completely
+  form.clearErrors();
   form.documents = [];
   form.document_types = [];
 
   // Only include documents that have files
   documents.value.forEach(doc => {
-    if (doc.file) {
+    if (doc.file && doc.file instanceof File) {
       form.documents.push(doc.file);
       form.document_types.push(doc.type);
     }
+  });
+
+  console.log('Submitting form with:', {
+    documentCount: form.documents.length,
+    typeCount: form.document_types.length,
+    documents: form.documents.map(f => ({
+      name: f.name,
+      type: f.type,
+      size: f.size,
+      isFile: f instanceof File
+    }))
   });
 
   uploadProgress.value = 0;
   uploadStatus.value = 'Uploading documents...';
 
   form.post(route('register.documents.store'), {
-    forceFormData: true, // <-- ensures multipart/form-data is sent
-    timeout: 300000, // 5 minutes timeout (300 seconds)
+    forceFormData: true,
+    preserveScroll: true,
+    timeout: 300000,
     onProgress: (progress) => {
-      // Update progress if available
+      console.log('Upload progress:', progress);
       if (progress && progress.percentage) {
         uploadProgress.value = progress.percentage;
         uploadStatus.value = `Uploading... ${Math.round(progress.percentage)}%`;
       }
     },
     onFinish: () => {
+      console.log('Upload finished');
       uploadStatus.value = '';
       uploadProgress.value = 0;
     },
-    onError: () => {
-      uploadStatus.value = 'Upload failed. Please try again.';
+    onError: (errors) => {
+      console.error('Upload error:', errors);
+      uploadStatus.value = 'Upload failed. Please check the error messages above.';
+    },
+    onSuccess: (response) => {
+      console.log('Upload success:', response);
     }
   });
 };
