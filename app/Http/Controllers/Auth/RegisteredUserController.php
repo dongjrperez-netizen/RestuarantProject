@@ -102,34 +102,9 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        // Send verification email synchronously (with extended timeout)
-        try {
-            \Log::info('Attempting to send verification email', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'mail_config' => [
-                    'mailer' => config('mail.default'),
-                    'host' => config('mail.mailers.smtp.host'),
-                    'port' => config('mail.mailers.smtp.port'),
-                    'from' => config('mail.from.address'),
-                ]
-            ]);
-
-            event(new Registered($user));
-
-            \Log::info('Verification email sent successfully', [
-                'user_id' => $user->id,
-                'email' => $user->email
-            ]);
-        } catch (\Exception $e) {
-            // Log email error but don't block registration
-            \Log::error('Failed to send verification email', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-        }
+        // Email verification temporarily disabled - Railway blocks SMTP ports
+        // Re-enable when using transactional email service (Resend, Mailgun, etc.)
+        // event(new Registered($user));
 
         return redirect()->route('register.documents');
     }
