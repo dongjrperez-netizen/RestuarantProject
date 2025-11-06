@@ -74,10 +74,7 @@ class RegisteredUserController extends Controller
             'contact_number.unique' => 'This contact number is already registered.',
         ]);
 
-        // Hash password before transaction to avoid holding DB locks
-        $hashedPassword = Hash::make($validated['password']);
-
-        $user = DB::transaction(function () use ($validated, $hashedPassword) {
+        $user = DB::transaction(function () use ($validated) {
 
             $user = User::create([
                 'last_name' => $validated['last_name'],
@@ -86,7 +83,7 @@ class RegisteredUserController extends Controller
                 'date_of_birth' => $validated['date_of_birth'],
                 'gender' => $validated['gender'],
                 'email' => $validated['email'],
-                'password' => $hashedPassword,
+                'password' => $validated['password'], // Laravel 'hashed' cast handles this automatically
             ]);
 
             Restaurant_Data::create([
