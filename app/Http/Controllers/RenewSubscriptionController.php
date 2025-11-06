@@ -6,7 +6,7 @@ use App\Models\Paymentinfo;
 use App\Models\Restaurant_Data;
 use App\Models\Subpayment;
 use App\Models\Subscriptionpackage;
-use App\Models\Usersubscription;
+use App\Models\UserSubscription;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;

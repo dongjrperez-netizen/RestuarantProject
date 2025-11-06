@@ -2,7 +2,7 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Usersubscription;
+use App\Models\UserSubscription;
 use Carbon\Carbon;
 use Closure;
 use Illuminate\Http\Request;
