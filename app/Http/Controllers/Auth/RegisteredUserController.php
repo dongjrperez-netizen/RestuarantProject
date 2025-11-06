@@ -97,8 +97,12 @@ class RegisteredUserController extends Controller
             return $user;
         });
 
-        // event(new Registered($user)); // Disabled: Causes SMTP timeout - enable when queue is configured
         Auth::login($user);
+
+        // Send verification email asynchronously to avoid timeout
+        dispatch(function () use ($user) {
+            event(new Registered($user));
+        })->afterResponse();
 
         return redirect()->route('register.documents');
     }
