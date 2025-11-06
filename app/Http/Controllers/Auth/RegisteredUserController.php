@@ -74,7 +74,10 @@ class RegisteredUserController extends Controller
             'contact_number.unique' => 'This contact number is already registered.',
         ]);
 
-        DB::transaction(function () use ($validated) {
+        // Hash password before transaction to avoid holding DB locks
+        $hashedPassword = Hash::make($validated['password']);
+
+        $user = DB::transaction(function () use ($validated, $hashedPassword) {
 
             $user = User::create([
                 'last_name' => $validated['last_name'],
@@ -83,7 +86,7 @@ class RegisteredUserController extends Controller
                 'date_of_birth' => $validated['date_of_birth'],
                 'gender' => $validated['gender'],
                 'email' => $validated['email'],
-                'password' => Hash::make($validated['password']),
+                'password' => $hashedPassword,
             ]);
 
             Restaurant_Data::create([
@@ -93,9 +96,10 @@ class RegisteredUserController extends Controller
                 'postal_code' => $validated['postal_code'],
                 'contact_number' => $validated['contact_number'],
             ]);
+
+            return $user;
         });
 
-        $user = User::where('email', $validated['email'])->first();
         event(new Registered($user));
         Auth::login($user);
 
