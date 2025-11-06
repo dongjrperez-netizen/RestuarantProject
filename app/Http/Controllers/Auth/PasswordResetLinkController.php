@@ -28,6 +28,9 @@ class PasswordResetLinkController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        // Increase execution time for email sending (2 minutes)
+        set_time_limit(120);
+
         $request->validate([
             'email' => 'required|email',
         ]);

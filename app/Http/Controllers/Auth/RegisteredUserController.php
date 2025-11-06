@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\SendVerificationEmail;
 use App\Models\Restaurant_Data;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
@@ -35,6 +34,9 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        // Increase execution time for email sending (2 minutes)
+        set_time_limit(120);
+
         $validated = $request->validate([
             'last_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
             'first_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
@@ -100,8 +102,17 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        // Queue verification email to be sent by queue worker
-        SendVerificationEmail::dispatch($user);
+        // Send verification email synchronously (with extended timeout)
+        try {
+            event(new Registered($user));
+        } catch (\Exception $e) {
+            // Log email error but don't block registration
+            \Log::error('Failed to send verification email', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage()
+            ]);
+        }
 
         return redirect()->route('register.documents');
     }
