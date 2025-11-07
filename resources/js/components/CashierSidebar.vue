@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeMount } from 'vue'
-import { Link } from '@inertiajs/vue3'
+import { Link, useForm } from '@inertiajs/vue3'
 import {
-  Receipt, DollarSign
+  Receipt, DollarSign, LogOut
 } from "lucide-vue-next"
 
 import {
@@ -21,11 +21,12 @@ import {
 } from "@/components/ui/sidebar"
 
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import Button from '@/components/ui/button/Button.vue'
 
 // Cashier-specific navigation items
 const navItems = [
   { title: "Customer Bills", href: "/cashier/bills", icon: Receipt },
-  { title: "Successful Payments", href: "/cashier/successful-payments", icon: DollarSign },
+  { title: "Payments History", href: "/cashier/successful-payments", icon: DollarSign },
 ]
 
 // Controlled state for collapsibles
@@ -45,6 +46,12 @@ onBeforeMount(() => {
 watch(openCollapsibles, (val) => {
   sessionStorage.setItem('cashierSidebarState', JSON.stringify(val))
 }, { deep: true })
+
+// Logout functionality
+const logoutForm = useForm({})
+const logout = () => {
+  logoutForm.post(route('logout'))
+}
 </script>
 
 <template>
@@ -107,5 +114,17 @@ watch(openCollapsibles, (val) => {
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>
+
+    <SidebarFooter class="border-t border-sidebar-border p-3">
+      <Button
+        @click="logout"
+        variant="ghost"
+        class="w-full justify-start gap-2 px-3 py-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+        :disabled="logoutForm.processing"
+      >
+        <LogOut class="h-4 w-4" />
+        <span class="text-sm">{{ logoutForm.processing ? 'Logging out...' : 'Logout' }}</span>
+      </Button>
+    </SidebarFooter>
   </Sidebar>
 </template>

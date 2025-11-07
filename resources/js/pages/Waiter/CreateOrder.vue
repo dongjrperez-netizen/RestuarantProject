@@ -217,17 +217,24 @@ const currentPrice = computed(() => {
   return Number(selectedDish.value.price) || 0;
 });
 
-const openQuantityModal = (dish: Dish) => {
+const openQuantityModal = (dish: Dish, existingVariantId?: number) => {
   selectedDish.value = dish;
   modalQuantity.value = 1;
   modalSpecialInstructions.value = '';
   showIngredients.value = false;
   excludedIngredients.value = [];
 
-  // Set default variant if dish has variants
+  // Set variant based on parameter or default
   if (dish.variants && dish.variants.length > 0) {
-    const defaultVariant = dish.variants.find(v => v.is_default) || dish.variants[0];
-    selectedVariant.value = defaultVariant;
+    if (existingVariantId !== undefined) {
+      // Use the provided variant ID (when editing existing cart item)
+      const specificVariant = dish.variants.find(v => v.variant_id === existingVariantId);
+      selectedVariant.value = specificVariant || dish.variants.find(v => v.is_default) || dish.variants[0];
+    } else {
+      // Use default variant (when adding new item)
+      const defaultVariant = dish.variants.find(v => v.is_default) || dish.variants[0];
+      selectedVariant.value = defaultVariant;
+    }
   } else {
     selectedVariant.value = null;
   }
@@ -906,7 +913,7 @@ const getAllergenBadgeColor = (allergen: string) => {
                       />
 
                       <Button
-                        @click="openQuantityModal(item.dish); showCartModal = false"
+                        @click="openQuantityModal(item.dish, item.variant_id); showCartModal = false"
                         variant="outline"
                         size="icon"
                         class="h-8 w-8"

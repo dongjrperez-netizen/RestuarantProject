@@ -1,2 +1,4 @@
 release: php artisan migrate --force && php artisan db:seed --class=AdminSeeder --force
 web: php artisan serve --host=0.0.0.0 --port=$PORT
+reverb: php artisan reverb:start --host=0.0.0.0 --port=8080
+queue: php artisan queue:work --tries=3 --timeout=60

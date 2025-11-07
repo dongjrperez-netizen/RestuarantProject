@@ -28,6 +28,12 @@ const discountNotes = ref('');
 // Store temporary discount (not persisted to DB)
 const tempDiscount = ref<null | { percentage: number; amount: number; reason: string; notes: string }>(null);
 
+// Result modal for discount operations
+const showResultModal = ref(false);
+const resultModalTitle = ref('');
+const resultModalMessage = ref('');
+const resultModalType = ref<'success' | 'error'>('success');
+
 // Payment modal state
 const isPaymentModalOpen = ref(false);
 const isCashPaymentModalOpen = ref(false);
@@ -75,6 +81,14 @@ const calculateTax = (subtotal: number) => {
     return subtotal * 0.12;
 };
 
+// Helper function to show result modal
+const showResult = (title: string, message: string, type: 'success' | 'error' = 'success') => {
+    resultModalTitle.value = title;
+    resultModalMessage.value = message;
+    resultModalType.value = type;
+    showResultModal.value = true;
+};
+
 // Discount functions
 const openDiscountModal = () => {
     discountPercentage.value = '';
@@ -94,12 +108,17 @@ const applyDiscount = async (order: any) => {
 
     try {
         // Save discount to database immediately
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
         const response = await fetch(`/cashier/bills/${order.order_id}/discount`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
             },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 discount_percentage: parseFloat(discountPercentage.value),
                 discount_amount: discountAmount,
@@ -107,6 +126,12 @@ const applyDiscount = async (order: any) => {
                 discount_notes: discountNotes.value
             }),
         });
+
+        // Handle 419 CSRF token expiration
+        if (response.status === 419) {
+            showResult('Session Expired', 'Your session has expired. Please click OK to refresh the page.', 'error');
+            return;
+        }
 
         if (response.ok) {
             // Update the order object with the new discount
@@ -120,17 +145,29 @@ const applyDiscount = async (order: any) => {
             tempDiscount.value = null;
 
             closeDiscountModal();
-            alert('Discount applied successfully!');
-
-            // Refresh the page to show updated order
-            window.location.reload();
+            showResult(
+                'Discount Applied!',
+                `Successfully applied ${discountPercentage.value}% discount (₱${discountAmount.toFixed(2)})`,
+                'success'
+            );
         } else {
-            const result = await response.json();
-            alert('Failed to apply discount: ' + (result.error || 'Unknown error'));
+            const responseText = await response.text();
+            let errorMessage = 'Unknown error';
+            try {
+                const result = JSON.parse(responseText);
+                errorMessage = result.error || result.message || 'Unknown error';
+            } catch (e) {
+                if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+                    errorMessage = 'Session expired. Please refresh the page.';
+                } else {
+                    errorMessage = responseText || 'Server error';
+                }
+            }
+            showResult('Failed to Apply Discount', errorMessage, 'error');
         }
     } catch (error) {
         console.error('Error applying discount:', error);
-        alert('Failed to apply discount. Please try again.');
+        showResult('Failed to Apply Discount', 'An unexpected error occurred. Please try again.', 'error');
     }
 };
 
@@ -138,13 +175,24 @@ const removeDiscount = async () => {
     if (!props.order) return;
 
     try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
         const response = await fetch(`/cashier/bills/${props.order.order_id}/discount`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
             },
+            credentials: 'same-origin',
         });
+
+        // Handle 419 CSRF token expiration
+        if (response.status === 419) {
+            showResult('Session Expired', 'Your session has expired. Please click OK to refresh the page.', 'error');
+            return;
+        }
 
         if (response.ok) {
             // Update the order object to remove discount
@@ -154,15 +202,25 @@ const removeDiscount = async () => {
                 props.order.discount_percentage = null;
             }
 
-            alert('Discount removed successfully!');
-            window.location.reload();
+            showResult('Discount Removed!', 'The discount has been successfully removed from this order.', 'success');
         } else {
-            const result = await response.json();
-            alert('Failed to remove discount: ' + (result.error || 'Unknown error'));
+            const responseText = await response.text();
+            let errorMessage = 'Unknown error';
+            try {
+                const result = JSON.parse(responseText);
+                errorMessage = result.error || result.message || 'Unknown error';
+            } catch (e) {
+                if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+                    errorMessage = 'Session expired. Please refresh the page.';
+                } else {
+                    errorMessage = responseText || 'Server error';
+                }
+            }
+            showResult('Failed to Remove Discount', errorMessage, 'error');
         }
     } catch (error) {
         console.error('Error removing discount:', error);
-        alert('Failed to remove discount. Please try again.');
+        showResult('Failed to Remove Discount', 'An unexpected error occurred. Please try again.', 'error');
     }
 };
 
@@ -481,17 +539,29 @@ const processCashPayment = async () => {
 
         console.log('Processing cash payment:', paymentData);
 
+        // Get fresh CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
         const response = await fetch(`/cashier/payment/${props.order.order_id}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
             },
+            credentials: 'same-origin',
             body: JSON.stringify(paymentData),
         });
 
         console.log('Response status:', response.status);
         console.log('Response ok:', response.ok);
+
+        // Handle 419 CSRF token expiration
+        if (response.status === 419) {
+            showResult('Session Expired', 'Your session has expired. Please click OK to refresh the page.', 'error');
+            return;
+        }
 
         if (response.ok) {
             const result = await response.json();
@@ -518,7 +588,12 @@ const processCashPayment = async () => {
                 errorMessage = errorData.message || errorData.error || 'Unknown error';
             } catch (e) {
                 console.error('Failed to parse error response as JSON');
-                errorMessage = responseText || 'Server error';
+                // Check if it's an HTML error page (like 419)
+                if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+                    errorMessage = 'Session expired. Please refresh the page and try again.';
+                } else {
+                    errorMessage = responseText || 'Server error';
+                }
             }
 
             alert('Failed to process payment: ' + errorMessage);
@@ -1087,6 +1162,44 @@ const getCurrentTotal = () => {
                             <span v-else>Complete Payment</span>
                         </Button>
                     </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        <!-- Result Modal for Discount Operations -->
+        <Dialog :open="showResultModal" @update:open="(open) => showResultModal = open">
+            <DialogContent class="max-w-md">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2">
+                        <div v-if="resultModalType === 'success'" class="flex items-center justify-center w-10 h-10 rounded-full bg-green-100">
+                            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        </div>
+                        <div v-else class="flex items-center justify-center w-10 h-10 rounded-full bg-red-100">
+                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </div>
+                        <span>{{ resultModalTitle }}</span>
+                    </DialogTitle>
+                    <DialogDescription>
+                        {{ resultModalMessage }}
+                    </DialogDescription>
+                </DialogHeader>
+                <div class="flex justify-end mt-4">
+                    <Button
+                        @click="() => {
+                            showResultModal = false;
+                            // Reload page if it was a session expired error
+                            if (resultModalTitle === 'Session Expired') {
+                                window.location.reload();
+                            }
+                        }"
+                        :class="resultModalType === 'success' ? 'bg-green-600 hover:bg-green-700' : ''"
+                    >
+                        OK
+                    </Button>
                 </div>
             </DialogContent>
         </Dialog>

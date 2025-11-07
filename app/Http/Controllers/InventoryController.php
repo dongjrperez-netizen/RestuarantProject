@@ -274,27 +274,39 @@ class InventoryController extends Controller
     {
         try {
             $user = auth()->user();
-
-            // Get restaurant ID from the user's restaurant data
             $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
 
-            if (! $restaurantId) {
+            if (!$restaurantId) {
                 return back()->withErrors('Restaurant not found for the authenticated user');
             }
 
-            // Get ingredients that are associated with suppliers belonging to this restaurant
-            $ingredients = \App\Models\Ingredients::with(['suppliers' => function ($query) use ($restaurantId) {
-                // Only load suppliers that belong to this restaurant and are active
-                $query->where('restaurant_id', $restaurantId)
-                    ->wherePivot('is_active', true);
-            }])
+            // Build the query base
+            $query = \App\Models\Ingredients::with(['suppliers' => function ($query) use ($restaurantId) {
+                    $query->where('restaurant_id', $restaurantId)
+                        ->wherePivot('is_active', true);
+                }])
                 ->whereHas('suppliers', function ($query) use ($restaurantId) {
-                    // Only show ingredients that have suppliers belonging to this restaurant
                     $query->where('restaurant_id', $restaurantId)
                         ->where('ingredient_suppliers.is_active', true);
-                })
-                ->orderBy('ingredient_name')
-                ->get()
+                });
+
+            // 🔍 Apply search filter (if provided)
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where('ingredient_name', 'like', "%{$search}%");
+            }
+
+            // 📦 Apply stock status filter (if provided)
+            if ($request->filled('status') && $request->status !== 'all') {
+                if ($request->status === 'low') {
+                    $query->whereColumn('current_stock', '<=', 'reorder_level');
+                } elseif ($request->status === 'in') {
+                    $query->whereColumn('current_stock', '>', 'reorder_level');
+                }
+            }
+
+            // Get all filtered ingredients
+            $ingredients = $query->orderBy('ingredient_name')->get()
                 ->map(function ($ingredient) {
                     $primarySupplier = $ingredient->suppliers->first();
                     $isLowStock = $ingredient->current_stock <= $ingredient->reorder_level;
@@ -308,20 +320,15 @@ class InventoryController extends Controller
                         'base_unit' => $ingredient->base_unit,
                         'supplier_name' => $primarySupplier ? $primarySupplier->supplier_name : 'No supplier',
                         'is_low_stock' => $isLowStock,
-                        'suppliers' => $ingredient->suppliers->map(function ($supplier) {
-                            return [
-                                'supplier_id' => $supplier->supplier_id,
-                                'supplier_name' => $supplier->supplier_name,
-                                'package_unit' => $supplier->pivot->package_unit,
-                                'package_contents_quantity' => (float) $supplier->pivot->package_contents_quantity,
-                                'package_contents_unit' => $supplier->pivot->package_contents_unit,
-                            ];
-                        }),
                     ];
                 });
 
             return inertia('Inventory/Ingredients', [
                 'ingredients' => $ingredients,
+                'filters' => [
+                    'search' => $request->search ?? '',
+                    'status' => $request->status ?? 'all',
+                ],
                 'stats' => [
                     'total_ingredients' => $ingredients->count(),
                     'low_stock_count' => $ingredients->where('is_low_stock', true)->count(),
@@ -329,11 +336,11 @@ class InventoryController extends Controller
             ]);
 
         } catch (Exception $e) {
-            Log::error('Failed to get ingredients inventory: '.$e->getMessage());
-
+            Log::error('Failed to get ingredients inventory: ' . $e->getMessage());
             return back()->withErrors('Failed to load ingredients inventory');
         }
     }
+
 
     /**
      * Update ingredient reorder level

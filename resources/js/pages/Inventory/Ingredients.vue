@@ -24,15 +24,17 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Edit } from 'lucide-vue-next';
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 
-// Declare Echo type for TypeScript
-declare global {
-  interface Window {
-    Echo: any;
-  }
-}
+
 
 interface Supplier {
   supplier_id: number;
@@ -58,12 +60,7 @@ interface Stats {
 const props = defineProps<{
   ingredients: Ingredient[];
   stats: Stats;
-  user?: any;
 }>();
-
-// Make ingredients reactive so we can update them in real-time
-const ingredients = ref<Ingredient[]>([...props.ingredients]);
-const stats = ref({ ...props.stats });
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Inventory', href: '/inventory' },
@@ -71,16 +68,35 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // Pagination
 const currentPage = ref(1);
-const itemsPerPage = 6;
+const itemsPerPage = 7;
 
+const searchQuery = ref('');
+const stockFilter = ref('all'); // all | low | in
+
+const filteredIngredients = computed(() => {
+  return props.ingredients.filter((ingredient) => {
+    const matchesSearch = ingredient.ingredient_name
+      .toLowerCase()
+      .includes(searchQuery.value.toLowerCase());
+
+    const matchesFilter =
+      stockFilter.value === 'all' ||
+      (stockFilter.value === 'low' && ingredient.is_low_stock) ||
+      (stockFilter.value === 'in' && !ingredient.is_low_stock);
+
+    return matchesSearch && matchesFilter;
+  });
+});
+
+// Updated pagination to use filtered results
 const paginatedIngredients = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
   const end = start + itemsPerPage;
-  return ingredients.value.slice(start, end);
+  return filteredIngredients.value.slice(start, end);
 });
 
 const totalPages = computed(() => {
-  return Math.ceil(ingredients.value.length / itemsPerPage);
+  return Math.ceil(filteredIngredients.value.length / itemsPerPage);
 });
 
 const goToPage = (page: number) => {
@@ -135,56 +151,25 @@ const saveEdit = () => {
   });
 };
 
-// Real-time inventory updates
-onMounted(() => {
-  const user = (page.props as any).auth?.user;
 
-  if (window.Echo && user) {
-    const restaurantId = user.id; // User ID is the restaurant ID
 
-    console.log('Setting up inventory real-time listener for restaurant:', restaurantId);
+const selectedCategory = ref('all');
 
-    // Listen for inventory updates for this restaurant
-    window.Echo.private(`restaurant.${restaurantId}.inventory`)
-      .listen('.inventory.updated', (event: any) => {
-        console.log('Inventory update received:', event);
+// Perform search
+const search = () => {
+  router.get(route('inventory.ingredients.index'), {
+    search: searchQuery.value,
+    status: stockFilter.value,
+  }, { preserveState: true, replace: true });
+};
 
-        // Find and update the ingredient in the list
-        const index = ingredients.value.findIndex(
-          (ing) => ing.ingredient_id === event.ingredient.ingredient_id
-        );
+// Clear filters
 
-        if (index !== -1) {
-          // Update the existing ingredient
-          ingredients.value[index] = {
-            ...ingredients.value[index],
-            current_stock: event.ingredient.current_stock,
-            is_low_stock: event.ingredient.current_stock <= ingredients.value[index].reorder_level,
-          };
-
-          // Update low stock count
-          const lowStockCount = ingredients.value.filter(
-            (ing) => ing.is_low_stock
-          ).length;
-          stats.value.low_stock_count = lowStockCount;
-
-          console.log(`Updated ${event.ingredient.ingredient_name}: ${event.previous_stock} → ${event.new_stock}`);
-        }
-      });
-
-    console.log('Inventory real-time updates enabled');
-  }
-});
-
-onUnmounted(() => {
-  const user = (page.props as any).auth?.user;
-
-  if (window.Echo && user) {
-    const restaurantId = user.id;
-    window.Echo.leave(`restaurant.${restaurantId}.inventory`);
-    console.log('Inventory real-time listener disconnected');
-  }
-});
+const clearFilters = () => {
+  searchQuery.value = '';
+  stockFilter.value = 'all';
+  search();
+};
 </script>
 
 <template>
@@ -202,41 +187,42 @@ onUnmounted(() => {
 
       <!-- Header -->
       <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">Ingredients Inventory</h1>
-          <p class="text-muted-foreground">Monitor your ingredient stock levels and reorder points</p>
-        </div>
+      
       </div>
-
-      <!-- Summary Cards -->
-      <div class="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-sm font-medium">Total Ingredients</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ formatNumber(stats.total_ingredients) }}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-sm font-medium">Low Stock Ingredients</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold text-yellow-600">{{ formatNumber(stats.low_stock_count) }}</div>
-            <p class="text-xs text-muted-foreground mt-1">
-              {{ stats.low_stock_count === 0 ? 'All ingredients are well stocked' : 'Items need reordering' }}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
       <!-- Ingredients Table -->
       <Card>
-        <CardHeader>
+       <CardHeader>
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <!-- Left side title -->
           <CardTitle>Inventory Stock Levels</CardTitle>
-        </CardHeader>
+
+          <!-- Right side search + filter controls -->
+          <div class="flex items-center gap-2">
+            <!-- Filter by stock status -->
+            <Select v-model="stockFilter" @change="search">
+              <SelectTrigger class="w-36">
+                <SelectValue placeholder="All Stock" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="in">In Stock</SelectItem>
+                <SelectItem value="low">Low Stock</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <!-- Search input -->
+            <Input
+              v-model="searchQuery"
+              placeholder="Search ingredients..."
+              @keyup.enter="search"
+              class="w-48"
+            />
+
+            <Button @click="clearFilters" variant="ghost" size="sm">Clear</Button>
+          </div>
+        </div>
+      </CardHeader>
+
         <CardContent>
           <Table>
             <TableHeader>

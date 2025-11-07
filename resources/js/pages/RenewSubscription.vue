@@ -43,6 +43,7 @@ function handleSubmit() {
 <template>
   <Head title="Renew Your Subscription - ServeWise" />
   <AppLayoutSubscriptionRenewal :breadcrumbs="breadcrumbs">
+<div class="mx-6 space-y-6">
 
     <!-- Hero Section -->
     <div class="text-center mb-12">
@@ -210,6 +211,8 @@ function handleSubmit() {
       </div>
     </div>
   </div>
+</div>
+  
 
   </AppLayoutSubscriptionRenewal>
 </template>

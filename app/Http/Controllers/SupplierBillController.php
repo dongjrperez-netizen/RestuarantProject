@@ -83,6 +83,7 @@ class SupplierBillController extends Controller
         $restaurantId = auth()->user()->restaurantData->id;
 
         $suppliers = Supplier::where('is_active', true)
+            ->where('restaurant_id', $restaurantId)
             ->orderBy('supplier_name')
             ->get();
 
@@ -180,7 +181,10 @@ class SupplierBillController extends Controller
                 ->with('error', 'Cannot edit paid bills.');
         }
 
+        $restaurantId = auth()->user()->restaurantData->id;
+
         $suppliers = Supplier::where('is_active', true)
+            ->where('restaurant_id', $restaurantId)
             ->orderBy('supplier_name')
             ->get();
 

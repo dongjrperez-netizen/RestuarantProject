@@ -19,6 +19,27 @@ use Inertia\Inertia;
 
 class WaiterController extends Controller
 {
+    /**
+     * Get ready orders for the waiter's restaurant
+     */
+    private function getReadyOrders($userId)
+    {
+        return CustomerOrder::where('restaurant_id', $userId)
+            ->where('status', 'ready')
+            ->with(['table'])
+            ->orderBy('updated_at', 'desc')
+            ->get()
+            ->map(function ($order) {
+                return [
+                    'order_id' => $order->order_id,
+                    'order_number' => $order->order_number,
+                    'table_number' => $order->table->table_number,
+                    'table_name' => $order->table->table_name,
+                    'table_id' => $order->table->id,
+                ];
+            });
+    }
+
     public function dashboard()
     {
         // Get the authenticated employee
@@ -137,6 +158,7 @@ class WaiterController extends Controller
             'activeMenuPlan' => $activeMenuPlan,
             'dishes' => $dishes,
             'isDefaultPlan' => $isDefaultPlan,
+            'readyOrders' => $this->getReadyOrders($employee->user_id),
         ]);
     }
 
@@ -253,6 +275,7 @@ class WaiterController extends Controller
             'dishes' => $dishes,
             'isDefaultPlan' => $isDefaultPlan,
             'currentDate' => $today,
+            'readyOrders' => $this->getReadyOrders($employee->user_id),
         ]);
     }
 
@@ -290,6 +313,7 @@ class WaiterController extends Controller
         return Inertia::render('Waiter/TakeOrder', [
             'tables' => $tables,
             'employee' => $employee->load('role'),
+            'readyOrders' => $this->getReadyOrders($employee->user_id),
         ]);
     }
 
@@ -412,6 +436,7 @@ class WaiterController extends Controller
             'activeMenuPlan' => $activeMenuPlan,
             'isDefaultPlan' => $isDefaultPlan,
             'currentDate' => $today,
+            'readyOrders' => $this->getReadyOrders($employee->user_id),
         ]);
     }
 

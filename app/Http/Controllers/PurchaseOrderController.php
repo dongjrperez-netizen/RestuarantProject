@@ -103,16 +103,20 @@ class PurchaseOrderController extends Controller
 
         $restaurantId = $user->restaurantData->id;
 
-        // Get suppliers that have ingredient offerings
+        // Get suppliers that have ingredient offerings (only for this restaurant)
         $suppliers = Supplier::where('is_active', true)
+            ->where('restaurant_id', $restaurantId)
             ->whereHas('ingredients')
             ->with(['ingredients'])
             ->orderBy('supplier_name')
             ->get();
 
-        // Get all ingredient offerings (supplier inventory) - not restaurant inventory
+        // Get all ingredient offerings (supplier inventory) - only for suppliers of this restaurant
         $supplierOfferings = IngredientSupplier::with(['ingredient', 'supplier'])
             ->where('is_active', true)
+            ->whereHas('supplier', function ($query) use ($restaurantId) {
+                $query->where('restaurant_id', $restaurantId);
+            })
             ->orderBy('id')
             ->get()
             ->groupBy('supplier_id');
@@ -236,16 +240,20 @@ class PurchaseOrderController extends Controller
 
         $restaurantId = $user->restaurantData->id;
 
-        // Get suppliers that have ingredient offerings
+        // Get suppliers that have ingredient offerings (only for this restaurant)
         $suppliers = Supplier::where('is_active', true)
+            ->where('restaurant_id', $restaurantId)
             ->whereHas('ingredients')
             ->with(['ingredients'])
             ->orderBy('supplier_name')
             ->get();
 
-        // Get all ingredient offerings (supplier inventory) - not restaurant inventory
+        // Get all ingredient offerings (supplier inventory) - only for suppliers of this restaurant
         $supplierOfferings = IngredientSupplier::with(['ingredient', 'supplier'])
             ->where('is_active', true)
+            ->whereHas('supplier', function ($query) use ($restaurantId) {
+                $query->where('restaurant_id', $restaurantId);
+            })
             ->orderBy('id')
             ->get()
             ->groupBy('supplier_id');

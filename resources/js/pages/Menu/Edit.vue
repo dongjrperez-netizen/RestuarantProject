@@ -479,7 +479,7 @@ const submit = () => {
   <Head :title="`Edit ${dish.dish_name}`" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="max-w-6xl mx-auto space-y-8">
+    <div class="mx-6 space-y-6">
       <!-- Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Edit Dish</h1>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Supplier\AuthController;
 use App\Http\Controllers\Supplier\DashboardController;
 use App\Http\Controllers\Supplier\IngredientOfferController;
+use App\Http\Controllers\Supplier\PaymentHistoryController;
 use App\Http\Controllers\Supplier\PurchaseOrderController;
 use Illuminate\Support\Facades\Route;
 
@@ -50,4 +51,9 @@ Route::middleware(['auth:supplier', 'supplier.auth'])->group(function () {
         Route::post('/{id}/reject', [PurchaseOrderController::class, 'reject'])->name('reject');
         Route::post('/{id}/mark-delivered', [PurchaseOrderController::class, 'markDelivered'])->name('mark-delivered');
     });
+    
+    Route::prefix('payments')->name('supplier.payments.')->group(function () {
+        Route::get('/history', [PaymentHistoryController::class, 'index'])->name('history');
+    });
+
 });
