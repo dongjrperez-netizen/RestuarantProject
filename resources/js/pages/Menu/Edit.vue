@@ -379,6 +379,7 @@ const handleImageUpload = async (file: File) => {
 
     response = await fetch('/api/images/upload', {
       method: 'POST',
+      credentials: 'same-origin', // IMPORTANT: Send cookies with request (needed for CSRF on Railway)
       headers: {
         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
       },
