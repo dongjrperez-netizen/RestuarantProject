@@ -100,11 +100,9 @@ class RegisteredUserController extends Controller
             return $user;
         });
 
+        $user = User::where('email', $validated['email'])->first();
+        event(new Registered($user));
         Auth::login($user);
-
-        // Email verification temporarily disabled - Railway blocks SMTP ports
-        // Re-enable when using transactional email service (Resend, Mailgun, etc.)
-        // event(new Registered($user));
 
         return redirect()->route('register.documents');
     }
