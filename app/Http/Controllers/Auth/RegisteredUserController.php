@@ -40,7 +40,7 @@ class RegisteredUserController extends Controller
         $validated = $request->validate([
             'last_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
             'first_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
-            'middle_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
+            'middle_name' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z\s\'-]+$/'],
             'date_of_birth' => 'required|date',
             'gender' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:users,email',
@@ -51,13 +51,13 @@ class RegisteredUserController extends Controller
             'address' => 'required|string|max:255',
             'postal_code' => 'nullable|string|max:20',
             'contact_number' => 'required|string|max:20|unique:restaurant_data,contact_number',
+            'terms_accepted' => 'required|accepted',
         ], [
             // Personal Information
             'last_name.required' => 'Last name is required.',
             'last_name.regex' => 'Last name can only contain letters, spaces, hyphens, and apostrophes.',
             'first_name.required' => 'First name is required.',
             'first_name.regex' => 'First name can only contain letters, spaces, hyphens, and apostrophes.',
-            'middle_name.required' => 'Middle name is required.',
             'middle_name.regex' => 'Middle name can only contain letters, spaces, hyphens, and apostrophes.',
             'date_of_birth.required' => 'Date of birth is required.',
             'date_of_birth.date' => 'Please provide a valid date of birth.',
@@ -75,6 +75,10 @@ class RegisteredUserController extends Controller
             'address.required' => 'Restaurant address is required.',
             'contact_number.required' => 'Contact number is required.',
             'contact_number.unique' => 'This contact number is already registered.',
+
+            // Terms & Privacy
+            'terms_accepted.required' => 'You must accept the Terms of Service and Privacy Policy.',
+            'terms_accepted.accepted' => 'You must accept the Terms of Service and Privacy Policy to create an account.',
         ]);
 
         $user = DB::transaction(function () use ($validated) {

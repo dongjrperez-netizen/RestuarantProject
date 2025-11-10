@@ -65,7 +65,6 @@ class AdminSettingsController extends Controller
     {
         $request->validate([
             'plan_name' => 'required|string|max:255',
-            'plan_description' => 'required|string',
             'plan_price' => 'required|numeric|min:0',
             'plan_duration' => 'required|integer|min:1',
             'plan_features' => 'nullable|string',
@@ -73,7 +72,6 @@ class AdminSettingsController extends Controller
 
         Subscriptionpackage::create([
             'plan_name' => $request->plan_name,
-            'plan_description' => $request->plan_description,
             'plan_price' => $request->plan_price,
             'plan_duration' => $request->plan_duration,
             'plan_features' => $request->plan_features,
@@ -86,7 +84,6 @@ class AdminSettingsController extends Controller
     {
         $request->validate([
             'plan_name' => 'required|string|max:255',
-            'plan_description' => 'required|string',
             'plan_price' => 'required|numeric|min:0',
             'plan_duration' => 'required|integer|min:1',
             'plan_features' => 'nullable|string',
@@ -95,7 +92,6 @@ class AdminSettingsController extends Controller
         $plan = Subscriptionpackage::findOrFail($id);
         $plan->update([
             'plan_name' => $request->plan_name,
-            'plan_description' => $request->plan_description,
             'plan_price' => $request->plan_price,
             'plan_duration' => $request->plan_duration,
             'plan_features' => $request->plan_features,

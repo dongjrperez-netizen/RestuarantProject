@@ -44,7 +44,7 @@ class HandleInertiaRequests extends Middleware
         $user = null;
         $userType = null;
 
-        if ($request->is('admin/*') || $request->is('admin')) {
+        if ($request->is('admin/*') || $request->is('admin') || $request->is('request')) {
             // For admin routes, get the admin user
             $user = Auth::guard('admin')->user();
             $userType = 'admin';
@@ -77,12 +77,27 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
+        // Get subscription data for restaurant owner
+        $subscription = null;
+        if ($userType === 'owner' && $user) {
+            $subscription = $user->subscription()
+                ->with('subscriptionPackage')
+                ->where('subscription_status', 'active')
+                ->first();
+        }
+
         return array_merge(parent::share($request), [
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $user,
                 'userType' => $userType,
+                'subscription' => $subscription ? [
+                    'plan_name' => $subscription->subscriptionPackage->plan_name ?? null,
+                    'plan_id' => $subscription->plan_id ?? null,
+                    'status' => $subscription->subscription_status ?? null,
+                    'end_date' => $subscription->subscription_endDate ?? null,
+                ] : null,
             ],
             'ziggy' => [
                 ...(new Ziggy)->toArray(),

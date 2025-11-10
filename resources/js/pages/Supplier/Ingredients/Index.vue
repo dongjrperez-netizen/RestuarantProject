@@ -59,15 +59,15 @@ const deleteOffer = (ingredientId: number) => {
   <Head title="My Ingredients" />
 
   <SupplierLayout :supplier="supplier">
-    <div class="space-y-6">
+    <div class="space-y-4 md:space-y-6 p-4 md:p-6">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 class="text-3xl font-bold tracking-tight">My Ingredients</h1>
-          <p class="text-muted-foreground">Manage your ingredient offers to restaurants</p>
+          <h1 class="text-2xl md:text-3xl font-bold tracking-tight">My Ingredients</h1>
+          <p class="text-sm md:text-base text-muted-foreground">Manage your ingredient offers to restaurants</p>
         </div>
         <Link href="/supplier/ingredients/create">
-          <Button>
+          <Button size="sm" class="md:size-default">
             <Plus class="w-4 h-4 mr-2" />
             Add Ingredient
           </Button>
@@ -84,16 +84,17 @@ const deleteOffer = (ingredientId: number) => {
         </CardHeader>
         <CardContent>
           <div v-if="offeredIngredients.length === 0" class="text-center py-8">
-            <p class="text-muted-foreground mb-4">You haven't added any ingredient offers yet.</p>
+            <p class="text-sm md:text-base text-muted-foreground mb-4">You haven't added any ingredient offers yet.</p>
             <Link href="/supplier/ingredients/create">
-              <Button>
+              <Button size="sm" class="md:size-default">
                 <Plus class="w-4 h-4 mr-2" />
                 Add Your First Ingredient
               </Button>
             </Link>
           </div>
-          
-          <div v-else>
+
+          <!-- Desktop Table View (hidden on mobile) -->
+          <div v-else class="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -150,8 +151,8 @@ const deleteOffer = (ingredientId: number) => {
                           <Edit class="w-4 h-4" />
                         </Button>
                       </Link>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         @click="deleteOffer(ingredient.ingredient_id)"
                         class="text-red-600 hover:text-red-700"
@@ -163,6 +164,66 @@ const deleteOffer = (ingredientId: number) => {
                 </TableRow>
               </TableBody>
             </Table>
+          </div>
+
+          <!-- Mobile Card View (hidden on desktop) -->
+          <div v-if="offeredIngredients.length > 0" class="md:hidden space-y-3">
+            <Card v-for="ingredient in offeredIngredients" :key="`${ingredient.ingredient_id}`" class="border">
+              <CardContent class="p-4">
+                <div class="flex items-start justify-between mb-3">
+                  <div class="flex-1">
+                    <div class="font-semibold text-base">{{ ingredient.ingredient_name }}</div>
+                    <div class="text-xs text-muted-foreground mt-1">Base: {{ ingredient.base_unit }}</div>
+                    <div class="text-sm text-muted-foreground mt-1">
+                      {{ ingredient.restaurant.restaurant_name }}
+                    </div>
+                  </div>
+                  <Badge :class="ingredient.pivot.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'" class="text-xs">
+                    {{ ingredient.pivot.is_active ? 'Active' : 'Inactive' }}
+                  </Badge>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+                  <div>
+                    <div class="text-muted-foreground text-xs">Package</div>
+                    <div class="font-medium">{{ ingredient.pivot.package_quantity }} {{ ingredient.pivot.package_unit }}</div>
+                    <div class="text-xs text-muted-foreground">
+                      {{ ingredient.pivot.package_contents_quantity }} {{ ingredient.pivot.package_contents_unit }}
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-muted-foreground text-xs">Price</div>
+                    <div class="font-semibold">{{ formatCurrency(ingredient.pivot.package_price) }}</div>
+                  </div>
+                  <div>
+                    <div class="text-muted-foreground text-xs">Lead Time</div>
+                    <div>{{ ingredient.pivot.lead_time_days }} {{ ingredient.pivot.lead_time_days === 1 ? 'day' : 'days' }}</div>
+                  </div>
+                  <div>
+                    <div class="text-muted-foreground text-xs">Min Order</div>
+                    <div>{{ ingredient.pivot.minimum_order_quantity }} {{ ingredient.pivot.package_unit }}</div>
+                  </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t">
+                  <Link :href="`/supplier/ingredients/${ingredient.ingredient_id}/edit`">
+                    <Button variant="outline" size="sm">
+                      <Edit class="w-4 h-4 mr-1" />
+                      Edit
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    @click="deleteOffer(ingredient.ingredient_id)"
+                    class="text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 class="w-4 h-4 mr-1" />
+                    Delete
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </CardContent>
       </Card>

@@ -28,6 +28,7 @@ class User extends Authenticatable implements MustVerifyEmailContract
         'manager_access_code',
         'status',
         'role_id',
+        'email_verified_at',
     ];
 
     protected $attributes = [

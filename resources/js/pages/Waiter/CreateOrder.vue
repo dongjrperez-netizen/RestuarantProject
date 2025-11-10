@@ -615,7 +615,7 @@ const getAllergenBadgeColor = (allergen: string) => {
 
     <!-- Quantity Selection Modal -->
     <Dialog :open="showQuantityModal" @update:open="closeQuantityModal">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent class="sm:max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add to Order</DialogTitle>
           <DialogDescription v-if="selectedDish">

@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\AdminUserEmail;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -12,12 +14,24 @@ class AdminUserController extends Controller
 {
     public function index(): Response
     {
-        $users = User::with(['restaurantData.documents', 'subscription'])
+        $users = User::with(['restaurantData.documents'])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($user) {
                 // Check if user has documents uploaded
                 $hasDocuments = $user->restaurantData && $user->restaurantData->documents->isNotEmpty();
+
+                // Get the active subscription, or if none, get the most recent one
+                $activeSubscription = \App\Models\UserSubscription::where('user_id', $user->id)
+                    ->where('subscription_status', 'active')
+                    ->first();
+
+                // If no active subscription, get the most recent one
+                if (!$activeSubscription) {
+                    $activeSubscription = \App\Models\UserSubscription::where('user_id', $user->id)
+                        ->orderBy('created_at', 'desc')
+                        ->first();
+                }
 
                 return [
                     'id' => $user->id,
@@ -27,7 +41,7 @@ class AdminUserController extends Controller
                     'status' => $user->status,
                     'email_verified' => $user->email_verified_at !== null,
                     'restaurant_name' => $user->restaurantData->restaurant_name ?? 'N/A',
-                    'subscription_status' => $user->subscription->subscription_status ?? 'none',
+                    'subscription_status' => $activeSubscription->subscription_status ?? 'none',
                     'created_at' => $user->created_at,
                     'last_login' => $user->updated_at, // Approximation
                     'has_documents' => $hasDocuments,
@@ -49,7 +63,19 @@ class AdminUserController extends Controller
 
     public function show($id): Response
     {
-        $user = User::with(['restaurantData', 'subscription'])->findOrFail($id);
+        $user = User::with(['restaurantData'])->findOrFail($id);
+
+        // Get the active subscription, or if none, get the most recent one
+        $activeSubscription = \App\Models\UserSubscription::where('user_id', $user->id)
+            ->where('subscription_status', 'active')
+            ->first();
+
+        // If no active subscription, get the most recent one
+        if (!$activeSubscription) {
+            $activeSubscription = \App\Models\UserSubscription::where('user_id', $user->id)
+                ->orderBy('created_at', 'desc')
+                ->first();
+        }
 
         $userData = [
             'id' => $user->id,
@@ -73,12 +99,12 @@ class AdminUserController extends Controller
                 'cuisine_type' => $user->restaurantData->cuisine_type,
                 'operating_hours' => $user->restaurantData->operating_hours,
             ] : null,
-            'subscription' => $user->subscription ? [
-                'status' => $user->subscription->subscription_status,
-                'start_date' => $user->subscription->subscription_startDate,
-                'end_date' => $user->subscription->subscription_endDate,
-                'remaining_days' => $user->subscription->remaining_days,
-                'is_trial' => $user->subscription->is_trial,
+            'subscription' => $activeSubscription ? [
+                'status' => $activeSubscription->subscription_status,
+                'start_date' => $activeSubscription->subscription_startDate,
+                'end_date' => $activeSubscription->subscription_endDate,
+                'remaining_days' => $activeSubscription->remaining_days,
+                'is_trial' => $activeSubscription->is_trial,
             ] : null,
         ];
 
@@ -141,5 +167,29 @@ class AdminUserController extends Controller
 
         return redirect()->route('admin.users.index')
             ->with('success', 'User deleted successfully.');
+    }
+
+    public function sendEmail(Request $request, $id): RedirectResponse
+    {
+        $request->validate([
+            'subject' => 'required|string|max:255',
+            'message' => 'required|string|max:5000',
+        ]);
+
+        $user = User::with('restaurantData')->findOrFail($id);
+
+        try {
+            Mail::to($user->email)->send(
+                new AdminUserEmail(
+                    $user,
+                    $request->subject,
+                    $request->message
+                )
+            );
+
+            return back()->with('success', "Email sent successfully to {$user->email}");
+        } catch (\Exception $e) {
+            return back()->with('error', 'Failed to send email. Please try again later.');
+        }
     }
 }

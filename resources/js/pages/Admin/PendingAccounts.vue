@@ -2,7 +2,6 @@
 import AppLayoutAdministrator from '@/layouts/AppLayoutAdministrator.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
 
 import {
   Table,
@@ -15,7 +14,7 @@ import {
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
-    title: 'Account Management',
+    title: 'Pending Account Requests',
     href: '/request',
   },
 ];
@@ -36,65 +35,18 @@ const props = defineProps({
       file_path: string;
       uploaded_at: string;
     }>;
-  }>,
-  allApplications: Array as () => Array<{
-    restaurant_id: number;
-    user_id: number;
-    restaurant_name: string;
-    user_name: string;
-    contact_email: string;
-    status: string;
-    documents: Array<{
-      id: number;
-      type: string;
-      file_name: string;
-      file_path: string;
-      uploaded_at: string;
-    }>;
   }>
-});
-
-const showPendingOnly = ref(true);
-
-const displayedApplications = computed(() => {
-  return showPendingOnly.value 
-    ? props.allApplications || []
-    : props.pendingApplications || [];
 });
 </script>
 
 <template>
-  <Head title="Account Management" />
+  <Head title="Pending Account Requests" />
 
   <AppLayoutAdministrator :breadcrumbs="breadcrumbs">
     <div class="p-6">
-     
-      <div class="mb-4 flex justify-between items-center">
-        <div class="flex space-x-2">
-          <button
-            @click="showPendingOnly = true"
-            :class="[
-              'px-4 py-2 text-sm font-medium rounded-md',
-              showPendingOnly 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            ]"
-          >
-            All Accounts
-          </button>
-          <button
-            @click="showPendingOnly = false"
-            :class="[
-              'px-4 py-2 text-sm font-medium rounded-md',
-              !showPendingOnly 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            ]"
-          >
-            Pending Clients
-          </button>
-          
-        </div>
+      <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Pending Account Requests</h1>
+        <p class="text-gray-600 mt-1">Review and approve or reject new restaurant account applications</p>
       </div>
 
       <div class="overflow-x-auto bg-white shadow rounded-lg">
@@ -112,7 +64,7 @@ const displayedApplications = computed(() => {
 
           <TableBody>
             <TableRow
-              v-for="application in displayedApplications"
+              v-for="application in pendingApplications"
               :key="application.restaurant_id"
               class="hover:bg-gray-50"
             >
@@ -169,9 +121,9 @@ const displayedApplications = computed(() => {
                 </span>
               </TableCell>
             </TableRow>
-            <TableRow v-if="displayedApplications.length === 0">
+            <TableRow v-if="!pendingApplications || pendingApplications.length === 0">
               <TableCell colspan="6" class="text-center py-4 text-gray-500">
-                No applications found.
+                No pending applications found.
               </TableCell>
             </TableRow>
           </TableBody>

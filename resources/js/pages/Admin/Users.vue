@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
   Table,
@@ -23,7 +24,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
-import { Users, CheckCircle, Clock, XCircle, MoreVertical, Eye, Settings, Trash2, RefreshCw, Mail, Search, Edit, UserCheck, UserX, Shield } from 'lucide-vue-next';
+import { Users, CheckCircle, Clock, XCircle, MoreVertical, Eye, Mail, Search, UserCheck, Shield } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
@@ -65,8 +66,23 @@ const searchQuery = ref<string>('');
 const showViewDialog = ref<boolean>(false);
 const viewingUser = ref<User | null>(null);
 
+// Email verification confirmation dialog
+const showEmailVerificationDialog = ref<boolean>(false);
+const emailVerificationUser = ref<User | null>(null);
+
+// Send email dialog
+const showSendEmailDialog = ref<boolean>(false);
+const sendEmailUser = ref<User | null>(null);
+const emailForm = ref({
+  subject: '',
+  message: ''
+});
+
 // Loading states
 const loadingActions = ref<Record<string, boolean>>({});
+
+// Dropdown open states
+const openDropdowns = ref<Record<number, boolean>>({});
 
 const filteredUsers = computed(() => {
   let filtered = props.users;
@@ -122,81 +138,100 @@ const getSubscriptionBadge = (status: string) => {
 };
 
 const updateUserStatus = async (userId: number, status: string) => {
+  // Close dropdown first
+  openDropdowns.value[userId] = false;
+
+  // Wait for dropdown to close before making request
+  await new Promise(resolve => setTimeout(resolve, 150));
+
   const actionKey = `status_${userId}`;
   loadingActions.value[actionKey] = true;
-  
-  try {
-    router.post(`/admin/users/${userId}/status`, { status }, {
-      onFinish: () => {
-        loadingActions.value[actionKey] = false;
-      }
-    });
-  } catch (error) {
-    loadingActions.value[actionKey] = false;
-  }
-};
 
-const toggleEmailVerification = async (userId: number) => {
-  const actionKey = `email_${userId}`;
-  loadingActions.value[actionKey] = true;
-  
-  try {
-    router.post(`/admin/users/${userId}/toggle-email`, {}, {
-      onFinish: () => {
-        loadingActions.value[actionKey] = false;
-      }
-    });
-  } catch (error) {
-    loadingActions.value[actionKey] = false;
-  }
-};
-
-const resetPassword = async (userId: number) => {
-  const actionKey = `reset_${userId}`;
-  loadingActions.value[actionKey] = true;
-  
-  try {
-    router.post(`/admin/users/${userId}/reset-password`, {}, {
-      onFinish: () => {
-        loadingActions.value[actionKey] = false;
-      }
-    });
-  } catch (error) {
-    loadingActions.value[actionKey] = false;
-  }
-};
-
-const deleteUser = async (userId: number) => {
-  if (confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-    const actionKey = `delete_${userId}`;
-    loadingActions.value[actionKey] = true;
-    
-    try {
-      router.delete(`/admin/users/${userId}`, {
-        onFinish: () => {
-          loadingActions.value[actionKey] = false;
-        }
-      });
-    } catch (error) {
+  router.post(`/admin/users/${userId}/status`, { status }, {
+    preserveScroll: true,
+    only: ['users', 'stats'],
+    onFinish: () => {
+      loadingActions.value[actionKey] = false;
+    },
+    onError: () => {
       loadingActions.value[actionKey] = false;
     }
-  }
+  });
+};
+
+const toggleEmailVerification = (user: User) => {
+  // Close dropdown and show confirmation modal
+  openDropdowns.value[user.id] = false;
+  emailVerificationUser.value = user;
+  showEmailVerificationDialog.value = true;
+};
+
+const confirmToggleEmailVerification = () => {
+  if (!emailVerificationUser.value) return;
+
+  const userId = emailVerificationUser.value.id;
+  const actionKey = `email_${userId}`;
+  loadingActions.value[actionKey] = true;
+
+  router.post(`/admin/users/${userId}/toggle-email`, {}, {
+    preserveScroll: true,
+    only: ['users', 'stats'],
+    onFinish: () => {
+      loadingActions.value[actionKey] = false;
+      showEmailVerificationDialog.value = false;
+      emailVerificationUser.value = null;
+    },
+    onError: () => {
+      loadingActions.value[actionKey] = false;
+    }
+  });
 };
 
 // View user details
 const viewUser = (user: User) => {
+  // Close dropdown first
+  openDropdowns.value[user.id] = false;
+
   viewingUser.value = user;
   showViewDialog.value = true;
 };
 
-// Edit user
-const editUser = (user: User) => {
-  router.visit(`/admin/users/${user.id}/edit`);
+// Open send email modal
+const sendEmail = (user: User) => {
+  // Close dropdown and open send email modal
+  openDropdowns.value[user.id] = false;
+  sendEmailUser.value = user;
+  emailForm.value = {
+    subject: '',
+    message: ''
+  };
+  showSendEmailDialog.value = true;
 };
 
-// Send email to user
-const sendEmail = (user: User) => {
-  router.visit(`/admin/users/${user.id}/send-email`);
+// Submit email
+const submitSendEmail = () => {
+  if (!sendEmailUser.value) return;
+
+  const userId = sendEmailUser.value.id;
+  const actionKey = `email_${userId}`;
+  loadingActions.value[actionKey] = true;
+
+  router.post(`/admin/users/${userId}/send-email`, emailForm.value, {
+    preserveScroll: true,
+    only: ['users', 'stats'],
+    onFinish: () => {
+      loadingActions.value[actionKey] = false;
+      showSendEmailDialog.value = false;
+      sendEmailUser.value = null;
+      emailForm.value = {
+        subject: '',
+        message: ''
+      };
+    },
+    onError: () => {
+      loadingActions.value[actionKey] = false;
+    }
+  });
 };
 </script>
 
@@ -335,7 +370,7 @@ const sendEmail = (user: User) => {
                   </TableCell>
                   <TableCell>{{ formatDate(user.created_at) }}</TableCell>
                   <TableCell class="text-center">
-                    <DropdownMenu>
+                    <DropdownMenu v-model:open="openDropdowns[user.id]">
                       <DropdownMenuTrigger as-child>
                         <Button variant="ghost" size="sm">
                           <MoreVertical class="h-4 w-4" />
@@ -343,56 +378,25 @@ const sendEmail = (user: User) => {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <!-- View Details -->
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           @click="viewUser(user)"
                           class="flex items-center gap-2"
                         >
                           <Eye class="h-4 w-4" />
                           View Details
                         </DropdownMenuItem>
-                        
-                        <!-- Edit User -->
-                        <DropdownMenuItem 
-                          @click="editUser(user)"
-                          class="flex items-center gap-2"
-                        >
-                          <Edit class="h-4 w-4" />
-                          Edit User
-                        </DropdownMenuItem>
-                        
+
                         <!-- Send Email -->
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           @click="sendEmail(user)"
                           class="flex items-center gap-2"
                         >
                           <Mail class="h-4 w-4" />
                           Send Email
                         </DropdownMenuItem>
-                        
-                        <!-- Approve (for pending users) -->
-                        <DropdownMenuItem 
-                          v-if="user.status === 'Pending'"
-                          @click="updateUserStatus(user.id, 'Approved')"
-                          class="flex items-center gap-2"
-                          :disabled="loadingActions[`status_${user.id}`]"
-                        >
-                          <CheckCircle class="h-4 w-4" />
-                          {{ loadingActions[`status_${user.id}`] ? 'Approving...' : 'Approve' }}
-                        </DropdownMenuItem>
-                        
-                        <!-- Reject (for pending users) -->
-                        <DropdownMenuItem 
-                          v-if="user.status === 'Pending'"
-                          @click="updateUserStatus(user.id, 'Rejected')"
-                          class="flex items-center gap-2"
-                          :disabled="loadingActions[`status_${user.id}`]"
-                        >
-                          <XCircle class="h-4 w-4" />
-                          {{ loadingActions[`status_${user.id}`] ? 'Rejecting...' : 'Reject' }}
-                        </DropdownMenuItem>
-                        
+
                         <!-- Reactivate (for rejected users) -->
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           v-if="user.status === 'Rejected'"
                           @click="updateUserStatus(user.id, 'Pending')"
                           class="flex items-center gap-2"
@@ -401,35 +405,14 @@ const sendEmail = (user: User) => {
                           <UserCheck class="h-4 w-4" />
                           {{ loadingActions[`status_${user.id}`] ? 'Reactivating...' : 'Reactivate' }}
                         </DropdownMenuItem>
-                        
+
                         <!-- Toggle Email Verification -->
-                        <DropdownMenuItem 
-                          @click="toggleEmailVerification(user.id)"
+                        <DropdownMenuItem
+                          @click="toggleEmailVerification(user)"
                           class="flex items-center gap-2"
-                          :disabled="loadingActions[`email_${user.id}`]"
                         >
                           <Shield class="h-4 w-4" />
-                          {{ loadingActions[`email_${user.id}`] ? 'Processing...' : (user.email_verified ? 'Unverify Email' : 'Verify Email') }}
-                        </DropdownMenuItem>
-                        
-                        <!-- Reset Password -->
-                        <DropdownMenuItem 
-                          @click="resetPassword(user.id)"
-                          class="flex items-center gap-2"
-                          :disabled="loadingActions[`reset_${user.id}`]"
-                        >
-                          <RefreshCw class="h-4 w-4" />
-                          {{ loadingActions[`reset_${user.id}`] ? 'Resetting...' : 'Reset Password' }}
-                        </DropdownMenuItem>
-                        
-                        <!-- Delete User -->
-                        <DropdownMenuItem 
-                          @click="deleteUser(user.id)"
-                          class="flex items-center gap-2 text-destructive"
-                          :disabled="loadingActions[`delete_${user.id}`]"
-                        >
-                          <Trash2 class="h-4 w-4" />
-                          {{ loadingActions[`delete_${user.id}`] ? 'Deleting...' : 'Delete User' }}
+                          {{ user.email_verified ? 'Unverify Email' : 'Verify Email' }}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -452,8 +435,11 @@ const sendEmail = (user: User) => {
       <DialogContent class="max-w-3xl">
         <DialogHeader>
           <DialogTitle>User Details</DialogTitle>
+          <DialogDescription>
+            View complete information about this user and their account status.
+          </DialogDescription>
         </DialogHeader>
-        
+
         <div v-if="viewingUser" class="space-y-6">
           <!-- User Information Grid -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -541,21 +527,147 @@ const sendEmail = (user: User) => {
             <Button variant="outline" @click="showViewDialog = false">
               Close
             </Button>
-            <Button variant="outline" @click="editUser(viewingUser)">
-              <Edit class="h-4 w-4 mr-2" />
-              Edit User
-            </Button>
             <Button variant="outline" @click="sendEmail(viewingUser)">
               <Mail class="h-4 w-4 mr-2" />
               Send Email
             </Button>
-            <Button 
-              v-if="viewingUser.status === 'Pending'"
-              @click="updateUserStatus(viewingUser.id, 'Approved')"
-              :disabled="loadingActions[`status_${viewingUser.id}`]"
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Email Verification Confirmation Dialog -->
+    <Dialog v-model:open="showEmailVerificationDialog">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Confirm Email Verification</DialogTitle>
+          <DialogDescription>
+            Review the user details and confirm the email verification action.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="emailVerificationUser" class="space-y-4">
+          <div class="space-y-2">
+            <p class="text-sm text-muted-foreground">
+              Are you sure you want to
+              <strong>{{ emailVerificationUser.email_verified ? 'unverify' : 'verify' }}</strong>
+              the email address for this user?
+            </p>
+
+            <Card class="bg-muted/50">
+              <CardContent class="p-4 space-y-2">
+                <div>
+                  <Label class="text-xs text-muted-foreground">User</Label>
+                  <p class="font-medium">{{ emailVerificationUser.name }}</p>
+                </div>
+                <div>
+                  <Label class="text-xs text-muted-foreground">Email</Label>
+                  <p class="font-medium">{{ emailVerificationUser.email }}</p>
+                </div>
+                <div>
+                  <Label class="text-xs text-muted-foreground">Current Status</Label>
+                  <div class="mt-1">
+                    <Badge :variant="emailVerificationUser.email_verified ? 'default' : 'secondary'">
+                      {{ emailVerificationUser.email_verified ? 'Verified' : 'Unverified' }}
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-4 border-t">
+            <Button
+              variant="outline"
+              @click="showEmailVerificationDialog = false"
+              :disabled="loadingActions[`email_${emailVerificationUser.id}`]"
             >
-              <CheckCircle class="h-4 w-4 mr-2" />
-              {{ loadingActions[`status_${viewingUser.id}`] ? 'Approving...' : 'Approve' }}
+              Cancel
+            </Button>
+            <Button
+              @click="confirmToggleEmailVerification"
+              :disabled="loadingActions[`email_${emailVerificationUser.id}`]"
+            >
+              <Shield class="h-4 w-4 mr-2" />
+              {{ loadingActions[`email_${emailVerificationUser.id}`]
+                ? 'Processing...'
+                : (emailVerificationUser.email_verified ? 'Unverify Email' : 'Verify Email')
+              }}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Send Email Dialog -->
+    <Dialog v-model:open="showSendEmailDialog">
+      <DialogContent class="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Send Email to User</DialogTitle>
+          <DialogDescription>
+            Compose and send an email directly to this user's registered email address.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="sendEmailUser" class="space-y-4">
+          <!-- Recipient Info -->
+          <Card class="bg-muted/50">
+            <CardContent class="p-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <Label class="text-xs text-muted-foreground">Recipient</Label>
+                  <p class="font-medium">{{ sendEmailUser.name }}</p>
+                </div>
+                <div>
+                  <Label class="text-xs text-muted-foreground">Email Address</Label>
+                  <p class="font-medium">{{ sendEmailUser.email }}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <!-- Email Form -->
+          <div class="space-y-4">
+            <div class="space-y-2">
+              <Label for="email-subject">Subject *</Label>
+              <Input
+                id="email-subject"
+                v-model="emailForm.subject"
+                placeholder="Enter email subject"
+                :disabled="loadingActions[`email_${sendEmailUser.id}`]"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <Label for="email-message">Message *</Label>
+              <Textarea
+                id="email-message"
+                v-model="emailForm.message"
+                placeholder="Enter your message here..."
+                rows="10"
+                :disabled="loadingActions[`email_${sendEmailUser.id}`]"
+              />
+              <p class="text-xs text-muted-foreground">
+                Maximum 5000 characters. This message will be sent to the user's email address.
+              </p>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-3 pt-4 border-t">
+            <Button
+              variant="outline"
+              @click="showSendEmailDialog = false"
+              :disabled="loadingActions[`email_${sendEmailUser.id}`]"
+            >
+              Cancel
+            </Button>
+            <Button
+              @click="submitSendEmail"
+              :disabled="loadingActions[`email_${sendEmailUser.id}`] || !emailForm.subject || !emailForm.message"
+            >
+              <Mail class="h-4 w-4 mr-2" />
+              {{ loadingActions[`email_${sendEmailUser.id}`] ? 'Sending...' : 'Send Email' }}
             </Button>
           </div>
         </div>

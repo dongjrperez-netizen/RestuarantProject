@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeMount } from 'vue'
-import { Link } from '@inertiajs/vue3'
+import { ref, watch, onBeforeMount, computed } from 'vue'
+import { Link, usePage } from '@inertiajs/vue3'
 import {
   Users, UserRound, Box, ClipboardList,
   UtensilsCrossed, ShoppingCart, Truck, Receipt,
@@ -24,8 +24,16 @@ import {
 
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 
-// Navigation items
-const navItems = [
+// Get page props to access subscription data
+const page = usePage()
+
+// Get current subscription plan
+const currentPlan = computed(() => {
+  return page.props.auth?.subscription?.plan_name || null
+})
+
+// Base navigation items
+const baseNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutGrid },
   {
     title: "User Management",
@@ -64,12 +72,33 @@ const navItems = [
   { title: "Generate reports", href: "/reports", icon: BarChart3 },
 ]
 
+// Filter navigation items based on subscription plan
+const navItems = computed(() => {
+  return baseNavItems.map(item => {
+    // If item has children, filter them based on subscription
+    if (item.children) {
+      const filteredChildren = item.children.filter(child => {
+        // Hide "Regular Employees" if plan is "Basic"
+        if (child.title === "Regular Employees" && currentPlan.value === "Basic") {
+          return false
+        }
+        return true
+      })
+
+      return {
+        ...item,
+        children: filteredChildren
+      }
+    }
+    return item
+  })
+})
 
 // Controlled state for collapsibles
 const openCollapsibles = ref<Record<string, boolean>>({})
 
 // Initialize collapsibles
-navItems.forEach(item => {
+baseNavItems.forEach(item => {
   if (item.children) openCollapsibles.value[item.title] = false
 })
 

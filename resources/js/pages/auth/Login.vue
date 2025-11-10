@@ -113,7 +113,7 @@ const submit = () => {
                             :tabindex="3"
                             class="text-orange-500 focus:ring-orange-500"
                         />
-                        <span class="text-xs sm:text-sm text-gray-600">Remember me for 30 days</span>
+                        <span class="text-xs sm:text-sm text-gray-600">Remember me</span>
                     </Label>
                 </div>
             </div>

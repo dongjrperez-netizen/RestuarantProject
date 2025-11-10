@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { CreditCard, Users, Clock, Award, Calendar, Edit, Eye, History, Search, Filter } from 'lucide-vue-next';
+import { CreditCard, Users, Clock, Award, Calendar, Eye, History, Search, Filter } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
@@ -164,11 +164,6 @@ const viewSubscription = (subscription: Subscription) => {
   viewingSubscription.value = subscription;
   showViewDialog.value = true;
 };
-
-// Edit subscription
-const editSubscription = (subscription: Subscription) => {
-  router.visit(`/admin/subscriptions/${subscription.id}/edit`);
-};
 </script>
 
 <template>
@@ -296,21 +291,12 @@ const editSubscription = (subscription: Subscription) => {
                   <TableCell class="text-center">
                     <div class="flex justify-center gap-2">
                       <!-- View Details -->
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         @click="viewSubscription(subscription)"
                       >
                         <Eye class="h-4 w-4" />
-                      </Button>
-
-                      <!-- Edit Subscription -->
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        @click="editSubscription(subscription)"
-                      >
-                        <Edit class="h-4 w-4" />
                       </Button>
 
                       <!-- Extend Subscription -->
@@ -573,10 +559,6 @@ const editSubscription = (subscription: Subscription) => {
           <div class="flex justify-end gap-3 pt-4 border-t">
             <Button variant="outline" @click="showViewDialog = false">
               Close
-            </Button>
-            <Button variant="outline" @click="editSubscription(viewingSubscription)">
-              <Edit class="h-4 w-4 mr-2" />
-              Edit
             </Button>
             <Button @click="selectedSubscription = viewingSubscription; showViewDialog = false">
               <Calendar class="h-4 w-4 mr-2" />

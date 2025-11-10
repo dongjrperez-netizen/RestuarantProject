@@ -445,9 +445,7 @@ setInterval(() => {
                 <Card>
                     <CardHeader class="flex flex-row items-center justify-between">
                         <CardTitle class="text-red-600">Low Stock Items</CardTitle>
-                        <Link href="/stock-list" class="text-sm text-muted-foreground hover:text-foreground">
-                            View inventory
-                        </Link>
+                        
                     </CardHeader>
                     <CardContent>
                         <div class="space-y-4">

@@ -28,6 +28,7 @@ interface SubscriptionPlan {
   plan_name: string;
   plan_price: number;
   plan_duration: number;
+  plan_duration_display?: string;
   paypal_plan_id?: string;
 }
 
@@ -177,7 +178,7 @@ const goBack = () => {
                                     {{ formatCurrency(plan.plan_price) }}
                                 </div>
                                 <div class="text-sm text-muted-foreground">
-                                    per {{ plan.plan_duration }} days
+                                    per {{ plan.plan_id == 4 ? plan.plan_duration + ' days' : (plan.plan_duration_display || plan.plan_duration + ' days') }}
                                 </div>
                                 <Badge
                                     v-if="props.currentSubscription && plan.plan_id === props.currentSubscription.plan_name"

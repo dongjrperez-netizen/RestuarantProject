@@ -39,6 +39,7 @@ interface SubscriptionPlan {
   plan_description: string;
   plan_price: number;
   plan_duration: number;
+  plan_duration_display?: string;
   plan_features: string;
   created_at: string;
 }
@@ -66,7 +67,6 @@ const adminForm = useForm({
 // Subscription Plan Management
 const planForm = useForm({
   plan_name: '',
-  plan_description: '',
   plan_price: 0,
   plan_duration: 30,
   plan_features: ''
@@ -103,7 +103,6 @@ const createPlan = () => {
 const editPlan = (plan: SubscriptionPlan) => {
   editingPlan.value = plan;
   planForm.plan_name = plan.plan_name;
-  planForm.plan_description = plan.plan_description;
   planForm.plan_price = plan.plan_price;
   planForm.plan_duration = plan.plan_duration;
   planForm.plan_features = plan.plan_features || '';
@@ -144,9 +143,9 @@ const formatDate = (dateString: string) => {
 };
 
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-PH', {
     style: 'currency',
-    currency: 'USD'
+    currency: 'PHP'
   }).format(amount);
 };
 </script>
@@ -331,14 +330,14 @@ const formatCurrency = (amount: number) => {
                         </div>
                         
                         <div>
-                          <Label for="plan_price">Price ($)</Label>
+                          <Label for="plan_price">Price (₱)</Label>
                           <Input
                             id="plan_price"
                             v-model="planForm.plan_price"
                             type="number"
                             step="0.01"
                             required
-                            placeholder="29.99"
+                            placeholder="1800"
                           />
                         </div>
                       </div>
@@ -353,17 +352,7 @@ const formatCurrency = (amount: number) => {
                           placeholder="30"
                         />
                       </div>
-                      
-                      <div>
-                        <Label for="plan_description">Description</Label>
-                        <Textarea
-                          id="plan_description"
-                          v-model="planForm.plan_description"
-                          required
-                          placeholder="Plan description..."
-                        />
-                      </div>
-                      
+
                       <div>
                         <Label for="plan_features">Features (optional)</Label>
                         <Textarea
@@ -387,7 +376,6 @@ const formatCurrency = (amount: number) => {
                     <TableHead>Plan Name</TableHead>
                     <TableHead>Price</TableHead>
                     <TableHead>Duration</TableHead>
-                    <TableHead>Description</TableHead>
                     <TableHead class="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -395,10 +383,7 @@ const formatCurrency = (amount: number) => {
                   <TableRow v-for="plan in subscriptionPlans" :key="plan.plan_id">
                     <TableCell class="font-medium">{{ plan.plan_name }}</TableCell>
                     <TableCell>{{ formatCurrency(plan.plan_price) }}</TableCell>
-                    <TableCell>{{ plan.plan_duration }} days</TableCell>
-                    <TableCell>
-                      <div class="max-w-xs truncate">{{ plan.plan_description }}</div>
-                    </TableCell>
+                    <TableCell>{{ plan.plan_duration_display || (plan.plan_duration + ' days') }}</TableCell>
                     <TableCell class="text-center">
                       <div class="flex justify-center gap-2">
                         <Button

@@ -319,7 +319,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Logout Button -->
-          <Button
+          <!-- <Button
             @click="logout"
             variant="ghost"
             size="sm"
@@ -327,7 +327,7 @@ onUnmounted(() => {
             :disabled="logoutForm.processing"
           >
             <LogOut class="h-4 w-4" />
-          </Button>
+          </Button> -->
         </div>
       </div>
     </header>
@@ -566,10 +566,10 @@ onUnmounted(() => {
               </div>
 
               <div class="text-right hidden md:block">
-                <p class="text-sm font-medium text-gray-900">{{ employee.firstname }} {{ employee.lastname }}</p>
+                <!-- <p class="text-sm font-medium text-gray-900">{{ employee.firstname }} {{ employee.lastname }}</p> -->
                 <p class="text-xs text-gray-500">{{ employee.role.role_name }}</p>
               </div>
-              <Button
+              <!-- <Button
                 @click="logout"
                 variant="ghost"
                 size="sm"
@@ -578,7 +578,7 @@ onUnmounted(() => {
               >
                 <LogOut class="h-4 w-4" />
                 <span class="text-sm hidden sm:inline ml-2">{{ logoutForm.processing ? 'Logging out...' : 'Logout' }}</span>
-              </Button>
+              </Button> -->
             </div>
           </div>
         </header>

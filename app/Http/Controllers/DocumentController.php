@@ -12,11 +12,9 @@ class DocumentController extends Controller
     public function index()
     {
         $pendingApplications = $this->getApplicationsByStatus('Pending');
-        $allApplications = $this->getApplicationsByStatus();
 
         return Inertia::render('Admin/PendingAccounts', [
             'pendingApplications' => $pendingApplications,
-            'allApplications' => $allApplications,
         ]);
     }
 

@@ -245,13 +245,6 @@ const hasRequiredDocuments = () => {
           {{ hasRequiredDocuments() ? 'Upload Documents' : 'Please upload all required documents' }}
         </Button>
       </div>
-
-      <div class="text-center text-sm text-muted-foreground">
-        You can upload these later from your account settings
-        <TextLink :href="route('home')" class="underline underline-offset-4">
-          Skip for now
-        </TextLink>
-      </div>
     </form>
   </AuthBase>
 </template>

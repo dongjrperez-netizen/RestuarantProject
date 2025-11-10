@@ -171,10 +171,6 @@ class RenewSubscriptionController extends Controller
                 'restaurant_id' => $restaurantId,
             ]);
 
-            // Update user role to premium
-            $user->role_id = 2;
-            $user->save();
-
             DB::commit();
 
             return redirect()->route('dashboard')->with('success', 'Subscription renewed successfully!');

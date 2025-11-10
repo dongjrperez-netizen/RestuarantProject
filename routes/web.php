@@ -40,6 +40,15 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 })->name('home');
 
+// Terms of Service and Privacy Policy
+Route::get('/terms', function () {
+    return Inertia::render('TermsOfService');
+})->name('terms');
+
+Route::get('/privacy', function () {
+    return Inertia::render('PrivacyPolicy');
+})->name('privacy');
+
 // Custom broadcasting auth endpoint that supports multiple guards
 Route::post('/broadcasting-custom-auth', function (Illuminate\Http\Request $request) {
     // Find authenticated user from any guard
@@ -273,6 +282,7 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('/admin/users/{id}', [AdminUserController::class, 'show'])->name('admin.users.show');
     Route::post('/admin/users/{id}/status', [AdminUserController::class, 'updateStatus'])->name('admin.users.status');
     Route::post('/admin/users/{id}/toggle-email', [AdminUserController::class, 'toggleEmailVerification'])->name('admin.users.toggle-email');
+    Route::post('/admin/users/{id}/send-email', [AdminUserController::class, 'sendEmail'])->name('admin.users.send-email');
     Route::post('/admin/users/{id}/reset-password', [AdminUserController::class, 'resetPassword'])->name('admin.users.reset-password');
     Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy'])->name('admin.users.destroy');
 

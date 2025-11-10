@@ -40,11 +40,18 @@ class SupplierBillController extends Controller
                 ];
             });
 
+        // Calculate paid this month by summing payments made in current month
+        $paidThisMonth = \App\Models\SupplierPayment::where('restaurant_id', $restaurantId)
+            ->whereYear('payment_date', now()->year)
+            ->whereMonth('payment_date', now()->month)
+            ->sum('payment_amount');
+
         $summary = [
             'total_outstanding' => $bills->sum('outstanding_amount'),
             'overdue_amount' => $bills->where('is_overdue', true)->sum('outstanding_amount'),
             'total_bills' => $bills->count(),
             'overdue_count' => $bills->where('is_overdue', true)->count(),
+            'paid_this_month' => $paidThisMonth,
         ];
 
         return Inertia::render('Bills/Index', [

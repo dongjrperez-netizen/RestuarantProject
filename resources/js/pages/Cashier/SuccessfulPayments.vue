@@ -160,12 +160,7 @@ const mockStats = {
                             <div class="text-right">
                                 <div class="text-2xl font-bold">₱{{ Number(order.total_amount || 0).toFixed(2) }}</div>
                                 <div class="flex gap-2 mt-2">
-                                    <Button size="sm" variant="outline">
-                                        View Receipt
-                                    </Button>
-                                    <Button size="sm" variant="secondary">
-                                        Print Receipt
-                                    </Button>
+                            
                                 </div>
                             </div>
                         </div>
@@ -177,32 +172,7 @@ const mockStats = {
                 </CardContent>
             </Card>
 
-            <!-- Quick Actions -->
-            <Card>
-                <CardHeader>
-                    <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Button variant="outline" class="h-20 flex-col gap-2">
-                            <Receipt class="w-6 h-6" />
-                            <span>Daily Report</span>
-                        </Button>
-                        <Button variant="outline" class="h-20 flex-col gap-2">
-                            <DollarSign class="w-6 h-6" />
-                            <span>Cash Drawer</span>
-                        </Button>
-                        <Button variant="outline" class="h-20 flex-col gap-2">
-                            <ShoppingCart class="w-6 h-6" />
-                            <span>All Orders</span>
-                        </Button>
-                        <Button variant="outline" class="h-20 flex-col gap-2">
-                            <Users class="w-6 h-6" />
-                            <span>Table Status</span>
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
+            
         </div>
     </CashierLayout>
 </template>

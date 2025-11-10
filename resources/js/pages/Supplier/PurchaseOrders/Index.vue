@@ -73,12 +73,12 @@ const needsAction = (status: string) => {
   <Head title="Purchase Orders" />
 
   <SupplierLayout>
-    <div class="space-y-6">
+    <div class="space-y-4 md:space-y-6 p-4 md:p-6">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-3xl font-bold tracking-tight">Purchase Orders</h1>
-          <p class="text-muted-foreground">Manage orders from restaurants and track deliveries</p>
+          <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Purchase Orders</h1>
+          <p class="text-sm md:text-base text-muted-foreground">Manage orders from restaurants and track deliveries</p>
         </div>
       </div>
 
@@ -131,85 +131,142 @@ const needsAction = (status: string) => {
         </Card>
       </div>
 
-      <!-- Purchase Orders Table -->
+      <!-- Purchase Orders List -->
       <Card>
         <CardHeader>
           <CardTitle>Purchase Orders</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>PO Number</TableHead>
-                <TableHead>Restaurant</TableHead>
-                <TableHead>Order Date</TableHead>
-                <TableHead>Expected Delivery</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Total Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead class="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="order in purchaseOrders" :key="order.purchase_order_id">
-                <TableCell class="font-medium">
-                  {{ order.po_number }}
-                </TableCell>
-                <TableCell>
-                  <div>
-                    <div class="font-medium">{{ order.restaurant.restaurant_name }}</div>
-                    <div class="text-sm text-muted-foreground">{{ order.restaurant.contact_number }}</div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {{ formatDate(order.order_date) }}
-                </TableCell>
-                <TableCell>
-                  <span v-if="order.expected_delivery_date">
-                    {{ formatDate(order.expected_delivery_date) }}
-                  </span>
-                  <span v-else class="text-muted-foreground">-</span>
-                </TableCell>
-                <TableCell>
-                  <div class="text-sm">
-                    <div>{{ order.items.length }} types</div>
-                    <div class="text-muted-foreground">{{ getTotalItems(order.items) }} total qty</div>
-                  </div>
-                </TableCell>
-                <TableCell class="font-medium">
-                  {{ formatCurrency(order.total_amount) }}
-                </TableCell>
-                <TableCell>
-                  <div class="flex items-center gap-2">
-                    <Badge :variant="getStatusBadge(order.status).variant">
+          <!-- Desktop Table View (hidden on mobile) -->
+          <div class="hidden md:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>PO Number</TableHead>
+                  <TableHead>Restaurant</TableHead>
+                  <TableHead>Order Date</TableHead>
+                  <TableHead>Expected Delivery</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead>Total Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead class="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="order in purchaseOrders" :key="order.purchase_order_id">
+                  <TableCell class="font-medium">
+                    {{ order.po_number }}
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <div class="font-medium">{{ order.restaurant.restaurant_name }}</div>
+                      <div class="text-sm text-muted-foreground">{{ order.restaurant.contact_number }}</div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {{ formatDate(order.order_date) }}
+                  </TableCell>
+                  <TableCell>
+                    <span v-if="order.expected_delivery_date">
+                      {{ formatDate(order.expected_delivery_date) }}
+                    </span>
+                    <span v-else class="text-muted-foreground">-</span>
+                  </TableCell>
+                  <TableCell>
+                    <div class="text-sm">
+                      <div>{{ order.items.length }} types</div>
+                      <div class="text-muted-foreground">{{ getTotalItems(order.items) }} total qty</div>
+                    </div>
+                  </TableCell>
+                  <TableCell class="font-medium">
+                    {{ formatCurrency(order.total_amount) }}
+                  </TableCell>
+                  <TableCell>
+                    <div class="flex items-center gap-2">
+                      <Badge :variant="getStatusBadge(order.status).variant">
+                        {{ getStatusBadge(order.status).label }}
+                      </Badge>
+                      <Clock
+                        v-if="needsAction(order.status)"
+                        class="h-4 w-4 text-orange-500 animate-pulse"
+                        title="Action Required"
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <Link :href="`/supplier/purchase-orders/${order.purchase_order_id}`">
+                      <Button variant="outline" size="sm">
+                        <Eye class="h-4 w-4 mr-2" />
+                        View Details
+                      </Button>
+                    </Link>
+                  </TableCell>
+                </TableRow>
+                <TableRow v-if="purchaseOrders.length === 0">
+                  <TableCell colspan="8" class="text-center py-8">
+                    <div class="text-muted-foreground">
+                      <div class="text-lg mb-2">No purchase orders found</div>
+                      <div class="text-sm">Orders from restaurants will appear here.</div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+
+          <!-- Mobile Card View (hidden on desktop) -->
+          <div class="md:hidden space-y-3">
+            <div v-if="purchaseOrders.length === 0" class="text-center py-8">
+              <div class="text-muted-foreground">
+                <div class="text-base mb-2">No purchase orders found</div>
+                <div class="text-sm">Orders from restaurants will appear here.</div>
+              </div>
+            </div>
+            <Link
+              v-for="order in purchaseOrders"
+              :key="order.purchase_order_id"
+              :href="`/supplier/purchase-orders/${order.purchase_order_id}`"
+              class="block"
+            >
+              <Card class="hover:bg-gray-50 transition-colors">
+                <CardContent class="p-4">
+                  <div class="flex items-start justify-between mb-3">
+                    <div class="flex-1">
+                      <div class="font-semibold text-base">{{ order.po_number }}</div>
+                      <div class="text-sm text-muted-foreground mt-1">
+                        {{ order.restaurant.restaurant_name }}
+                      </div>
+                    </div>
+                    <Badge :variant="getStatusBadge(order.status).variant" class="text-xs">
                       {{ getStatusBadge(order.status).label }}
                     </Badge>
-                    <Clock 
-                      v-if="needsAction(order.status)" 
-                      class="h-4 w-4 text-orange-500 animate-pulse" 
-                      title="Action Required"
-                    />
                   </div>
-                </TableCell>
-                <TableCell class="text-right">
-                  <Link :href="`/supplier/purchase-orders/${order.purchase_order_id}`">
+
+                  <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+                    <div>
+                      <div class="text-muted-foreground text-xs">Order Date</div>
+                      <div>{{ formatDate(order.order_date) }}</div>
+                    </div>
+                    <div>
+                      <div class="text-muted-foreground text-xs">Items</div>
+                      <div>{{ order.items.length }} types ({{ getTotalItems(order.items) }} qty)</div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between pt-3 border-t">
+                    <div>
+                      <div class="text-xs text-muted-foreground">Total Amount</div>
+                      <div class="font-semibold text-lg">{{ formatCurrency(order.total_amount) }}</div>
+                    </div>
                     <Button variant="outline" size="sm">
-                      <Eye class="h-4 w-4 mr-2" />
-                      View Details
+                      <Eye class="h-4 w-4 mr-1" />
+                      View
                     </Button>
-                  </Link>
-                </TableCell>
-              </TableRow>
-              <TableRow v-if="purchaseOrders.length === 0">
-                <TableCell colspan="8" class="text-center py-8">
-                  <div class="text-muted-foreground">
-                    <div class="text-lg mb-2">No purchase orders found</div>
-                    <div class="text-sm">Orders from restaurants will appear here.</div>
                   </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

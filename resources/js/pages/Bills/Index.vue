@@ -33,6 +33,7 @@ interface Summary {
   overdue_amount: number;
   total_bills: number;
   overdue_count: number;
+  paid_this_month: number;
 }
 
 interface Props {
@@ -172,13 +173,7 @@ const getPaymentProgress = (bill: Bill) => {
           </CardHeader>
           <CardContent>
             <div class="text-2xl font-bold text-green-600">
-              {{
-                formatCurrency(
-                  bills
-                    .filter(b => ['paid', 'partially_paid'].includes(b.status))
-                    .reduce((sum, b) => sum + Number(b.paid_amount || 0), 0)
-                )
-              }}
+              {{ formatCurrency(summary.paid_this_month) }}
             </div>
           </CardContent>
         </Card>

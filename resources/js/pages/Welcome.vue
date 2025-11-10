@@ -13,13 +13,14 @@ import {
 const pricingPlans = [
   {
     name: 'Basic',
-    price: '₱1,650',
+    price: '₱1,800',
     period: 'per month',
     description: 'Perfect for small restaurants and cafes',
     features: [
       '5 Employee Accounts',
       '10 Supplier Accounts',
-      'Basic Inventory Management',
+      'Inventory Management',
+      'Waiter Dashboard',
       'Order Processing',
       'Kitchen Dashboard',
       'Sales Reports',
@@ -35,13 +36,14 @@ const pricingPlans = [
     features: [
       '10 Employee Accounts',
       '15 Supplier Accounts',
-      'Advanced Inventory Management',
+      'Regular Employee CRUD',
+      'Inventory Management',
       'Order Processing & Tracking',
       'Kitchen Dashboard',
+      'Waiter Dashboard',
       'Advanced Analytics & Reports',
       'Menu Planning',
-      'Priority Email Support',
-      'Phone Support'
+      'Email Support'
     ],
     popular: true
   },
@@ -98,27 +100,6 @@ const features = [
     description: 'Enterprise-grade security with role-based access control and document verification.'
   }
 ];
-
-const testimonials = [
-  {
-    name: 'Maria Rodriguez',
-    restaurant: 'La Cocina Moderna',
-    text: 'ServeWise transformed how we manage our restaurant. Inventory tracking is a game-changer!',
-    rating: 5
-  },
-  {
-    name: 'James Chen',
-    restaurant: 'Fusion Bistro',
-    text: 'The order management system reduced our kitchen chaos by 80%. Highly recommended!',
-    rating: 5
-  },
-  {
-    name: 'Sarah Johnson',
-    restaurant: 'Garden Grill',
-    text: 'Staff scheduling and management became so much easier. Our team loves the platform.',
-    rating: 5
-  }
-];
 </script>
 
 <template>
@@ -129,46 +110,41 @@ const testimonials = [
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kaushan+Script&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet" />
   </Head>
 
-  <div class="min-h-screen bg-white">
+  <div class="min-h-screen bg-white scroll-smooth">
     <!-- HERO SECTION -->
     <div class="relative min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <!-- Background Image -->
-      <div class="absolute inset-0 bg-[url('/RestoBG.jpg')] bg-cover bg-center bg-no-repeat"></div>
-      <!-- Dark Overlay -->
-      <div class="absolute inset-0 bg-black/60"></div>
-
       <!-- Navigation -->
-      <nav class="relative z-20 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+      <nav class="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 py-2 sm:py-3 bg-slate-900/90 backdrop-blur-sm">
         <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <!-- Logo Section -->
-          <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <AppLogoIcon class="w-8 h-8 sm:w-10 md:w-12 sm:h-10 md:h-12" />
-            <div class="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-orange-500" style="font-family: 'Kaushan Script', cursive;">
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <AppLogoIcon class="w-6 h-6 sm:w-8 md:w-9 sm:h-8 md:h-9" />
+            <div class="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-orange-500" style="font-family: 'Kaushan Script', cursive;">
               ServeWise
             </div>
           </div>
 
           <!-- Desktop Navigation Menu -->
-          <div class="hidden lg:flex space-x-8 text-white/80 text-base">
-            <a href="#features" class="hover:text-white transition-colors">Features</a>
-            <a href="#testimonials" class="hover:text-white transition-colors">Reviews</a>
-            <a href="#pricing" class="hover:text-white transition-colors">Pricing</a>
+          <div class="hidden lg:flex space-x-6 text-white text-sm">
+            <a href="#features" class="hover:text-orange-300 transition-colors">Features</a>
+            <a href="#contact" class="hover:text-orange-300 transition-colors">Contact Us</a>
+            <a href="#pricing" class="hover:text-orange-300 transition-colors">Pricing</a>
           </div>
 
           <!-- Auth Buttons -->
-          <div class="flex gap-3 items-center flex-shrink-0">
+          <div class="flex gap-2 items-center flex-shrink-0">
             <Link v-if="$page.props.auth.user"
                   :href="route('dashboard')"
-                  class="px-4 sm:px-5 md:px-6 py-2 bg-orange-500 text-white text-sm md:text-base rounded-full hover:bg-orange-600 transition font-semibold">
+                  class="px-4 sm:px-5 py-1.5 sm:py-2 bg-orange-500 text-white text-xs sm:text-sm rounded-full hover:bg-orange-600 transition font-semibold">
               Dashboard
             </Link>
             <template v-else>
               <Link :href="route('login')"
-                    class="px-4 md:px-6 py-2 text-white hover:text-orange-300 transition font-medium text-sm md:text-base">
+                    class="px-3 sm:px-4 py-1.5 sm:py-2 text-white hover:text-orange-300 transition font-medium text-xs sm:text-sm">
                 Sign In
               </Link>
               <Link :href="route('register')"
-                    class="px-4 md:px-6 py-2 bg-orange-500 text-white text-sm md:text-base rounded-full hover:bg-orange-600 transition font-semibold whitespace-nowrap">
+                    class="px-3 sm:px-4 py-1.5 sm:py-2 bg-orange-500 text-white text-xs sm:text-sm rounded-full hover:bg-orange-600 transition font-semibold whitespace-nowrap">
                 Get Started
               </Link>
             </template>
@@ -177,18 +153,18 @@ const testimonials = [
       </nav>
 
       <!-- Hero Content -->
-      <div class="relative z-10 flex flex-col items-center justify-center min-h-[70vh] sm:min-h-[80vh] text-center px-4 sm:px-6">
+      <div class="relative z-10 flex flex-col items-center justify-center min-h-[70vh] sm:min-h-[80vh] text-center px-4 sm:px-6 pt-20 sm:pt-24 md:pt-28">
         <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white mb-4 sm:mb-6 leading-tight" style="font-family: 'Playfair Display', serif;">
           Restaurant Management
           <span class="block text-orange-500">Made Simple</span>
         </h1>
-        <p class="text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300 mb-6 sm:mb-8 max-w-3xl font-light leading-relaxed px-2">
+        <p class="text-base sm:text-lg md:text-xl lg:text-2xl text-white mb-6 sm:mb-8 max-w-3xl font-light leading-relaxed px-2">
           From inventory tracking to order management, ServeWise provides everything you need to run a successful restaurant with confidence and style.
         </p>
         <div class="flex flex-col sm:flex-row gap-4 sm:gap-6 mt-4 sm:mt-8 w-full sm:w-auto px-4 sm:px-0">
           <Link :href="route('register')"
                 class="bg-orange-500 text-white px-6 sm:px-8 md:px-10 py-3 sm:py-4 rounded-full text-base sm:text-lg font-semibold hover:bg-orange-600 transition-all transform hover:scale-105 shadow-lg">
-            Start Free Trial
+            Get Started
           </Link>
           <a href="#features"
              class="border-2 border-white/30 text-white px-6 sm:px-8 md:px-10 py-3 sm:py-4 rounded-full text-base sm:text-lg font-semibold hover:bg-white hover:text-slate-900 transition-all">
@@ -239,28 +215,49 @@ const testimonials = [
       </div>
     </section>
 
-    <!-- TESTIMONIALS SECTION -->
-    <section id="testimonials" class="py-12 sm:py-16 md:py-20 bg-slate-50">
+    <!-- GALLERY SECTION -->
+    <section id="gallery" class="py-12 sm:py-16 md:py-20 bg-slate-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6">
         <div class="text-center mb-10 sm:mb-12 md:mb-16">
           <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 sm:mb-6 px-2" style="font-family: 'Playfair Display', serif;">
-            Loved by Restaurant Owners
+            See ServeWise in Action
           </h2>
           <p class="text-base sm:text-lg md:text-xl text-gray-600 max-w-2xl mx-auto px-4">
-            Don't just take our word for it. Here's what real restaurant owners say about ServeWise.
+            Experience the power of modern restaurant management
           </p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
-          <div v-for="testimonial in testimonials" :key="testimonial.name"
-               class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex mb-3 sm:mb-4">
-              <span v-for="n in testimonial.rating" :key="n" class="text-orange-400 text-lg sm:text-xl">★</span>
+          <!-- Dish Food Image -->
+          <div class="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+            <img src="/dish food.jpg" alt="Delicious Food" class="w-full h-64 sm:h-72 md:h-80 object-cover">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end">
+              <div class="p-6 text-white">
+                <h3 class="text-xl font-bold mb-2">Quality Dishes</h3>
+                <p class="text-sm text-gray-200">Manage your menu with precision</p>
+              </div>
             </div>
-            <p class="text-sm sm:text-base text-gray-700 mb-4 sm:mb-6 italic leading-relaxed">"{{ testimonial.text }}"</p>
-            <div>
-              <div class="text-sm sm:text-base font-semibold text-gray-900">{{ testimonial.name }}</div>
-              <div class="text-sm sm:text-base text-orange-600 font-medium">{{ testimonial.restaurant }}</div>
+          </div>
+
+          <!-- Table Image -->
+          <div class="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+            <img src="/Table.jpg" alt="Restaurant Table" class="w-full h-64 sm:h-72 md:h-80 object-cover">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end">
+              <div class="p-6 text-white">
+                <h3 class="text-xl font-bold mb-2">Table Management</h3>
+                <p class="text-sm text-gray-200">Optimize seating and reservations</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Waiter Image -->
+          <div class="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+            <img src="/Waiter.avif" alt="Professional Service" class="w-full h-64 sm:h-72 md:h-80 object-cover">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end">
+              <div class="p-6 text-white">
+                <h3 class="text-xl font-bold mb-2">Staff Efficiency</h3>
+                <p class="text-sm text-gray-200">Streamline operations and service</p>
+              </div>
             </div>
           </div>
         </div>
@@ -417,7 +414,7 @@ const testimonials = [
     </section>
 
     <!-- FOOTER -->
-    <footer class="bg-slate-900 text-white py-8 sm:py-12">
+    <footer id="contact" class="bg-slate-900 text-white py-8 sm:py-12">
       <div class="max-w-7xl mx-auto px-4 sm:px-6">
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           <div class="col-span-1 sm:col-span-2">
@@ -442,11 +439,24 @@ const testimonials = [
           </div>
 
           <div>
-            <h4 class="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Support</h4>
+            <h4 class="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Contact Us</h4>
             <ul class="space-y-2 text-gray-400 text-sm sm:text-base">
-              <li><a href="#" class="hover:text-white transition">Help Center</a></li>
-              <li><a href="#" class="hover:text-white transition">Contact Us</a></li>
-              <li><a href="#" class="hover:text-white transition">Status</a></li>
+              <li>
+                <a href="https://web.facebook.com/roger.perez.308346/" target="_blank" rel="noopener noreferrer" class="hover:text-white transition flex items-center gap-2">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  Facebook
+                </a>
+              </li>
+              <li>
+                <a href="mailto:rogerjrperez286@gmail.com" class="hover:text-white transition flex items-center gap-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                  </svg>
+                  rogerjrperez286@gmail.com
+                </a>
+              </li>
             </ul>
           </div>
         </div>
@@ -456,12 +466,17 @@ const testimonials = [
             &copy; {{ new Date().getFullYear() }} ServeWise. All rights reserved.
           </p>
           <div class="flex gap-4 sm:gap-6 text-xs sm:text-sm">
-            <a href="#" class="text-gray-400 hover:text-white transition">Privacy</a>
-            <a href="#" class="text-gray-400 hover:text-white transition">Terms</a>
-            <a href="#" class="text-gray-400 hover:text-white transition">Cookies</a>
+            <Link href="/privacy" target="_blank" class="text-gray-400 hover:text-white transition">Privacy Policy</Link>
+            <Link href="/terms" target="_blank" class="text-gray-400 hover:text-white transition">Terms of Service</Link>
           </div>
         </div>
       </div>
     </footer>
   </div>
 </template>
+
+<style>
+html {
+  scroll-behavior: smooth;
+}
+</style>

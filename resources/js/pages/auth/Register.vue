@@ -34,6 +34,7 @@ const form = useForm({
   address: '',
   postal_code:'',
   contact_number: '',
+  terms_accepted: false,
 });
 
 const hasErrors = computed(() => {
@@ -288,6 +289,27 @@ const closeModal = () => {
               placeholder="Confirm your password"
               class="text-sm"
             />
+          </div>
+
+          <!-- Terms & Privacy Checkbox -->
+          <div class="space-y-2 pt-2">
+            <label class="flex items-start space-x-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                v-model="form.terms_accepted"
+                required
+                class="w-4 h-4 mt-0.5 text-orange-500 border-gray-300 rounded focus:ring-orange-500 focus:ring-2 cursor-pointer"
+              />
+              <span class="text-xs sm:text-sm text-gray-700 leading-relaxed">
+                I agree to the
+                <a href="/terms" target="_blank" class="text-orange-500 hover:text-orange-600 font-medium underline">Terms of Service</a>
+                and
+                <a href="/privacy" target="_blank" class="text-orange-500 hover:text-orange-600 font-medium underline">Privacy Policy</a>
+              </span>
+            </label>
+            <p v-if="form.errors.terms_accepted" class="text-xs text-red-600">
+              {{ form.errors.terms_accepted }}
+            </p>
           </div>
         </div>
 

@@ -62,11 +62,11 @@ const formatDate = (dateString: string) => {
   <Head title="Supplier Dashboard" />
 
   <SupplierLayout :supplier="supplier">
-    <div class="space-y-6">
+    <div class="space-y-4 md:space-y-6 p-4 md:p-6">
       <!-- Welcome Section -->
       <div>
-        <h1 class="text-3xl font-bold tracking-tight">Welcome back, {{ supplier.supplier_name }}!</h1>
-        <p class="text-muted-foreground">Here's an overview of your supplier activities</p>
+        <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Welcome back, {{ supplier.supplier_name }}!</h1>
+        <p class="text-sm md:text-base text-muted-foreground">Here's an overview of your supplier activities</p>
       </div>
 
       <!-- Stats Cards -->
@@ -124,26 +124,26 @@ const formatDate = (dateString: string) => {
           <div v-if="recentOrders.length === 0" class="text-center py-8 text-muted-foreground">
             No recent orders found
           </div>
-          <div v-else class="space-y-4">
+          <div v-else class="space-y-3">
             <Link
-              v-for="order in recentOrders" 
+              v-for="order in recentOrders"
               :key="order.purchase_order_id"
               :href="`/supplier/purchase-orders/${order.purchase_order_id}`"
-              class="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+              class="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 md:p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer gap-2"
             >
               <div class="flex-1">
-                <div class="flex items-center gap-3">
-                  <div class="font-medium">{{ order.po_number }}</div>
-                  <Badge :class="getStatusColor(order.status)">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <div class="font-medium text-sm md:text-base">{{ order.po_number }}</div>
+                  <Badge :class="getStatusColor(order.status)" class="text-xs">
                     {{ order.status.replace('_', ' ').toUpperCase() }}
                   </Badge>
                 </div>
-                <div class="text-sm text-muted-foreground mt-1">
+                <div class="text-xs md:text-sm text-muted-foreground mt-1">
                   {{ order.restaurant.restaurant_name }} • {{ formatDate(order.order_date) }}
                 </div>
               </div>
-              <div class="text-right">
-                <div class="font-medium">{{ formatCurrency(order.total_amount) }}</div>
+              <div class="text-left sm:text-right">
+                <div class="font-medium text-sm md:text-base">{{ formatCurrency(order.total_amount) }}</div>
               </div>
             </Link>
           </div>
@@ -159,49 +159,49 @@ const formatDate = (dateString: string) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div class="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-            <a 
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <a
               href="/supplier/ingredients/create"
-              class="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+              class="flex items-start p-3 md:p-4 border rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <Package class="h-8 w-8 text-primary mr-3" />
+              <Package class="h-6 w-6 md:h-8 md:w-8 text-primary mr-3 flex-shrink-0" />
               <div>
-                <div class="font-medium">Add New Ingredient</div>
-                <div class="text-sm text-muted-foreground">Offer a new ingredient to restaurants</div>
-              </div>
-            </a>
-            
-            <a 
-              href="/supplier/ingredients"
-              class="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <CheckCircle class="h-8 w-8 text-primary mr-3" />
-              <div>
-                <div class="font-medium">Manage Ingredients</div>
-                <div class="text-sm text-muted-foreground">Update your ingredient offers</div>
+                <div class="font-medium text-sm md:text-base">Add New Ingredient</div>
+                <div class="text-xs md:text-sm text-muted-foreground">Offer a new ingredient to restaurants</div>
               </div>
             </a>
 
-            <a 
-              href="/supplier/purchase-orders"
-              class="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+            <a
+              href="/supplier/ingredients"
+              class="flex items-start p-3 md:p-4 border rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <ShoppingCart class="h-8 w-8 text-primary mr-3" />
+              <CheckCircle class="h-6 w-6 md:h-8 md:w-8 text-primary mr-3 flex-shrink-0" />
               <div>
-                <div class="font-medium">View All Orders</div>
-                <div class="text-sm text-muted-foreground">Manage purchase orders from restaurants</div>
+                <div class="font-medium text-sm md:text-base">Manage Ingredients</div>
+                <div class="text-xs md:text-sm text-muted-foreground">Update your ingredient offers</div>
+              </div>
+            </a>
+
+            <a
+              href="/supplier/purchase-orders"
+              class="flex items-start p-3 md:p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <ShoppingCart class="h-6 w-6 md:h-8 md:w-8 text-primary mr-3 flex-shrink-0" />
+              <div>
+                <div class="font-medium text-sm md:text-base">View All Orders</div>
+                <div class="text-xs md:text-sm text-muted-foreground">Manage purchase orders from restaurants</div>
               </div>
             </a>
 
             <!-- 🆕 View History -->
-            <a 
+            <a
               href="/supplier/payments/history"
-              class="flex items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+              class="flex items-start p-3 md:p-4 border rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <Clock class="h-8 w-8 text-primary mr-3" />
+              <Clock class="h-6 w-6 md:h-8 md:w-8 text-primary mr-3 flex-shrink-0" />
               <div>
-                <div class="font-medium">View History</div>
-                <div class="text-sm text-muted-foreground">Check your past transactions and order logs</div>
+                <div class="font-medium text-sm md:text-base">View History</div>
+                <div class="text-xs md:text-sm text-muted-foreground">Check your past transactions and order logs</div>
               </div>
             </a>
           </div>

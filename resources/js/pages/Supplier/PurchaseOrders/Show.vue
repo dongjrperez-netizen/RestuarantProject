@@ -141,30 +141,29 @@ const markDelivered = () => {
   <Head :title="`Purchase Order ${purchaseOrder.po_number}`" />
 
   <SupplierLayout>
-    <div class="space-y-6">
+    <div class="space-y-4 md:space-y-6 p-4 md:p-6">
       <!-- Header -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-4">
-          <Link href="/supplier/purchase-orders">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft class="h-4 w-4 mr-2" />
-              Back to Orders
-            </Button>
-          </Link>
-          <div>
-            <h1 class="text-3xl font-bold tracking-tight">{{ purchaseOrder.po_number }}</h1>
-            <p class="text-muted-foreground">Purchase order from {{ purchaseOrder.restaurant.restaurant_name }}</p>
+      <div class="flex flex-col space-y-3">
+        <Link href="/supplier/purchase-orders">
+          <Button variant="ghost" size="sm" class="self-start">
+            <ArrowLeft class="h-4 w-4 mr-2" />
+            Back to Orders
+          </Button>
+        </Link>
+
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div class="flex-1">
+            <h1 class="text-2xl md:text-3xl font-bold tracking-tight">{{ purchaseOrder.po_number }}</h1>
+            <p class="text-sm md:text-base text-muted-foreground">Purchase order from {{ purchaseOrder.restaurant.restaurant_name }}</p>
           </div>
-        </div>
-        <div class="flex items-center space-x-2">
-          <Badge :variant="getStatusBadge(purchaseOrder.status).variant">
+          <Badge :variant="getStatusBadge(purchaseOrder.status).variant" class="self-start sm:self-center">
             {{ getStatusBadge(purchaseOrder.status).label }}
           </Badge>
         </div>
       </div>
 
       <!-- Action Buttons -->
-      <div v-if="canConfirm(purchaseOrder.status) || canReject(purchaseOrder.status) || canMarkDelivered(purchaseOrder.status)" class="flex space-x-2">
+      <div v-if="canConfirm(purchaseOrder.status) || canReject(purchaseOrder.status) || canMarkDelivered(purchaseOrder.status)" class="flex flex-col sm:flex-row gap-2">
         <Button 
           v-if="canConfirm(purchaseOrder.status)"
           @click="showConfirmDialog = true"
@@ -193,56 +192,87 @@ const markDelivered = () => {
         </Button> -->
       </div>
 
-      <div class="grid gap-6 lg:grid-cols-3">
+      <div class="grid gap-4 md:gap-6 lg:grid-cols-3">
         <!-- Order Details -->
-        <div class="lg:col-span-2 space-y-6">
+        <div class="lg:col-span-2 space-y-4 md:space-y-6">
           <!-- Order Items -->
           <Card>
             <CardHeader>
-              <CardTitle>Order Items</CardTitle>
+              <CardTitle class="text-lg md:text-xl">Order Items</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ingredient</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Unit Price</TableHead>
-                    <TableHead>Unit</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Notes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow v-for="item in purchaseOrder.items" :key="item.purchase_order_item_id">
-                    <TableCell class="font-medium">
-                      {{ item.ingredient.ingredient_name }}
-                    </TableCell>
-                    <TableCell>
-                      {{ item.ordered_quantity }}
-                    </TableCell>
-                    <TableCell>
-                      {{ formatCurrency(item.unit_price) }}
-                    </TableCell>
-                    <TableCell>
-                      {{ item.unit_of_measure }}
-                    </TableCell>
-                    <TableCell class="font-medium">
-                      {{ formatCurrency(item.total_price) }}
-                    </TableCell>
-                    <TableCell>
-                      <span v-if="item.notes" class="text-sm text-muted-foreground">{{ item.notes }}</span>
-                      <span v-else class="text-muted-foreground">-</span>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              
+              <!-- Desktop Table View (hidden on mobile) -->
+              <div class="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ingredient</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Unit Price</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow v-for="item in purchaseOrder.items" :key="item.purchase_order_item_id">
+                      <TableCell class="font-medium">
+                        {{ item.ingredient.ingredient_name }}
+                      </TableCell>
+                      <TableCell>
+                        {{ item.ordered_quantity }}
+                      </TableCell>
+                      <TableCell>
+                        {{ formatCurrency(item.unit_price) }}
+                      </TableCell>
+                      <TableCell>
+                        {{ item.unit_of_measure }}
+                      </TableCell>
+                      <TableCell class="font-medium">
+                        {{ formatCurrency(item.total_price) }}
+                      </TableCell>
+                      <TableCell>
+                        <span v-if="item.notes" class="text-sm text-muted-foreground">{{ item.notes }}</span>
+                        <span v-else class="text-muted-foreground">-</span>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+
+              <!-- Mobile Card View (hidden on desktop) -->
+              <div class="md:hidden space-y-3">
+                <div v-for="item in purchaseOrder.items" :key="item.purchase_order_item_id" class="border rounded-lg p-3">
+                  <div class="font-semibold text-base mb-2">{{ item.ingredient.ingredient_name }}</div>
+
+                  <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <div class="text-muted-foreground text-xs">Quantity</div>
+                      <div class="font-medium">{{ item.ordered_quantity }} {{ item.unit_of_measure }}</div>
+                    </div>
+                    <div>
+                      <div class="text-muted-foreground text-xs">Unit Price</div>
+                      <div>{{ formatCurrency(item.unit_price) }}</div>
+                    </div>
+                  </div>
+
+                  <div class="mt-2 pt-2 border-t flex justify-between items-center">
+                    <div class="text-xs text-muted-foreground">Total</div>
+                    <div class="font-semibold text-base">{{ formatCurrency(item.total_price) }}</div>
+                  </div>
+
+                  <div v-if="item.notes" class="mt-2 pt-2 border-t">
+                    <div class="text-xs text-muted-foreground">Notes</div>
+                    <div class="text-sm">{{ item.notes }}</div>
+                  </div>
+                </div>
+              </div>
+
               <!-- Order Total -->
-              <div class="border-t pt-4 mt-4">
+              <div class="border-t pt-3 md:pt-4 mt-3 md:mt-4">
                 <div class="flex justify-between items-center">
-                  <span class="text-lg font-semibold">Total Amount</span>
-                  <span class="text-xl font-bold">{{ formatCurrency(purchaseOrder.total_amount) }}</span>
+                  <span class="text-base md:text-lg font-semibold">Total Amount</span>
+                  <span class="text-lg md:text-xl font-bold">{{ formatCurrency(purchaseOrder.total_amount) }}</span>
                 </div>
               </div>
             </CardContent>
@@ -251,14 +281,14 @@ const markDelivered = () => {
           <!-- Notes and Instructions -->
           <Card v-if="purchaseOrder.notes || purchaseOrder.delivery_instructions">
             <CardHeader>
-              <CardTitle>Additional Information</CardTitle>
+              <CardTitle class="text-lg md:text-xl">Additional Information</CardTitle>
             </CardHeader>
-            <CardContent class="space-y-4">
+            <CardContent class="space-y-3 md:space-y-4">
               <div v-if="purchaseOrder.notes">
                 <Label class="text-sm font-medium">Order Notes</Label>
                 <p class="text-sm text-muted-foreground mt-1">{{ purchaseOrder.notes }}</p>
               </div>
-              
+
               <div v-if="purchaseOrder.delivery_instructions">
                 <Label class="text-sm font-medium">Delivery Instructions</Label>
                 <p class="text-sm text-muted-foreground mt-1">{{ purchaseOrder.delivery_instructions }}</p>
@@ -268,28 +298,28 @@ const markDelivered = () => {
         </div>
 
         <!-- Sidebar -->
-        <div class="space-y-6">
+        <div class="space-y-4 md:space-y-6">
           <!-- Restaurant Information -->
           <Card>
             <CardHeader>
-              <CardTitle class="flex items-center">
+              <CardTitle class="flex items-center text-base md:text-lg">
                 <User class="h-4 w-4 mr-2" />
                 Restaurant Details
               </CardTitle>
             </CardHeader>
             <CardContent class="space-y-3">
               <div>
-                <Label class="text-sm font-medium">Restaurant Name</Label>
+                <Label class="text-xs md:text-sm font-medium">Restaurant Name</Label>
                 <p class="text-sm">{{ purchaseOrder.restaurant.restaurant_name }}</p>
               </div>
-              
+
               <div>
-                <Label class="text-sm font-medium">Contact Number</Label>
+                <Label class="text-xs md:text-sm font-medium">Contact Number</Label>
                 <p class="text-sm">{{ purchaseOrder.restaurant.contact_number }}</p>
               </div>
-              
+
               <div v-if="purchaseOrder.restaurant.address">
-                <Label class="text-sm font-medium">Address</Label>
+                <Label class="text-xs md:text-sm font-medium">Address</Label>
                 <p class="text-sm">{{ purchaseOrder.restaurant.address }}</p>
               </div>
             </CardContent>
@@ -298,29 +328,29 @@ const markDelivered = () => {
           <!-- Order Timeline -->
           <Card>
             <CardHeader>
-              <CardTitle class="flex items-center">
+              <CardTitle class="flex items-center text-base md:text-lg">
                 <Calendar class="h-4 w-4 mr-2" />
                 Order Timeline
               </CardTitle>
             </CardHeader>
             <CardContent class="space-y-3">
               <div>
-                <Label class="text-sm font-medium">Order Date</Label>
+                <Label class="text-xs md:text-sm font-medium">Order Date</Label>
                 <p class="text-sm">{{ formatDate(purchaseOrder.order_date) }}</p>
               </div>
-              
+
               <div v-if="purchaseOrder.expected_delivery_date">
-                <Label class="text-sm font-medium">Expected Delivery</Label>
+                <Label class="text-xs md:text-sm font-medium">Expected Delivery</Label>
                 <p class="text-sm">{{ formatDate(purchaseOrder.expected_delivery_date) }}</p>
               </div>
-              
+
               <div v-if="purchaseOrder.actual_delivery_date">
-                <Label class="text-sm font-medium">Actual Delivery</Label>
+                <Label class="text-xs md:text-sm font-medium">Actual Delivery</Label>
                 <p class="text-sm">{{ formatDate(purchaseOrder.actual_delivery_date) }}</p>
               </div>
-              
+
               <div>
-                <Label class="text-sm font-medium">Ordered By</Label>
+                <Label class="text-xs md:text-sm font-medium">Ordered By</Label>
                 <p class="text-sm">{{ purchaseOrder.created_by.first_name }} {{ purchaseOrder.created_by.last_name }}</p>
               </div>
             </CardContent>

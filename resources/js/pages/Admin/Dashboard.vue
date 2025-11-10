@@ -106,7 +106,7 @@ const getActivityBadgeVariant = (status: string) => {
                     <CardContent>
                         <div class="text-2xl font-bold">{{ analytics.pendingApprovals }}</div>
                         <p class="text-xs text-muted-foreground">
-                            {{ analytics.monthlyStats.approvalsThisMonth }} approved this month
+                            {{ analytics.monthlyStats.approvalsThisMonth }} pending this month
                         </p>
                     </CardContent>
                 </Card>

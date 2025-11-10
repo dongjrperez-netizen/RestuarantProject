@@ -17,21 +17,18 @@ class CashierController extends Controller
 {
     public function successfulPayments()
     {
-        // Get the authenticated employee
         $employee = Auth::guard('cashier')->user();
 
         if (!$employee || strtolower($employee->role->role_name) !== 'cashier') {
             abort(403, 'Access denied. Cashiers only.');
         }
 
-        // Get paid orders with payment details
         $paidOrders = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments'])
-            ->where('restaurant_id', $employee->user_id)  // Filter by restaurant
-            ->where('status', 'paid')  // Only paid orders
+            ->where('restaurant_id', $employee->user_id) 
+            ->where('status', 'paid')  
             ->orderBy('updated_at', 'desc')
-            ->paginate(15);
+            ->paginate(5);
 
-        // Add payment data to each order for frontend compatibility
         $paidOrders->getCollection()->transform(function ($order) {
             $payment = $order->payments()->where('status', 'completed')->latest()->first();
             if ($payment) {

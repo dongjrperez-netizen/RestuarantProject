@@ -18,6 +18,7 @@ class Subscriptionpackage extends Model
         'plan_name',
         'plan_price',
         'plan_duration',
+        'plan_duration_display',
         'paypal_plan_id',
         'employee_limit',
         'supplier_limit',

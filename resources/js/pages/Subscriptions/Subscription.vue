@@ -4,9 +4,9 @@ import { ref, computed } from 'vue'
 
 const { props } = usePage()
 const plans = props.plans
-const subscriptions = props.subscriptions || []   
-const success = props.success || null            
-const isLoading = ref(false)
+const subscriptions = props.subscriptions || []
+const success = props.success || null
+const loadingPlanId = ref(null)
 
 // Debug function to check CSRF token
 function debugCSRF() {
@@ -18,8 +18,8 @@ function debugCSRF() {
 debugCSRF()
 
 // Helper function to handle form submission loading state
-function handleSubmit(event) {
-  isLoading.value = true
+function handleSubmit(planId) {
+  loadingPlanId.value = planId
   // Form will submit normally, loading will reset on page change
 }
 
@@ -30,6 +30,55 @@ function convertDaysToMinutes(days) {
 
 // Compute most popular plan (middle one or based on some logic)
 const popularPlanIndex = computed(() => Math.floor(plans.length / 2))
+
+// Features for each plan based on plan name
+const planFeatures = {
+  'Basic': [
+    '5 Employee Accounts',
+    '10 Supplier Accounts',
+    'Inventory Management',
+    'Waiter Dashboard',
+    'Order Processing',
+    'Kitchen Dashboard',
+    'Sales Reports',
+    'Email Support'
+  ],
+  'Premium': [
+    '10 Employee Accounts',
+    '15 Supplier Accounts',
+    'Regular Employee CRUD',
+    'Inventory Management',
+    'Order Processing & Tracking',
+    'Kitchen Dashboard',
+    'Waiter Dashboard',
+    'Advanced Analytics & Reports',
+    'Menu Planning',
+    'Email Support'
+  ],
+  'Enterprise': [
+    'Unlimited Employee Accounts',
+    'Unlimited Supplier Accounts',
+    'Full Inventory Management',
+    'Advanced Order Processing',
+    'Multi-Location Support',
+    'Custom Reports & Analytics',
+    'Menu Planning & Optimization',
+    'Table Reservations',
+    'Dedicated Account Manager',
+    '24/7 Priority Support'
+  ],
+  'Free Trial': [
+    'Full Restaurant Management',
+    'Inventory Tracking',
+    'Order Management',
+    '30 Days Access'
+  ]
+}
+
+// Get features for a plan
+function getPlanFeatures(planName) {
+  return planFeatures[planName] || planFeatures['Free Trial']
+}
 </script>
 
 <template>
@@ -102,81 +151,47 @@ const popularPlanIndex = computed(() => Math.floor(plans.length / 2))
         <div
           v-for="(plan, index) in plans"
           :key="plan.plan_id"
-          :class="[
-            'relative bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 border border-white/20',
-            index === popularPlanIndex ? 'ring-2 ring-orange-500 scale-105' : ''
-          ]"
+          class="relative bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 border border-white/20 flex flex-col"
         >
-          <!-- Popular Badge -->
-          <div 
-            v-if="index === popularPlanIndex" 
-            class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
-          >
-            <span class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-4 py-1 rounded-full text-sm font-semibold shadow-lg">
-              Most Popular
-            </span>
-          </div>
-
-          <div class="p-8">
+          <div class="p-8 flex flex-col flex-grow">
             <!-- Plan Header -->
             <div class="text-center mb-8">
               <h3 class="text-xl font-bold text-gray-900 mb-3" style="font-family: 'Playfair Display', serif;">{{ plan.plan_name }}</h3>
               <div class="flex items-baseline justify-center">
                 <span class="text-3xl font-extrabold text-gray-900">₱{{ plan.plan_price }}</span>
-                <span class="text-gray-600 ml-2 text-sm">/ {{ plan.plan_duration }} days</span>
+                <span class="text-gray-600 ml-2 text-sm">
+                  / {{ plan.plan_id == 4 ? plan.plan_duration + ' days' : (plan.plan_duration_display || plan.plan_duration + ' days') }}
+                </span>
               </div>
             </div>
 
             <!-- Features List -->
-            <div class="mb-8">
-              <ul class="space-y-4">
-                <li class="flex items-center">
+            <div class="mb-8 flex-grow">
+              <ul class="space-y-3">
+                <li v-for="feature in getPlanFeatures(plan.plan_name)" :key="feature" class="flex items-center">
                   <svg class="h-5 w-5 text-orange-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
                   </svg>
-                  <span class="text-gray-700 font-medium">Full Restaurant Management</span>
-                </li>
-                <li class="flex items-center">
-                  <svg class="h-5 w-5 text-orange-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                  </svg>
-                  <span class="text-gray-700 font-medium">Inventory Tracking</span>
-                </li>
-                <li class="flex items-center">
-                  <svg class="h-5 w-5 text-orange-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                  </svg>
-                  <span class="text-gray-700 font-medium">Order Management</span>
-                </li>
-                <li class="flex items-center">
-                  <svg class="h-5 w-5 text-orange-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                  </svg>
-                  <span class="text-gray-700 font-medium">24/7 Support</span>
+                  <span class="text-gray-700 text-sm">{{ feature }}</span>
                 </li>
               </ul>
             </div>
 
             <!-- Subscribe / Free Trial Button -->
-            <form 
-              method="POST" 
-              :action="plan.plan_id == 4 ? route('subscriptions.free-trial') : route('subscriptions.create')" 
-              @submit="handleSubmit"
+            <form
+              method="POST"
+              :action="plan.plan_id == 4 ? route('subscriptions.free-trial') : route('subscriptions.create')"
+              @submit="handleSubmit(plan.plan_id)"
             >
               <input type="hidden" name="_token" :value="$page.props.csrf_token" />
               <input type="hidden" name="plan_id" :value="plan.plan_id" />
               <button
                 type="submit"
-                :disabled="isLoading"
-                :class="[ 
-                  'w-full py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-4',
-                  index === popularPlanIndex 
-                    ? 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg focus:ring-orange-300' 
-                    : 'bg-slate-700 hover:bg-slate-800 shadow-md focus:ring-slate-300'
-                ]"
+                :disabled="loadingPlanId !== null"
+                class="w-full py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-4 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg focus:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <span v-if="!isLoading">
-                  {{ plan.plan_id == 4 ? 'Start 7 Days Free Trial' : 'Subscribe Now' }}
+                <span v-if="loadingPlanId !== plan.plan_id">
+                  {{ plan.plan_id == 4 ? 'Start 30 Days Free Trial' : 'Subscribe Now' }}
                 </span>
                 <span v-else class="flex items-center justify-center">
                   <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
