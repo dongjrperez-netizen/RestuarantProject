@@ -123,10 +123,10 @@ class InventoryController extends Controller
     public function getLowStockIngredients(Request $request): JsonResponse
     {
         try {
-            $user = auth()->user();
-
-            // Get restaurant ID from the user's restaurant data
+             $user = auth()->user();
             $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
+            // Get restaurant ID from the user's restaurant data
+            $restaurantId = $this->getRestaurantId();
 
             if (! $restaurantId) {
                 return response()->json([
@@ -273,22 +273,19 @@ class InventoryController extends Controller
     public function index(Request $request)
     {
         try {
-            $user = auth()->user();
+             $user = auth()->user();
             $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
 
             if (!$restaurantId) {
                 return back()->withErrors('Restaurant not found for the authenticated user');
             }
 
-            // Build the query base
+            // Build the query base - filter by ingredient's restaurant_id
             $query = \App\Models\Ingredients::with(['suppliers' => function ($query) use ($restaurantId) {
                     $query->where('restaurant_id', $restaurantId)
                         ->wherePivot('is_active', true);
                 }])
-                ->whereHas('suppliers', function ($query) use ($restaurantId) {
-                    $query->where('restaurant_id', $restaurantId)
-                        ->where('ingredient_suppliers.is_active', true);
-                });
+                ->where('restaurant_id', $user->id); // Filter by ingredient's restaurant
 
             // 🔍 Apply search filter (if provided)
             if ($request->filled('search')) {
@@ -359,7 +356,7 @@ class InventoryController extends Controller
 
             // Check if ingredient belongs to user's restaurant
             $user = auth()->user();
-            $restaurantId = $user->id; // User ID is the restaurant ID
+            $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
 
             // Restaurant authorization check
             // For now, we'll allow editing if user has no restaurant_id (likely admin/development)

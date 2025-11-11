@@ -26,7 +26,7 @@ class SupplierBillController extends Controller
 
     public function index()
     {
-        $restaurantId = auth()->user()->restaurantData->id;
+         $restaurantId = auth()->user()->restaurantData->id;
 
         $bills = SupplierBill::with(['supplier', 'purchaseOrder', 'payments'])
             ->where('restaurant_id', $restaurantId)
@@ -87,7 +87,7 @@ class SupplierBillController extends Controller
 
     public function create()
     {
-        $restaurantId = auth()->user()->restaurantData->id;
+         $restaurantId = auth()->user()->restaurantData->id;
 
         $suppliers = Supplier::where('is_active', true)
             ->where('restaurant_id', $restaurantId)
@@ -125,7 +125,7 @@ class SupplierBillController extends Controller
 
         $bill = SupplierBill::create([
             'purchase_order_id' => $validated['purchase_order_id'],
-            'restaurant_id' => auth()->user()->restaurantData->id,
+            'restaurant_id' => $this->getRestaurantId(),
             'supplier_id' => $validated['supplier_id'],
             'supplier_invoice_number' => $validated['supplier_invoice_number'],
             'bill_date' => $validated['bill_date'],
@@ -188,7 +188,7 @@ class SupplierBillController extends Controller
                 ->with('error', 'Cannot edit paid bills.');
         }
 
-        $restaurantId = auth()->user()->restaurantData->id;
+          $restaurantId = auth()->user()->restaurantData->id;
 
         $suppliers = Supplier::where('is_active', true)
             ->where('restaurant_id', $restaurantId)
@@ -427,7 +427,7 @@ class SupplierBillController extends Controller
         ]);
 
         try {
-            $restaurantId = auth()->user()->restaurantData->id;
+            $restaurantId = $this->getRestaurantId();
             $analytics = $this->billingService->getBillingAnalytics($restaurantId, $validated);
 
             if ($request->wantsJson()) {
@@ -461,7 +461,7 @@ class SupplierBillController extends Controller
     public function autoMarkOverdue()
     {
         try {
-            $restaurantId = auth()->user()->restaurantData->id ?? null;
+             $restaurantId = auth()->user()->restaurantData->id;
             $result = $this->billingService->markOverdueBills($restaurantId);
 
             return response()->json([

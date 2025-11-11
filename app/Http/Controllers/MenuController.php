@@ -57,7 +57,7 @@ class MenuController extends Controller
 
     public function create()
     {
-        $user = Auth::user();
+       $user = Auth::user();
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         $categories = MenuCategory::byRestaurant($restaurantId)
@@ -164,7 +164,7 @@ class MenuController extends Controller
         // Wrap entire logic in try/catch to handle unexpected exceptions
         try {
             $user = Auth::user();
-
+    
             $validated = $request->validate([
                 'dish_name' => 'required|string|max:255',
                 'description' => 'nullable|string',
@@ -221,7 +221,7 @@ class MenuController extends Controller
             DB::transaction(function () use ($request, $user, $finalImageUrl) {
                 // Create the dish
                 $dish = Dish::create([
-                    'restaurant_id' => $user->restaurant_id ?? ($user->restaurantData->id ?? null),
+                    'restaurant_id' => $this->getRestaurantId(),
                     'dish_name' => $request->dish_name,
                     'description' => $request->description,
                     'category_id' => $request->category_id,
@@ -240,7 +240,7 @@ class MenuController extends Controller
                     } else {
                         // Custom ingredient - create new one
                         $ingredient = Ingredients::create([
-                            'restaurant_id' => $user->restaurant_id ?? ($user->restaurantData->id ?? null),
+                            'restaurant_id' => $this->getRestaurantId(),
                             'ingredient_name' => $ingredientData['ingredient_name'],
                             'base_unit' => $ingredientData['unit'],
                             'current_stock' => 0,
@@ -307,8 +307,7 @@ class MenuController extends Controller
 
      public function edit(Dish $dish)
     {
-        $user = Auth::user();
-        // NOTE: Models are assumed to be imported for this section (e.g., MenuCategory, Ingredients)
+       $user = Auth::user();
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         $dish->load([
@@ -316,36 +315,13 @@ class MenuController extends Controller
             'variants'
         ]);
 
-        // Mocking Model dependencies for the environment
-        // --- FIX: Updated mocks to correctly support fluent chaining via methods, resolving Call to undefined method error ---
-        $MenuCategoryMock = new class { 
-            public static function byRestaurant($id) {
-                return new class {
-                    public function active() { return $this; }
-                    public function orderBy($col) { return $this; }
-                    public function get($cols) { return collect([]); }
-                };
-            }
-        };
-        $IngredientsMock = new class { 
-            public static function where($col, $val) {
-                return new class {
-                    public function orderBy($col) { return $this; }
-                    public function get($cols) { return collect([]); }
-                };
-            }
-        };
-        
-        // Actual Model Calls (if models were available):
-        // $categories = MenuCategory::byRestaurant($restaurantId)
-        $categories = $MenuCategoryMock::byRestaurant($restaurantId)
+        // Load actual categories and ingredients for the restaurant
+        $categories = MenuCategory::byRestaurant($restaurantId)
             ->active()
             ->orderBy('sort_order')
             ->get(['category_id', 'category_name']);
 
-        // Actual Model Calls (if models were available):
-        // $ingredients = Ingredients::where('restaurant_id', $restaurantId)
-        $ingredients = $IngredientsMock::where('restaurant_id', $restaurantId)
+        $ingredients = Ingredients::where('restaurant_id', $restaurantId)
             ->orderBy('ingredient_name')
             ->get([
                 'ingredient_id',
@@ -521,7 +497,7 @@ class MenuController extends Controller
 
     public function analytics()
     {
-        $user = Auth::user();
+       $user = Auth::user();
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         // Get analytics data

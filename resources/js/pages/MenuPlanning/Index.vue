@@ -113,53 +113,48 @@ const deletePlan = (plan: MenuPlan) => {
       </div>
 
       <!-- Summary Cards -->
-      <div class="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Total Plans</CardTitle>
-            <Calendar class="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ menuPlans.total || 0 }}</div>
-          </CardContent>
-        </Card>
+      <div class="grid gap-3 md:grid-cols-4">
+      <Card class="h-24 flex flex-col justify-between p-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground">Total Plans</p>
+          <Calendar class="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div class="text-xl font-bold leading-tight">
+          {{ menuPlans.total || 0 }}
+        </div>
+      </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Active Plans</CardTitle>
-            <Play class="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">
-              {{ (menuPlans.data || []).filter(plan => plan.is_active).length }}
-            </div>
-          </CardContent>
-        </Card>
+      <Card class="h-24 flex flex-col justify-between p-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground">Active Plans</p>
+          <Play class="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div class="text-xl font-bold leading-tight">
+          {{ (menuPlans.data || []).filter(plan => plan.is_active).length }}
+        </div>
+      </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Daily Plans</CardTitle>
-            <Calendar class="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">
-              {{ (menuPlans.data || []).filter(plan => plan.plan_type === 'daily').length }}
-            </div>
-          </CardContent>
-        </Card>
+      <Card class="h-24 flex flex-col justify-between p-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground">Daily Plans</p>
+          <Calendar class="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div class="text-xl font-bold leading-tight">
+          {{ (menuPlans.data || []).filter(plan => plan.plan_type === 'daily').length }}
+        </div>
+      </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Weekly Plans</CardTitle>
-            <CalendarDays class="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">
-              {{ (menuPlans.data || []).filter(plan => plan.plan_type === 'weekly').length }}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card class="h-24 flex flex-col justify-between p-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground">Weekly Plans</p>
+          <CalendarDays class="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div class="text-xl font-bold leading-tight">
+          {{ (menuPlans.data || []).filter(plan => plan.plan_type === 'weekly').length }}
+        </div>
+      </Card>
+    </div>
+
 
       <!-- Menu Plans Table -->
       <Card>

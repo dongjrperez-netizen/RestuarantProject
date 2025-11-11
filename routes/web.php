@@ -55,7 +55,7 @@ Route::post('/broadcasting-custom-auth', function (Illuminate\Http\Request $requ
     $authenticatedUser = null;
     $guardName = null;
 
-    foreach (['waiter', 'kitchen', 'cashier', 'web'] as $guard) {
+    foreach (['waiter', 'kitchen', 'cashier', 'supervisor', 'web'] as $guard) {
         if (Auth::guard($guard)->check()) {
             $authenticatedUser = Auth::guard($guard)->user();
             $guardName = $guard;
@@ -174,8 +174,10 @@ Route::get('/test-void-notification/{restaurantId}', function($restaurantId) {
 })->name('test.void.notification');
 
 Route::get('dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified', 'check.subscription'])
+    ->middleware(['auth', 'verified','check.subscription'])
     ->name('dashboard');
+
+
 
 Route::get('/admin/login', [AdministratorController::class, 'showLogin'])->name('admin.login');
 Route::post('/admin/login', [AdministratorController::class, 'login'])->name('admin.login.submit');
@@ -198,6 +200,7 @@ Route::middleware(['auth:waiter', 'role:waiter'])->prefix('waiter')->name('waite
     Route::post('/orders', [App\Http\Controllers\WaiterController::class, 'storeOrder'])->name('orders.store');
     Route::get('/tables/{table}/orders', [App\Http\Controllers\WaiterController::class, 'getTableOrders'])->name('tables.orders');
     Route::post('/orders/{orderId}/items/{itemId}/served', [App\Http\Controllers\WaiterController::class, 'updateItemServedStatus'])->name('orders.items.served');
+    Route::post('/dishes/check-availability', [App\Http\Controllers\WaiterController::class, 'checkDishAvailability'])->name('dishes.check-availability');
 
     // Debug route to check recent orders
     Route::get('/debug/orders', function () {

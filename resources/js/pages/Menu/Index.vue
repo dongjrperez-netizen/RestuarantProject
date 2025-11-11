@@ -166,43 +166,44 @@ const draftDishes = computed(() => (props.dishes || []).filter(dish => dish.stat
       </div>
 
       <!-- Summary Cards -->
-      <div class="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Total Dishes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ (dishes || []).length }}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Active Dishes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ activeDishes }}</div>
-          </CardContent>
-        </Card>
+      <div class="grid gap-3 md:grid-cols-4">
+      <Card class="h-24 flex flex-col justify-between p-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground">Total Dishes</p>
+        </div>
+        <div class="text-xl font-bold leading-tight">
+          {{ (dishes || []).length }}
+        </div>
+      </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Draft Dishes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ draftDishes }}</div>
-          </CardContent>
-        </Card>
+      <Card class="h-24 flex flex-col justify-between p-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground">Active Dishes</p>
+        </div>
+        <div class="text-xl font-bold leading-tight">
+          {{ activeDishes }}
+        </div>
+      </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Categories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">{{ (categories || []).length }}</div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card class="h-24 flex flex-col justify-between p-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground">Draft Dishes</p>
+        </div>
+        <div class="text-xl font-bold leading-tight">
+          {{ draftDishes }}
+        </div>
+      </Card>
+
+      <Card class="h-24 flex flex-col justify-between p-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground">Categories</p>
+        </div>
+        <div class="text-xl font-bold leading-tight">
+          {{ (categories || []).length }}
+        </div>
+      </Card>
+    </div>
+
 
       <!-- Dishes Table -->
       <Card>

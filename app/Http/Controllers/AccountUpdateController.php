@@ -17,7 +17,7 @@ class AccountUpdateController extends Controller
      */
     public function show()
     {
-        $user = Auth::user();
+        $user = $this->getAuthUser();
 
         return Inertia::render('AccountUpdate');
     }
@@ -25,7 +25,7 @@ class AccountUpdateController extends Controller
     public function update(Request $request)
     {
         try {
-            $user = Auth::user();
+            $user = $this->getAuthUser();
 
             Log::info('AccountUpdate request data:', [
                 'name' => $request->input('name'),

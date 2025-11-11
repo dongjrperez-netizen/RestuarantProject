@@ -225,14 +225,14 @@ const statusOptions = [
                 <Download class="w-4 h-4 mr-2" />
                 PDF
               </SelectItem>
-              <SelectItem value="excel">
+              <!-- <SelectItem value="excel">
                 <Download class="w-4 h-4 mr-2" />
                 Excel
               </SelectItem>
               <SelectItem value="csv">
                 <Download class="w-4 h-4 mr-2" />
                 CSV
-              </SelectItem>
+              </SelectItem> -->
             </SelectContent>
           </Select>
         </div>

@@ -19,12 +19,11 @@ use Dompdf\Options;
 
 class ReportsController extends Controller
 {
-    protected function getRestaurantId()
+     protected function getRestaurantId()
     {
         $user = Auth::user();
         return $user->restaurant_id ?? ($user->restaurantData->id ?? null);
     }
-
     public function index()
     {
         $restaurantId = $this->getRestaurantId();
@@ -729,7 +728,7 @@ class ReportsController extends Controller
         ]);
     }
 
-    private function getComprehensiveReportData($restaurantId, $startDate, $endDate)
+   private function getComprehensiveReportData($restaurantId, $startDate, $endDate)
     {
         // Get restaurant data
         $restaurant = Restaurant_Data::where('user_id', Auth::id())

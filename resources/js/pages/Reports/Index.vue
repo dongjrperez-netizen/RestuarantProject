@@ -71,7 +71,7 @@ const reportModules = [
     href: '/reports/comprehensive',
     color: 'bg-indigo-500',
     stats: 'All-in-one report',
-    count: 'Sales, Inventory, Purchases, Billing & Spoilage'
+    count: 'Sales, Inventory, Purchases, Billing...'
   },
   {
     id: 'sales',
@@ -127,12 +127,6 @@ const reportModules = [
           <h1 class="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
           <p class="text-muted-foreground">Comprehensive business insights and data-driven analytics</p>
         </div>
-        <div class="flex gap-2">
-          <Button variant="outline">
-            <Download class="w-4 h-4 mr-2" />
-            Export All
-          </Button>
-        </div>
       </div>
 
       <!-- Report Modules -->
@@ -165,7 +159,7 @@ const reportModules = [
               </div>
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted-foreground">Details:</span>
-                <span class="font-medium">{{ module.count }}</span>
+                <span class="font-medium text-right">{{ module.count }}</span>
               </div>
             </div>
             <Link :href="module.href" class="block mt-4">

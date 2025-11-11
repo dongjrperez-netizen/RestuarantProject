@@ -132,6 +132,8 @@ const exportReport = (format: string) => {
   window.open(`/reports/wastage?${params.toString()}`);
 };
 
+
+
 const typeOptions = [
   { value: 'all', label: 'All Types' },
   { value: 'damage', label: 'Damage' },
@@ -195,14 +197,7 @@ const avgCostPerIncident = computed(() => {
                 <Download class="w-4 h-4 mr-2" />
                 PDF
               </SelectItem>
-              <SelectItem value="excel">
-                <Download class="w-4 h-4 mr-2" />
-                Excel
-              </SelectItem>
-              <SelectItem value="csv">
-                <Download class="w-4 h-4 mr-2" />
-                CSV
-              </SelectItem>
+
             </SelectContent>
           </Select>
         </div>

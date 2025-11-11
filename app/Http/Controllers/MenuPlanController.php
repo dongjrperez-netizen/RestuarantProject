@@ -154,7 +154,6 @@ class MenuPlanController extends Controller
     {
         $user = Auth::user();
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
-
         $menuPlan = MenuPlan::with(['menuPlanDishes.dish'])
             ->forRestaurant($restaurantId)
             ->findOrFail($id);
@@ -262,7 +261,7 @@ class MenuPlanController extends Controller
 
     public function getActiveMenuPlan(Request $request)
     {
-        $user = Auth::user();
+         $user = Auth::user();
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         $date = $request->get('date', now()->format('Y-m-d'));
@@ -322,7 +321,7 @@ class MenuPlanController extends Controller
 
     public function toggleActive($id)
     {
-        $user = Auth::user();
+     $user = Auth::user();
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         $menuPlan = MenuPlan::forRestaurant($restaurantId)->findOrFail($id);
@@ -345,25 +344,8 @@ class MenuPlanController extends Controller
         ]);
 
         $user = Auth::user();
-
-        // Try multiple ways to get restaurant ID
-        $restaurantId = null;
-
-        // Method 1: Direct restaurant_id field
-        if (isset($user->restaurant_id)) {
-            $restaurantId = $user->restaurant_id;
-            \Log::info('Using direct restaurant_id', ['restaurant_id' => $restaurantId]);
-        }
-        // Method 2: Through restaurantData relationship
-        elseif ($user->restaurantData) {
-            $restaurantId = $user->restaurantData->id;
-            \Log::info('Using restaurantData relationship', ['restaurant_id' => $restaurantId]);
-        }
-        // Method 3: Use user ID as restaurant ID (common pattern in this app)
-        else {
-            $restaurantId = $user->id;
-            \Log::info('Using user ID as restaurant ID', ['restaurant_id' => $restaurantId]);
-        }
+        $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
+        \Log::info('MobileView - Restaurant ID retrieved', ['restaurant_id' => $restaurantId]);
 
         if (! $restaurantId) {
             \Log::error('No restaurant ID found, redirecting to dashboard');

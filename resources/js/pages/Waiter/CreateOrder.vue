@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import WaiterLayout from '@/layouts/WaiterLayout.vue';
 import Button from '@/components/ui/button/Button.vue';
@@ -141,6 +141,12 @@ const modalQuantity = ref(1);
 const modalSpecialInstructions = ref('');
 const showIngredients = ref(false);
 const excludedIngredients = ref<number[]>([]);
+const availabilityCheckInProgress = ref(false);
+const maxAvailableQuantity = ref<number | null>(null);
+const limitingIngredient = ref<string | null>(null);
+const availabilityError = ref<string | null>(null);
+const showAvailabilityAlert = ref(false);
+const availabilityAlertMessage = ref('');
 
 const categories = computed(() => {
   if (!props.dishes || !Array.isArray(props.dishes)) {
@@ -217,12 +223,85 @@ const currentPrice = computed(() => {
   return Number(selectedDish.value.price) || 0;
 });
 
+// Check dish ingredient availability
+const checkDishAvailability = async () => {
+  if (!selectedDish.value) return;
+
+  availabilityCheckInProgress.value = true;
+  availabilityError.value = null;
+  maxAvailableQuantity.value = null;
+  limitingIngredient.value = null;
+
+  try {
+    const response = await fetch(route('waiter.dishes.check-availability'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+      },
+      body: JSON.stringify({
+        dish_id: selectedDish.value.dish_id,
+        variant_id: selectedVariant.value?.variant_id,
+        requested_quantity: modalQuantity.value,
+        cart_items: orderItems.value.map(item => ({
+          dish_id: item.dish_id,
+          variant_id: item.variant_id,
+          quantity: item.quantity,
+          excluded_ingredients: item.excluded_ingredients || [],
+        })),
+      }),
+    });
+
+    const data = await response.json();
+
+    console.log('Availability check result:', data);
+
+    if (data.success) {
+      maxAvailableQuantity.value = data.max_quantity;
+      limitingIngredient.value = data.limiting_ingredient;
+
+      // Auto-adjust quantity if it exceeds max available
+      if (modalQuantity.value > data.max_quantity) {
+        if (data.max_quantity > 0) {
+          modalQuantity.value = data.max_quantity;
+        }
+      }
+
+      if (!data.available || data.max_quantity === 0) {
+        availabilityError.value = data.max_quantity === 0
+          ? 'Out of stock - insufficient ingredients'
+          : `This dish can only have maximum of ${data.max_quantity} order${data.max_quantity !== 1 ? 's' : ''}`;
+      }
+    } else {
+      availabilityError.value = data.message || 'Failed to check availability';
+      maxAvailableQuantity.value = 0; // Prevent ordering when check fails
+    }
+  } catch (error) {
+    console.error('Error checking availability:', error);
+    availabilityError.value = 'Failed to check availability - please try again';
+    maxAvailableQuantity.value = 0; // Prevent ordering when check fails
+  } finally {
+    availabilityCheckInProgress.value = false;
+  }
+};
+
+// Watch for changes in modalQuantity and selectedVariant to re-check availability
+watch([modalQuantity, selectedVariant], () => {
+  if (showQuantityModal.value && selectedDish.value) {
+    checkDishAvailability();
+  }
+});
+
 const openQuantityModal = (dish: Dish, existingVariantId?: number) => {
   selectedDish.value = dish;
+  selectedVariant.value = null;
   modalQuantity.value = 1;
   modalSpecialInstructions.value = '';
   showIngredients.value = false;
   excludedIngredients.value = [];
+  availabilityError.value = null;
+  maxAvailableQuantity.value = null;
+  limitingIngredient.value = null;
 
   // Set variant based on parameter or default
   if (dish.variants && dish.variants.length > 0) {
@@ -235,70 +314,104 @@ const openQuantityModal = (dish: Dish, existingVariantId?: number) => {
       const defaultVariant = dish.variants.find(v => v.is_default) || dish.variants[0];
       selectedVariant.value = defaultVariant;
     }
-  } else {
-    selectedVariant.value = null;
   }
 
   // Check if this exact dish + variant combo already exists in order to pre-fill quantity and instructions
-  const existingItem = orderItems.value.find(item =>
-    item.dish_id === dish.dish_id &&
-    item.variant_id === selectedVariant.value?.variant_id
-  );
+  const variantIdToCheck = selectedVariant.value?.variant_id ?? null;
+  const existingItem = orderItems.value.find(item => {
+    const itemVariantId = item.variant_id ?? null;
+    return item.dish_id === dish.dish_id && itemVariantId === variantIdToCheck;
+  });
+
   if (existingItem) {
     modalQuantity.value = existingItem.quantity;
     modalSpecialInstructions.value = existingItem.special_instructions;
     excludedIngredients.value = existingItem.excluded_ingredients || [];
     console.log('Opening modal for existing item:', {
       dish_id: dish.dish_id,
-      variant_id: selectedVariant.value?.variant_id,
-      excluded_ingredients: excludedIngredients.value,
-      existing_excluded: existingItem.excluded_ingredients
+      dish_name: dish.dish_name,
+      variant_id: variantIdToCheck,
+      current_quantity: existingItem.quantity,
+      modal_quantity: modalQuantity.value,
+      excluded_ingredients: excludedIngredients.value
     });
   } else {
-    console.log('Opening modal for new dish:', dish.dish_id, 'variant:', selectedVariant.value?.variant_id);
+    console.log('Opening modal for new dish:', {
+      dish_id: dish.dish_id,
+      dish_name: dish.dish_name,
+      variant_id: variantIdToCheck
+    });
   }
 
   showQuantityModal.value = true;
+
+  // Check initial availability
+  checkDishAvailability();
 };
 
 const addDishToOrder = () => {
   if (!selectedDish.value || modalQuantity.value < 1) return;
 
+  // Check if quantity exceeds max available
+  if (maxAvailableQuantity.value !== null && modalQuantity.value > maxAvailableQuantity.value) {
+    availabilityError.value = `Only ${maxAvailableQuantity.value} available`;
+    if (limitingIngredient.value) {
+      availabilityError.value += ` (limited by ${limitingIngredient.value})`;
+    }
+    return;
+  }
+
   // Find existing item with same dish_id AND variant_id (size)
-  // This allows ordering the same dish in different sizes
-  const existingItemIndex = orderItems.value.findIndex(item =>
-    item.dish_id === selectedDish.value!.dish_id &&
-    item.variant_id === selectedVariant.value?.variant_id
-  );
+  // Use null comparison to handle undefined/null variant_id consistently
+  const variantIdToMatch = selectedVariant.value?.variant_id ?? null;
+  const existingItemIndex = orderItems.value.findIndex(item => {
+    const itemVariantId = item.variant_id ?? null;
+    return item.dish_id === selectedDish.value!.dish_id && itemVariantId === variantIdToMatch;
+  });
   const isNewItem = existingItemIndex === -1;
 
   console.log('Adding dish to order:', {
     dish_id: selectedDish.value.dish_id,
-    variant_id: selectedVariant.value?.variant_id,
+    dish_name: selectedDish.value.dish_name,
+    variant_id: variantIdToMatch,
+    quantity: modalQuantity.value,
     excluded_ingredients: excludedIngredients.value,
-    is_new: isNewItem
+    is_new: isNewItem,
+    existing_index: existingItemIndex,
+    max_available: maxAvailableQuantity.value,
+    current_cart: orderItems.value.map(i => ({ dish_id: i.dish_id, variant_id: i.variant_id, quantity: i.quantity }))
   });
 
   if (existingItemIndex > -1) {
     // Update existing item
-    orderItems.value[existingItemIndex].variant_id = selectedVariant.value?.variant_id;
+    const oldQuantity = orderItems.value[existingItemIndex].quantity;
+    orderItems.value[existingItemIndex].variant_id = variantIdToMatch;
     orderItems.value[existingItemIndex].quantity = modalQuantity.value;
     orderItems.value[existingItemIndex].special_instructions = modalSpecialInstructions.value;
     orderItems.value[existingItemIndex].excluded_ingredients = excludedIngredients.value.length > 0 ? [...excludedIngredients.value] : [];
 
-    console.log('Updated item:', orderItems.value[existingItemIndex]);
+    console.log('Updated existing item:', {
+      index: existingItemIndex,
+      old_quantity: oldQuantity,
+      new_quantity: modalQuantity.value,
+      item: orderItems.value[existingItemIndex]
+    });
   } else {
     // Add new item
-    orderItems.value.push({
+    const newItem = {
       dish_id: selectedDish.value.dish_id,
       dish: selectedDish.value,
-      variant_id: selectedVariant.value?.variant_id,
+      variant_id: variantIdToMatch,
       quantity: modalQuantity.value,
       special_instructions: modalSpecialInstructions.value,
       excluded_ingredients: excludedIngredients.value.length > 0 ? [...excludedIngredients.value] : [],
-    });
+    };
+    orderItems.value.push(newItem);
 
-    console.log('Added new item:', orderItems.value[orderItems.value.length - 1]);
+    console.log('Added new item:', {
+      total_items: orderItems.value.length,
+      new_item: newItem
+    });
   }
 
   showQuantityModal.value = false;
@@ -330,9 +443,11 @@ const toggleIngredientExclusion = (ingredientId: number) => {
 };
 
 const removeDishFromOrder = (dishId: number, variantId?: number) => {
-  const itemIndex = orderItems.value.findIndex(item =>
-    item.dish_id === dishId && item.variant_id === variantId
-  );
+  const variantIdToMatch = variantId ?? null;
+  const itemIndex = orderItems.value.findIndex(item => {
+    const itemVariantId = item.variant_id ?? null;
+    return item.dish_id === dishId && itemVariantId === variantIdToMatch;
+  });
   if (itemIndex > -1) {
     if (orderItems.value[itemIndex].quantity > 1) {
       orderItems.value[itemIndex].quantity--;
@@ -343,15 +458,75 @@ const removeDishFromOrder = (dishId: number, variantId?: number) => {
 };
 
 const updateQuantity = (dishId: number, quantity: number, variantId?: number) => {
-  const item = orderItems.value.find(item =>
-    item.dish_id === dishId && item.variant_id === variantId
-  );
+  const variantIdToMatch = variantId ?? null;
+  const item = orderItems.value.find(item => {
+    const itemVariantId = item.variant_id ?? null;
+    return item.dish_id === dishId && itemVariantId === variantIdToMatch;
+  });
   if (item) {
     if (quantity > 0) {
       item.quantity = quantity;
     } else {
       removeDishFromOrder(dishId, variantId);
     }
+  }
+};
+
+// Increase cart quantity with availability checking
+const increaseCartQuantity = async (dishId: number, variantId?: number) => {
+  const variantIdToMatch = variantId ?? null;
+  const item = orderItems.value.find(item => {
+    const itemVariantId = item.variant_id ?? null;
+    return item.dish_id === dishId && itemVariantId === variantIdToMatch;
+  });
+
+  if (!item) return;
+
+  try {
+    // Check availability for increased quantity
+    const response = await fetch(route('waiter.dishes.check-availability'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+      },
+      body: JSON.stringify({
+        dish_id: dishId,
+        variant_id: variantId,
+        requested_quantity: item.quantity + 1,
+        cart_items: orderItems.value
+          .filter(cartItem => !(cartItem.dish_id === dishId && (cartItem.variant_id ?? null) === variantIdToMatch))
+          .map(cartItem => ({
+            dish_id: cartItem.dish_id,
+            variant_id: cartItem.variant_id,
+            quantity: cartItem.quantity,
+            excluded_ingredients: cartItem.excluded_ingredients || [],
+          })),
+      }),
+    });
+
+    const data = await response.json();
+
+    console.log('Cart quantity increase check:', {
+      dish_id: dishId,
+      current_quantity: item.quantity,
+      requested_quantity: item.quantity + 1,
+      max_available: data.max_quantity,
+      can_increase: data.available
+    });
+
+    if (data.success && data.available) {
+      item.quantity++;
+    } else {
+      // Show modal with availability message
+      const dishName = item.dish.dish_name;
+      availabilityAlertMessage.value = `${dishName} can only have maximum of ${data.max_quantity} order${data.max_quantity !== 1 ? 's' : ''}`;
+      showAvailabilityAlert.value = true;
+    }
+  } catch (error) {
+    console.error('Error checking availability:', error);
+    availabilityAlertMessage.value = 'Failed to check ingredient availability. Please try again.';
+    showAvailabilityAlert.value = true;
   }
 };
 
@@ -681,7 +856,12 @@ const getAllergenBadgeColor = (allergen: string) => {
 
           <!-- Quantity Selection -->
           <div class="space-y-2">
-            <Label for="quantity">Quantity</Label>
+            <div class="flex items-center justify-between">
+              <Label for="quantity">Quantity</Label>
+              <span v-if="maxAvailableQuantity !== null" class="text-xs text-muted-foreground">
+                Max available: <span class="font-semibold text-foreground">{{ maxAvailableQuantity }}</span>
+              </span>
+            </div>
             <div class="flex items-center gap-2">
               <Button
                 @click="modalQuantity = Math.max(1, modalQuantity - 1)"
@@ -695,7 +875,9 @@ const getAllergenBadgeColor = (allergen: string) => {
                 v-model.number="modalQuantity"
                 type="number"
                 min="1"
+                :max="maxAvailableQuantity || undefined"
                 class="w-20 text-center"
+                :class="{ 'border-red-500': availabilityError }"
                 id="quantity"
               />
               <Button
@@ -703,9 +885,22 @@ const getAllergenBadgeColor = (allergen: string) => {
                 variant="outline"
                 size="icon"
                 class="h-10 w-10"
+                :disabled="maxAvailableQuantity !== null && modalQuantity >= maxAvailableQuantity"
               >
                 <Plus class="h-4 w-4" />
               </Button>
+            </div>
+
+            <!-- Availability Error/Warning -->
+            <div v-if="availabilityError" class="flex items-start gap-2 p-2 bg-red-50 border border-red-200 rounded-md">
+              <AlertTriangle class="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+              <p class="text-xs text-red-700">{{ availabilityError }}</p>
+            </div>
+
+            <!-- Loading indicator -->
+            <div v-if="availabilityCheckInProgress" class="flex items-center gap-2 text-xs text-muted-foreground">
+              <div class="h-3 w-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+              <span>Checking ingredient availability...</span>
             </div>
           </div>
 
@@ -784,8 +979,11 @@ const getAllergenBadgeColor = (allergen: string) => {
           <Button variant="outline" @click="closeQuantityModal">
             Cancel
           </Button>
-          <Button @click="addDishToOrder">
-            Add to Order
+          <Button
+            @click="addDishToOrder"
+            :disabled="availabilityCheckInProgress || (maxAvailableQuantity !== null && maxAvailableQuantity === 0)"
+          >
+            {{ availabilityCheckInProgress ? 'Checking...' : 'Add to Order' }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -904,16 +1102,12 @@ const getAllergenBadgeColor = (allergen: string) => {
                         <Minus class="h-3 w-3" />
                       </Button>
 
-                      <Input
-                        :model-value="item.quantity"
-                        @update:model-value="(value) => updateQuantity(item.dish_id, parseInt(String(value)) || 0, item.variant_id)"
-                        type="number"
-                        min="0"
-                        class="w-14 h-8 text-center text-xs"
-                      />
+                      <span class="w-14 h-8 flex items-center justify-center border rounded-md bg-background text-sm font-semibold">
+                        {{ item.quantity }}
+                      </span>
 
                       <Button
-                        @click="openQuantityModal(item.dish, item.variant_id); showCartModal = false"
+                        @click="increaseCartQuantity(item.dish_id, item.variant_id)"
                         variant="outline"
                         size="icon"
                         class="h-8 w-8"
@@ -968,6 +1162,26 @@ const getAllergenBadgeColor = (allergen: string) => {
             class="flex-1 bg-green-600 hover:bg-green-700"
           >
             {{ orderForm.processing ? 'Submitting...' : (existingOrderItems.length > 0 ? 'Add to Order' : 'Submit Order') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Availability Alert Modal -->
+    <Dialog :open="showAvailabilityAlert" @update:open="(open) => showAvailabilityAlert = open">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle class="flex items-center gap-2 text-amber-600">
+            <AlertTriangle class="h-5 w-5" />
+            Maximum Order Reached
+          </DialogTitle>
+        </DialogHeader>
+        <div class="py-4">
+          <p class="text-sm text-muted-foreground">{{ availabilityAlertMessage }}</p>
+        </div>
+        <DialogFooter>
+          <Button @click="showAvailabilityAlert = false" class="w-full">
+            OK
           </Button>
         </DialogFooter>
       </DialogContent>

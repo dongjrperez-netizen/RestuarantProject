@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed } from 'vue';
-import { Plus, Search, MoreVertical, Users, Edit, Eye, Calendar, Clock, UserCheck, UserPlus } from 'lucide-vue-next';
+import { Plus, Search, MoreVertical, Edit, Eye, Calendar, Clock, UserCheck, UserPlus } from 'lucide-vue-next';
 
 interface TableReservation {
   id: number;
@@ -226,67 +226,67 @@ const formatNextReservation = (dateString: string | null | undefined, timeString
       </div>
 
       <!-- Statistics Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent class="p-4">
-            <div class="flex items-center space-x-2">
-              <Users class="w-5 h-5 text-muted-foreground" />
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Total Tables</p>
-                <p class="text-2xl font-bold">{{ tableStats.total }}</p>
-              </div>
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <Card class="h-20"> <!-- shorter height -->
+        <CardContent class="p-2 flex items-center h-full">
+          <div class="flex items-center space-x-2">
+            <Users class="w-4 h-4 text-muted-foreground" />
+            <div>
+              <p class="text-xs text-muted-foreground">Total Tables</p>
+              <p class="text-lg font-semibold">{{ tableStats.total }}</p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardContent class="p-4">
-            <div class="flex items-center space-x-2">
-              <div class="w-3 h-3 rounded-full bg-green-500"></div>
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Available</p>
-                <p class="text-2xl font-bold">{{ tableStats.available }}</p>
-              </div>
+      <Card class="h-20">
+        <CardContent class="p-2 flex items-center h-full">
+          <div class="flex items-center space-x-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+            <div>
+              <p class="text-xs text-muted-foreground">Available</p>
+              <p class="text-lg font-semibold">{{ tableStats.available }}</p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardContent class="p-4">
-            <div class="flex items-center space-x-2">
-              <div class="w-3 h-3 rounded-full bg-red-500"></div>
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Occupied</p>
-                <p class="text-2xl font-bold">{{ tableStats.occupied }}</p>
-              </div>
+      <Card class="h-20">
+        <CardContent class="p-2 flex items-center h-full">
+          <div class="flex items-center space-x-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+            <div>
+              <p class="text-xs text-muted-foreground">Occupied</p>
+              <p class="text-lg font-semibold">{{ tableStats.occupied }}</p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardContent class="p-4">
-            <div class="flex items-center space-x-2">
-              <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Reserved</p>
-                <p class="text-2xl font-bold">{{ tableStats.reserved }}</p>
-              </div>
+      <Card class="h-20">
+        <CardContent class="p-2 flex items-center h-full">
+          <div class="flex items-center space-x-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+            <div>
+              <p class="text-xs text-muted-foreground">Reserved</p>
+              <p class="text-lg font-semibold">{{ tableStats.reserved }}</p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardContent class="p-4">
-            <div class="flex items-center space-x-2">
-              <div class="w-3 h-3 rounded-full bg-gray-500"></div>
-              <div>
-                <p class="text-sm font-medium text-muted-foreground">Not Available</p>
-                <p class="text-2xl font-bold">{{ tableStats.maintenance }}</p>
-              </div>
+      <Card class="h-20">
+        <CardContent class="p-2 flex items-center h-full">
+          <div class="flex items-center space-x-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
+            <div>
+              <p class="text-xs text-muted-foreground">Not Available</p>
+              <p class="text-lg font-semibold">{{ tableStats.maintenance }}</p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
 
       <!-- Tables List -->
       <Card>

@@ -767,7 +767,7 @@ class WaiterController extends Controller
                 'new_served_quantity' => $orderItem->served_quantity,
                 'new_status' => $orderItem->status
             ]);
-            
+
             // Check if any items were served and broadcast event
             if ($request->served && $orderItem->served_quantity > 0) {
                 $order = $orderItem->customerOrder;
@@ -795,6 +795,158 @@ class WaiterController extends Controller
 
             return response()->json([
                 'error' => 'Failed to update item status',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Check dish ingredient availability considering current cart items
+     */
+    public function checkDishAvailability(Request $request)
+    {
+        $employee = Auth::guard('waiter')->user();
+
+        if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
+            return response()->json(['error' => 'Access denied. Waiters only.'], 403);
+        }
+
+        $validated = $request->validate([
+            'dish_id' => 'required|exists:dishes,dish_id',
+            'variant_id' => 'nullable|exists:dish_variants,variant_id',
+            'requested_quantity' => 'required|integer|min:1',
+            'cart_items' => 'nullable|array',
+            'cart_items.*.dish_id' => 'required|exists:dishes,dish_id',
+            'cart_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
+            'cart_items.*.quantity' => 'required|integer|min:1',
+            'cart_items.*.excluded_ingredients' => 'nullable|array',
+            'cart_items.*.excluded_ingredients.*' => 'exists:ingredients,ingredient_id',
+        ]);
+
+        try {
+            // Get the dish with ingredients
+            $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
+                ->where('restaurant_id', $employee->user_id)
+                ->findOrFail($validated['dish_id']);
+
+            // Get variant multiplier
+            $variantMultiplier = 1.0;
+            if (!empty($validated['variant_id'])) {
+                $variant = $dish->variants->where('variant_id', $validated['variant_id'])->first();
+                if ($variant) {
+                    $variantMultiplier = $variant->quantity_multiplier ?? 1.0;
+                }
+            }
+
+            // Calculate total ingredient requirements from cart
+            $cartIngredientRequirements = [];
+            if (!empty($validated['cart_items'])) {
+                foreach ($validated['cart_items'] as $cartItem) {
+                    $cartDish = Dish::with(['dishIngredients.ingredient', 'variants'])
+                        ->where('restaurant_id', $employee->user_id)
+                        ->find($cartItem['dish_id']);
+
+                    if (!$cartDish) continue;
+
+                    // Get variant multiplier for cart item
+                    $cartVariantMultiplier = 1.0;
+                    if (!empty($cartItem['variant_id'])) {
+                        $cartVariant = $cartDish->variants->where('variant_id', $cartItem['variant_id'])->first();
+                        if ($cartVariant) {
+                            $cartVariantMultiplier = $cartVariant->quantity_multiplier ?? 1.0;
+                        }
+                    }
+
+                    // Get excluded ingredients for this cart item
+                    $excludedIngredients = $cartItem['excluded_ingredients'] ?? [];
+
+                    // Add ingredient requirements for this cart item
+                    foreach ($cartDish->dishIngredients as $dishIngredient) {
+                        // Skip if ingredient is excluded in this cart item
+                        if (in_array($dishIngredient->ingredient_id, $excludedIngredients)) {
+                            continue;
+                        }
+
+                        $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
+                        $totalRequired = $quantityInBaseUnit * $cartVariantMultiplier * $cartItem['quantity'];
+
+                        if (!isset($cartIngredientRequirements[$dishIngredient->ingredient_id])) {
+                            $cartIngredientRequirements[$dishIngredient->ingredient_id] = 0;
+                        }
+                        $cartIngredientRequirements[$dishIngredient->ingredient_id] += $totalRequired;
+                    }
+                }
+            }
+
+            // Check availability for the requested dish
+            $ingredientDetails = [];
+            $isAvailable = true;
+            $maxQuantity = PHP_INT_MAX;
+            $limitingIngredient = null;
+
+            foreach ($dish->dishIngredients as $dishIngredient) {
+                $ingredient = $dishIngredient->ingredient;
+                $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
+                $requiredPerDish = $quantityInBaseUnit * $variantMultiplier;
+
+                // Calculate total required (cart + requested)
+                $cartUsage = $cartIngredientRequirements[$ingredient->ingredient_id] ?? 0;
+                $requestedUsage = $requiredPerDish * $validated['requested_quantity'];
+                $totalRequired = $cartUsage + $requestedUsage;
+
+                // Check current stock
+                $currentStock = $ingredient->current_stock;
+                $availableStock = $currentStock - $cartUsage;
+
+                // Calculate max quantity possible for this ingredient
+                $maxForThisIngredient = $availableStock > 0
+                    ? floor($availableStock / $requiredPerDish)
+                    : 0;
+
+                if ($maxForThisIngredient < $maxQuantity) {
+                    $maxQuantity = $maxForThisIngredient;
+                    $limitingIngredient = $ingredient->ingredient_name;
+                }
+
+                $ingredientDetails[] = [
+                    'ingredient_id' => $ingredient->ingredient_id,
+                    'ingredient_name' => $ingredient->ingredient_name,
+                    'current_stock' => $currentStock,
+                    'base_unit' => $ingredient->base_unit,
+                    'required_per_dish' => round($requiredPerDish, 4),
+                    'cart_usage' => round($cartUsage, 4),
+                    'requested_usage' => round($requestedUsage, 4),
+                    'total_required' => round($totalRequired, 4),
+                    'available_after_cart' => round($availableStock, 4),
+                    'is_sufficient' => $totalRequired <= $currentStock,
+                    'max_quantity' => (int)$maxForThisIngredient,
+                ];
+
+                if ($totalRequired > $currentStock) {
+                    $isAvailable = false;
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'available' => $isAvailable,
+                'max_quantity' => max(0, (int)$maxQuantity),
+                'limiting_ingredient' => $limitingIngredient,
+                'dish_name' => $dish->dish_name,
+                'requested_quantity' => $validated['requested_quantity'],
+                'ingredients' => $ingredientDetails,
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error checking dish availability:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'dish_id' => $validated['dish_id'] ?? null,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to check dish availability',
                 'message' => $e->getMessage()
             ], 500);
         }
