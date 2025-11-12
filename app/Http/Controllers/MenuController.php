@@ -21,7 +21,7 @@ class MenuController extends Controller
 {
     public function index(Request $request)
     {
-        $user = Auth::user();
+         $user = Auth::user();
         $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         $query = Dish::with(['category', 'variants'])
