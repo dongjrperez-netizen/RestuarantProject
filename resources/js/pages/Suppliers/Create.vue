@@ -180,7 +180,7 @@ const submit = () => {
             <!-- Business Details -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label for="business_registration">Business Registration</Label>
+                <Label for="business_registration">Business Registration ID</Label>
                 <Input
                   id="business_registration"
                   v-model="form.business_registration"

@@ -101,7 +101,7 @@ const submit = () => {
             </div>
 
             <!-- Form -->
-            <Card class="max-w-2xl">
+            <Card class="max-w-2xl mx-auto">
                 <CardHeader>
                     <CardTitle>Employee Information</CardTitle>
                     <CardDescription>

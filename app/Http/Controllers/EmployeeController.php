@@ -38,7 +38,7 @@ class EmployeeController extends Controller
         }
 
         $employees = $query->paginate(15)->withQueryString();
-        $roles = Role::all();
+        $roles = Role::whereIn('role_name', ['Waiter', 'Cashier', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/Employees', [
             'employees' => $employees,
@@ -52,7 +52,7 @@ class EmployeeController extends Controller
         $limitService = new SubscriptionLimitService();
         $limitCheck = $limitService->canAddEmployee(Auth::user());
 
-        $roles = Role::all();
+        $roles = Role::whereIn('role_name', ['Waiter', 'Cashier', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/CreateEmployee', [
             'roles' => $roles,
@@ -115,7 +115,7 @@ class EmployeeController extends Controller
         $this->authorizeEmployeeAccess($employee);
 
         $employee->load(['role']);
-        $roles = Role::all();
+        $roles = Role::whereIn('role_name', ['Waiter', 'Cashier', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/EditEmployee', [
             'employee' => $employee,
