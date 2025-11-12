@@ -19,7 +19,8 @@ import {
   AlertTriangle,
   BarChart3,
   Calendar,
-  Filter
+  Filter,
+  Banknote
 } from 'lucide-vue-next';
 
 interface Summary {
@@ -247,7 +248,7 @@ const totalOrders = computed(() => {
                 <p class="text-xs text-muted-foreground mt-1">After all expenses</p>
               </div>
               <div class="h-8 w-8 rounded-full flex items-center justify-center" :class="financialData.summary.net_profit >= 0 ? 'bg-green-100' : 'bg-red-100'">
-                <DollarSign class="h-4 w-4" :class="financialData.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'" />
+                <Banknote class="h-4 w-4" :class="financialData.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'" />
               </div>
             </div>
           </CardContent>

@@ -16,7 +16,8 @@ import {
   DollarSign,
   BarChart3,
   Search,
-  XCircle
+  XCircle,
+  Banknote
 } from 'lucide-vue-next';
 
 interface InventoryItem {
@@ -169,7 +170,7 @@ const highValueItems = [...props.inventoryData.items]
                 <p class="text-xs text-muted-foreground mt-1">Inventory worth</p>
               </div>
               <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                <DollarSign class="h-4 w-4 text-green-600" />
+                <Banknote class="h-4 w-4 text-green-600" />
               </div>
             </div>
           </CardContent>

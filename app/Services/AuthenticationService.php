@@ -101,12 +101,20 @@ class AuthenticationService
             ->orderByDesc('subscription_endDate')
             ->first();
 
+        \Log::info('🔍 USER SUBSCRIPTION REDIRECT', [
+            'user_id' => $user->user_id,
+            'subscription_status' => $subscription ? $subscription->subscription_status : 'none'
+        ]);
+
         if ($subscription && strtolower($subscription->subscription_status) === 'active') {
-            return redirect()->intended(route('dashboard', absolute: false));
+            \Log::info('🔍 REDIRECTING TO DASHBOARD');
+            return redirect()->route('dashboard');
         } elseif ($subscription && strtolower($subscription->subscription_status) === 'archive') {
-            return redirect()->intended(route('subscriptions.renew', absolute: false));
+            \Log::info('🔍 REDIRECTING TO RENEW SUBSCRIPTION');
+            return redirect()->route('subscriptions.renew');
         } else {
-            return redirect()->intended(route('subscriptions.index', absolute: false));
+            \Log::info('🔍 REDIRECTING TO SUBSCRIPTIONS INDEX');
+            return redirect()->route('subscriptions.index');
         }
     }
 
@@ -277,6 +285,56 @@ class AuthenticationService
                         'guard' => 'web'
                     ];
                 }
+            }
+        }
+
+        // If both user and employee exist with same email
+        if ($user && $employee) {
+            // Prioritize active user (restaurant owner) over employee
+            if (!in_array($user->status, ['Pending', 'Rejected']) && $employee->status === 'active') {
+                // Both are active - prioritize user (restaurant owner)
+                \Log::info('🔍 EMAIL CONFLICT: User and Employee both active, prioritizing User', [
+                    'email' => $email,
+                    'user_id' => $user->user_id,
+                    'employee_id' => $employee->employee_id
+                ]);
+                return [
+                    'type' => 'user',
+                    'model' => $user,
+                    'guard' => 'web'
+                ];
+            } elseif (!in_array($user->status, ['Pending', 'Rejected']) && $employee->status !== 'active') {
+                // User active, employee inactive
+                return [
+                    'type' => 'user',
+                    'model' => $user,
+                    'guard' => 'web'
+                ];
+            } elseif (in_array($user->status, ['Pending', 'Rejected']) && $employee->status === 'active') {
+                // User pending/rejected, employee active - use employee
+                $guard = 'employee';
+                if ($employee->role) {
+                    $roleName = strtolower($employee->role->role_name);
+                    if ($roleName === 'waiter') {
+                        $guard = 'waiter';
+                    } elseif ($roleName === 'cashier') {
+                        $guard = 'cashier';
+                    } elseif ($roleName === 'kitchen') {
+                        $guard = 'kitchen';
+                    }
+                }
+                return [
+                    'type' => 'employee',
+                    'model' => $employee,
+                    'guard' => $guard
+                ];
+            } else {
+                // Both pending/inactive - default to user
+                return [
+                    'type' => 'user',
+                    'model' => $user,
+                    'guard' => 'web'
+                ];
             }
         }
 
@@ -528,9 +586,17 @@ class AuthenticationService
      */
     public function handleUnifiedLoginRedirect(string $userType, $userModel): RedirectResponse
     {
+        \Log::info('🔍 UNIFIED REDIRECT HANDLER', [
+            'user_type' => $userType,
+            'model_class' => get_class($userModel),
+            'model_id' => $userModel->id ?? $userModel->user_id ?? $userModel->employee_id ?? 'unknown'
+        ]);
+
         if ($userType === 'user') {
+            \Log::info('🔍 HANDLING USER TYPE REDIRECT');
             // Handle rejected status - redirect to account update
             if ($userModel->status === 'Rejected') {
+                \Log::info('🔍 USER STATUS: REJECTED - REDIRECTING TO ACCOUNT UPDATE');
                 return redirect()->route('account.update');
             }
 
@@ -538,18 +604,22 @@ class AuthenticationService
         }
 
         if ($userType === 'employee') {
+            \Log::info('🔍 HANDLING EMPLOYEE TYPE REDIRECT');
             return $this->handleEmployeeRoleRedirect($userModel);
         }
-        
+
 
         if ($userType === 'supplier') {
+            \Log::info('🔍 HANDLING SUPPLIER TYPE REDIRECT');
             return $this->handleSupplierRedirect($userModel);
         }
         if ($userType === 'admin') {
+            \Log::info('🔍 HANDLING ADMIN TYPE REDIRECT');
             return $this->handleAdminRedirect($userModel);
         }
 
         // Fallback
+        \Log::warning('🔍 NO USER TYPE MATCHED - FALLBACK TO DASHBOARD');
         return redirect()->route('dashboard');
     }
 }

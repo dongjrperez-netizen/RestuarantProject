@@ -19,7 +19,8 @@ import {
   BarChart3,
   Calendar,
   Filter,
-  User
+  User,
+  Banknote
 } from 'lucide-vue-next';
 
 interface WastageLog {
@@ -278,7 +279,7 @@ const avgCostPerIncident = computed(() => {
                 <p class="text-xs text-muted-foreground mt-1">Financial impact</p>
               </div>
               <div class="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
-                <DollarSign class="h-4 w-4 text-red-600" />
+                <Banknote class="h-4 w-4 text-red-600" />
               </div>
             </div>
           </CardContent>

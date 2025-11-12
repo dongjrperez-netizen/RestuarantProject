@@ -16,13 +16,13 @@ import {
 } from '@/components/ui/table';
 import BarChart from '@/components/ui/chart-bar/BarChart.vue';
 import DonutChart from '@/components/ui/chart-donut/DonutChart.vue';
-import { 
-  DollarSign, 
-  ShoppingCart, 
-  Users, 
-  TrendingUp, 
-  Clock, 
-  Package, 
+import {
+  DollarSign,
+  ShoppingCart,
+  Users,
+  TrendingUp,
+  Clock,
+  Package,
   AlertTriangle,
   Plus,
   Eye,
@@ -32,7 +32,8 @@ import {
   BarChart3,
   Settings,
   UtensilsCrossed,
-  Truck
+  Truck,
+  Banknote
 } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -235,7 +236,7 @@ setInterval(() => {
                 <Card>
                     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle class="text-sm font-medium">Today's Revenue</CardTitle>
-                        <DollarSign class="h-4 w-4 text-muted-foreground" />
+                        <Banknote class="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div class="text-2xl font-bold">{{ formatCurrency(stats.revenue.today) }}</div>
@@ -317,7 +318,7 @@ setInterval(() => {
                 <Card>
                     <CardHeader>
                         <CardTitle class="flex items-center gap-2">
-                            <DollarSign class="h-5 w-5" />
+                            <Banknote class="h-5 w-5" />
                             Weekly Revenue
                         </CardTitle>
                     </CardHeader>

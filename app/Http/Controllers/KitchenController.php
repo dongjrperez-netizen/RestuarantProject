@@ -26,6 +26,7 @@ class KitchenController extends Controller
 
         try {
             // Single optimized query with all relationships loaded eagerly
+            // Only show orders from today that are not completed or paid
             $unpaidOrders = CustomerOrder::with([
                 'table',
                 'orderItems' => function($query) {
@@ -35,7 +36,8 @@ class KitchenController extends Controller
                 'employee'
             ])
             ->where('restaurant_id', $restaurantId)
-            ->whereIn('status', ['pending', 'ready', 'completed', 'in_progress'])
+            ->whereIn('status', ['pending', 'confirmed', 'in_progress', 'ready'])
+            ->whereDate('created_at', today())
             ->whereHas('orderItems', function ($query) {
                 $query->whereColumn('served_quantity', '<', 'quantity');
             })
@@ -62,150 +64,17 @@ class KitchenController extends Controller
             ];
 
         } catch (\Exception $e) {
-            // Fallback to mock data if database tables don't exist
-            $unpaidOrders = collect([
-                (object)[
-                    'customer_order_id' => 1,
-                    'order_number' => 'ORD-001',
-                    'status' => 'confirmed',
-                    'customer_name' => 'John Doe',
-                    'created_at' => now()->subMinutes(15),
-                    'updated_at' => now()->subMinutes(15),
-                    'total_amount' => 850.00,
-                    'table' => (object)[
-                        'table_id' => 1,
-                        'table_number' => '5',
-                        'table_name' => 'Table 5'
-                    ],
-                    'employee' => (object)[
-                        'employee_id' => 1,
-                        'firstname' => 'Maria',
-                        'lastname' => 'Santos'
-                    ],
-                    'orderItems' => collect([
-                        (object)[
-                            'order_item_id' => 1,
-                            'dish_id' => 1,
-                            'quantity' => 2,
-                            'unit_price' => 350.00,
-                            'special_instructions' => 'Extra spicy, no onions',
-                            'dish' => (object)[
-                                'dish_id' => 1,
-                                'dish_name' => 'Chicken Adobo',
-                                'dish_description' => 'Traditional Filipino braised chicken'
-                            ]
-                        ],
-                        (object)[
-                            'order_item_id' => 2,
-                            'dish_id' => 2,
-                            'quantity' => 1,
-                            'unit_price' => 150.00,
-                            'special_instructions' => 'Extra rice',
-                            'dish' => (object)[
-                                'dish_id' => 2,
-                                'dish_name' => 'Garlic Rice',
-                                'dish_description' => 'Fragrant garlic fried rice'
-                            ]
-                        ]
-                    ])
-                ],
-                (object)[
-                    'customer_order_id' => 2,
-                    'order_number' => 'ORD-002',
-                    'status' => 'in_progress',
-                    'customer_name' => 'Jane Smith',
-                    'created_at' => now()->subMinutes(25),
-                    'updated_at' => now()->subMinutes(10),
-                    'total_amount' => 1200.00,
-                    'table' => (object)[
-                        'table_id' => 2,
-                        'table_number' => '3',
-                        'table_name' => 'Table 3'
-                    ],
-                    'employee' => (object)[
-                        'employee_id' => 2,
-                        'firstname' => 'Carlos',
-                        'lastname' => 'Rodriguez'
-                    ],
-                    'orderItems' => collect([
-                        (object)[
-                            'order_item_id' => 3,
-                            'dish_id' => 3,
-                            'quantity' => 1,
-                            'unit_price' => 750.00,
-                            'special_instructions' => 'Medium rare, side of vegetables',
-                            'dish' => (object)[
-                                'dish_id' => 3,
-                                'dish_name' => 'Beef Tenderloin',
-                                'dish_description' => 'Grilled beef tenderloin with herbs'
-                            ]
-                        ],
-                        (object)[
-                            'order_item_id' => 4,
-                            'dish_id' => 4,
-                            'quantity' => 2,
-                            'unit_price' => 225.00,
-                            'special_instructions' => 'Extra creamy',
-                            'dish' => (object)[
-                                'dish_id' => 4,
-                                'dish_name' => 'Mushroom Soup',
-                                'dish_description' => 'Creamy mushroom soup'
-                            ]
-                        ]
-                    ])
-                ],
-                (object)[
-                    'customer_order_id' => 3,
-                    'order_number' => 'ORD-003',
-                    'status' => 'ready',
-                    'customer_name' => 'Mike Johnson',
-                    'created_at' => now()->subMinutes(45),
-                    'updated_at' => now()->subMinutes(5),
-                    'total_amount' => 650.00,
-                    'table' => (object)[
-                        'table_id' => 3,
-                        'table_number' => '8',
-                        'table_name' => 'Table 8'
-                    ],
-                    'employee' => (object)[
-                        'employee_id' => 1,
-                        'firstname' => 'Maria',
-                        'lastname' => 'Santos'
-                    ],
-                    'orderItems' => collect([
-                        (object)[
-                            'order_item_id' => 5,
-                            'dish_id' => 5,
-                            'quantity' => 1,
-                            'unit_price' => 450.00,
-                            'special_instructions' => 'Well cooked, extra sauce',
-                            'dish' => (object)[
-                                'dish_id' => 5,
-                                'dish_name' => 'Grilled Salmon',
-                                'dish_description' => 'Fresh grilled salmon with lemon'
-                            ]
-                        ],
-                        (object)[
-                            'order_item_id' => 6,
-                            'dish_id' => 6,
-                            'quantity' => 1,
-                            'unit_price' => 200.00,
-                            'special_instructions' => 'Light dressing',
-                            'dish' => (object)[
-                                'dish_id' => 6,
-                                'dish_name' => 'Caesar Salad',
-                                'dish_description' => 'Fresh caesar salad with croutons'
-                            ]
-                        ]
-                    ])
-                ]
-            ]);
+            // Log the error for debugging
+            \Log::error('Kitchen Dashboard Error: ' . $e->getMessage());
+
+            // Return empty collection if database query fails
+            $unpaidOrders = collect([]);
 
             $todayStats = [
-                'total_orders' => 12,
-                'pending_orders' => 1,
-                'in_progress_orders' => 1,
-                'ready_orders' => 1,
+                'total_orders' => 0,
+                'pending_orders' => 0,
+                'in_progress_orders' => 0,
+                'ready_orders' => 0,
             ];
         }
 

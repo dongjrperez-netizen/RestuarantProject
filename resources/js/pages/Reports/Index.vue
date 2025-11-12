@@ -17,7 +17,8 @@ import {
   Calendar,
   FileText,
   Download,
-  Eye
+  Eye,
+  Banknote
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 

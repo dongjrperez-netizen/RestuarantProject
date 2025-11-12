@@ -19,7 +19,8 @@ import {
   Users,
   BarChart3,
   Calendar,
-  Filter
+  Filter,
+  Banknote
 } from 'lucide-vue-next';
 
 interface SalesDataItem {
@@ -261,7 +262,7 @@ const groupByOptions = [
                 </div>
               </div>
               <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <DollarSign class="h-4 w-4 text-blue-600" />
+                <Banknote class="h-4 w-4 text-blue-600" />
               </div>
             </div>
           </CardContent>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, router } from '@inertiajs/vue3';
 import WaiterLayout from '@/layouts/WaiterLayout.vue';
 import Button from '@/components/ui/button/Button.vue';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
@@ -299,8 +299,37 @@ const maintenanceTables = computed(() =>
   props.tables.filter(table => table.status === 'maintenance')
 );
 
+// Auto-refresh interval for tables
+let refreshInterval: ReturnType<typeof setInterval> | null = null;
+const REFRESH_INTERVAL = 30000; // Refresh every 30 seconds
+
+const startAutoRefresh = () => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+  }
+
+  refreshInterval = setInterval(() => {
+    // Reload only the tables data to update table statuses
+    router.reload({
+      only: ['tables'],
+      preserveScroll: true,
+      preserveState: true,
+    });
+  }, REFRESH_INTERVAL);
+};
+
+const stopAutoRefresh = () => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
+};
+
 // Real-time order status updates
 onMounted(() => {
+  // Start auto-refresh for tables
+  startAutoRefresh();
+
   if (window.Echo && props.employee) {
     const restaurantId = props.employee.user_id;
 
@@ -326,6 +355,16 @@ onMounted(() => {
           );
 
           console.log(`Order ${voidedOrderId} was voided and removed from view`);
+        }
+
+        // If an order is paid, reload tables to update status
+        if (event.new_status === 'paid') {
+          console.log('Order paid - refreshing table statuses');
+          router.reload({
+            only: ['tables'],
+            preserveScroll: true,
+            preserveState: true,
+          });
         }
       })
       .error((error: any) => {
@@ -360,6 +399,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  // Stop auto-refresh
+  stopAutoRefresh();
+
   if (window.Echo && props.employee) {
     const restaurantId = props.employee.user_id;
     window.Echo.leave(`restaurant.${restaurantId}.waiter`);

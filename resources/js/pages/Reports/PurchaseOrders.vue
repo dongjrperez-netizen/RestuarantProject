@@ -20,7 +20,8 @@ import {
   DollarSign,
   TrendingUp,
   Calendar,
-  Filter
+  Filter,
+  Banknote
 } from 'lucide-vue-next';
 
 interface PurchaseOrder {
@@ -313,7 +314,7 @@ const statusOptions = [
                 <p class="text-xs text-muted-foreground mt-1">Order value</p>
               </div>
               <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                <DollarSign class="h-4 w-4 text-green-600" />
+                <Banknote class="h-4 w-4 text-green-600" />
               </div>
             </div>
           </CardContent>

@@ -4,7 +4,7 @@ import CashierLayout from '@/layouts/CashierLayout.vue';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
-import { DollarSign, ShoppingCart, Clock, Users, Receipt, TrendingUp } from 'lucide-vue-next';
+import { DollarSign, ShoppingCart, Clock, Users, Receipt, TrendingUp, Banknote } from 'lucide-vue-next';
 
 // Props would come from backend
 defineProps<{
@@ -76,7 +76,7 @@ const mockStats = {
                 <Card>
                     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle class="text-sm font-medium">Today's Revenue</CardTitle>
-                        <DollarSign class="h-4 w-4 text-muted-foreground" />
+                        <Banknote class="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div class="text-2xl font-bold">₱{{ Number(todayRevenue || 0).toLocaleString() }}</div>
