@@ -11,8 +11,8 @@ class MenuCategoryController extends Controller
 {
     public function index()
     {
-        $user = $this->getAuthUser();
-        $restaurantId = $this->getRestaurantId();
+        $user = Auth::user();
+        $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         $categories = MenuCategory::byRestaurant($restaurantId)
             ->withCount('dishes')
