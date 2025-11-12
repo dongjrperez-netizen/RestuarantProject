@@ -189,6 +189,25 @@ const clearFilters = () => {
       <div class="flex items-center justify-between">
       
       </div>
+         <!-- Summary Cards -->
+      <div class="grid gap-4 md:grid-cols-2">
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Total Ingredients</div>
+            <div class="text-2xl font-bold">{{ formatNumber(stats.total_ingredients) }}</div>
+          </CardContent>
+        </Card>
+
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Low Stock Ingredients</div>
+            <div class="text-2xl font-bold text-yellow-600">{{ formatNumber(stats.low_stock_count) }}</div>
+            <p class="text-xs text-muted-foreground mt-1">
+              {{ stats.low_stock_count === 0 ? 'All ingredients are well stocked' : 'Items need reordering' }}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
       <!-- Ingredients Table -->
       <Card>
        <CardHeader>

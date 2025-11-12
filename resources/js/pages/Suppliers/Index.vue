@@ -208,6 +208,8 @@ const copyInvitationLink = async (supplier: Supplier) => {
       <!-- Header -->
       <div class="flex items-center justify-between mt-6">
         <div>
+           <h1 class="text-3xl font-bold tracking-tight">Suppliers</h1>
+          <p class="text-muted-foreground">Manage your suppliers and their contact information</p>
         
         </div>
         <Link href="/suppliers/create">
@@ -215,35 +217,29 @@ const copyInvitationLink = async (supplier: Supplier) => {
         </Link>
       </div>
 
-      <!-- Summary Cards
+      <!-- Summary Cards -->
       <div class="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Total Suppliers</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Total Suppliers</div>
             <div class="text-2xl font-bold">{{ suppliers.length }}</div>
           </CardContent>
         </Card>
-        
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Active Suppliers</CardTitle>
-          </CardHeader>
-          <CardContent>
+
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Active Suppliers</div>
             <div class="text-2xl font-bold">{{ suppliers.filter(s => s.is_active).length }}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">With Email</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">With Email</div>
             <div class="text-2xl font-bold">{{ suppliers.filter(s => s.email).length }}</div>
           </CardContent>
         </Card>
-      </div> -->
+      </div>
 
       <!-- Suppliers Table -->
       <Card>

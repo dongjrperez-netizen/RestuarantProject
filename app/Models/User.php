@@ -32,7 +32,7 @@ class User extends Authenticatable implements MustVerifyEmailContract
     ];
 
     protected $attributes = [
-        'role_id' => 1, // Default value
+        'role_id' => 0, // Default value
     ];
 
     // Define the relationship with Restaurant_Data

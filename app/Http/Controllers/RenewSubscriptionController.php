@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Srmklive\PayPal\Services\PayPal as PayPalClient;
@@ -186,5 +187,229 @@ class RenewSubscriptionController extends Controller
     public function renewCancel()
     {
         return redirect()->route('subscriptions.renew')->withErrors('Subscription renewal was cancelled.');
+    }
+
+    /**
+     * Process renewal with PayMongo (GCash)
+     */
+    public function renewWithPayMongo(Request $request)
+    {
+        $request->validate([
+            'plan_id' => 'required|exists:subscriptionpackages,plan_id',
+            'payment_method' => 'required|string|in:gcash,grab_pay,card',
+        ]);
+
+        $user = Auth::user();
+        $plan = Subscriptionpackage::findOrFail($request->plan_id);
+
+        // Check if PayMongo is configured
+        if (empty(config('services.paymongo.secret_key'))) {
+            return response()->json([
+                'message' => 'PayMongo is not configured. Please contact the administrator.'
+            ], 500);
+        }
+
+        // Construct full name from user fields
+        $fullName = trim($user->first_name . ' ' . ($user->middle_name ? $user->middle_name . ' ' : '') . $user->last_name);
+
+        // Validate user has required information
+        if (empty($fullName) || empty($user->email)) {
+            return response()->json([
+                'message' => 'Your account is missing required information (name or email). Please update your profile first.'
+            ], 400);
+        }
+
+        // Check if user already has an active subscription
+        $activeSubscription = Usersubscription::where('user_id', $user->id)
+            ->where('subscription_status', 'active')
+            ->first();
+
+        if ($activeSubscription) {
+            $now = Carbon::now();
+            $endDate = Carbon::parse($activeSubscription->subscription_endDate);
+
+            // Only allow renewal if subscription is expiring within 7 days or has expired
+            if ($now->diffInDays($endDate, false) > 7) {
+                return response()->json([
+                    'message' => 'You can only renew your subscription within 7 days of expiration.'
+                ], 400);
+            }
+        }
+
+        try {
+            $response = Http::withBasicAuth(config('services.paymongo.secret_key'), '')
+                ->post('https://api.paymongo.com/v1/checkout_sessions', [
+                    'data' => [
+                        'attributes' => [
+                            'line_items' => [
+                                [
+                                    'currency' => 'PHP',
+                                    'amount' => (int) round($plan->plan_price * 100), // Convert to centavos
+                                    'name' => 'ServeWise - ' . $plan->plan_name . ' Renewal',
+                                    'quantity' => 1,
+                                ],
+                            ],
+                            'payment_method_types' => [$request->payment_method],
+                            'success_url' => route('subscriptions.renew.paymongo.success') . '?plan_id=' . $plan->plan_id,
+                            'cancel_url' => route('subscriptions.renew.paymongo.cancel'),
+                            'customer' => [
+                                'name' => $fullName,
+                                'email' => $user->email,
+                            ],
+                            'metadata' => [
+                                'plan_id' => $plan->plan_id,
+                                'user_id' => $user->id,
+                                'payment_method' => $request->payment_method,
+                            ],
+                        ],
+                    ],
+                ]);
+
+            if ($response->failed()) {
+                $errorResponse = $response->json();
+                $errorMessage = 'Payment processing failed';
+
+                // Extract specific error message from PayMongo response
+                if (isset($errorResponse['errors']) && is_array($errorResponse['errors']) && count($errorResponse['errors']) > 0) {
+                    $errorMessage = $errorResponse['errors'][0]['detail'] ?? $errorMessage;
+                } elseif (isset($errorResponse['message'])) {
+                    $errorMessage = $errorResponse['message'];
+                }
+
+                Log::error('PayMongo Renewal Checkout Error', [
+                    'response' => $errorResponse,
+                    'plan_id' => $request->plan_id,
+                    'user_id' => $user->id,
+                    'status_code' => $response->status(),
+                ]);
+
+                return response()->json(['message' => $errorMessage], 400);
+            }
+
+            $checkoutData = $response->json();
+
+            // Store checkout session ID in session for verification later
+            session(['paymongo_renew_checkout_session_id' => $checkoutData['data']['id']]);
+            session(['paymongo_renew_plan_id' => $plan->plan_id]);
+
+            Log::info('PayMongo Renewal Checkout Created', [
+                'plan_id' => $plan->plan_id,
+                'user_id' => $user->id,
+                'checkout_session_id' => $checkoutData['data']['id'],
+                'amount' => $plan->plan_price,
+                'payment_method' => $request->payment_method,
+            ]);
+
+            return response()->json([
+                'checkout_url' => $checkoutData['data']['attributes']['checkout_url'],
+                'checkout_session_id' => $checkoutData['data']['id'],
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('PayMongo Renewal Exception', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'plan_id' => $request->plan_id,
+                'user_id' => $user->id,
+            ]);
+
+            return response()->json([
+                'message' => 'Payment processing error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle PayMongo renewal success
+     */
+    public function renewPayMongoSuccess(Request $request)
+    {
+        $user = auth()->user();
+        $restaurant = Restaurant_Data::where('user_id', $user->id)->first();
+
+        if (!$restaurant) {
+            return redirect()->route('subscriptions.renew')
+                ->withErrors('No restaurant data found for this user.');
+        }
+
+        $restaurantId = $restaurant->id;
+        $planId = $request->get('plan_id') ?? session('paymongo_renew_plan_id');
+        $checkoutSessionId = $request->get('checkout_session_id') ?? session('paymongo_renew_checkout_session_id');
+
+        if (!$planId || !$checkoutSessionId) {
+            return redirect()->route('subscriptions.renew')
+                ->withErrors('Missing payment information.');
+        }
+
+        $plan = Subscriptionpackage::findOrFail($planId);
+
+        try {
+            DB::beginTransaction();
+
+            // Archive any existing active subscription
+            Usersubscription::where('user_id', $user->id)
+                ->where('subscription_status', 'active')
+                ->update(['subscription_status' => 'archive']);
+
+            $startDate = now();
+            $endDate = now()->addDays((int) $plan->plan_duration);
+
+            $userSubscription = Usersubscription::create([
+                'subscription_startDate' => $startDate,
+                'subscription_endDate' => $endDate,
+                'remaining_days' => $plan->plan_duration,
+                'subscription_status' => 'active',
+                'plan_id' => $plan->plan_id,
+                'user_id' => $user->id,
+                'is_trial' => false,
+            ]);
+
+            $paymentInfo = Paymentinfo::create([
+                'payment_name' => 'PayMongo - GCash',
+                'payment_status' => 'completed',
+            ]);
+
+            Subpayment::create([
+                'amount' => $plan->plan_price,
+                'currency' => 'PHP',
+                'paypal_transaction_id' => $checkoutSessionId, // Reusing this field for PayMongo
+                'payment_id' => $paymentInfo->payment_id,
+                'restaurant_id' => $restaurantId,
+            ]);
+
+            DB::commit();
+
+            // Clear session data
+            session()->forget(['paymongo_renew_checkout_session_id', 'paymongo_renew_plan_id']);
+
+            Log::info('PayMongo Renewal Activated', [
+                'user_id' => $user->id,
+                'plan_id' => $plan->plan_id,
+                'checkout_session_id' => $checkoutSessionId,
+                'subscription_id' => $userSubscription->userSubscription_id,
+            ]);
+
+            return redirect()->route('dashboard')
+                ->with('success', 'Subscription renewed successfully via GCash!');
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            Log::error('PayMongo Renewal Activation Error: ' . $e->getMessage());
+
+            return redirect()->route('subscriptions.renew')
+                ->withErrors(['error' => 'Subscription renewal failed. Please contact support.']);
+        }
+    }
+
+    /**
+     * Handle PayMongo renewal cancellation
+     */
+    public function renewPayMongoCancel()
+    {
+        // Clear session data
+        session()->forget(['paymongo_renew_checkout_session_id', 'paymongo_renew_plan_id']);
+
+        return redirect()->route('subscriptions.renew')
+            ->withErrors('Subscription renewal was cancelled.');
     }
 }

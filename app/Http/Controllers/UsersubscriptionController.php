@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\UserSubscription;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class UsersubscriptionController extends Controller
 {
@@ -400,5 +403,243 @@ class UsersubscriptionController extends Controller
         session()->forget('renewal_action_type');
 
         return redirect()->route('user-management.subscriptions')->with('message', 'Payment cancelled.');
+    }
+
+    /**
+     * Create PayMongo checkout for renewal or upgrade
+     */
+    public function processPayMongoRenewalOrUpgrade(Request $request)
+    {
+        $request->validate([
+            'plan_id' => 'required|exists:subscriptionpackages,plan_id',
+            'type' => 'required|in:renewal,upgrade',
+            'payment_method' => 'required|string|in:gcash,grab_pay,card',
+        ]);
+
+        $user = auth()->user();
+        $plan = \App\Models\Subscriptionpackage::findOrFail($request->plan_id);
+
+        // Check if PayMongo is configured
+        if (empty(config('services.paymongo.secret_key'))) {
+            return response()->json([
+                'message' => 'PayMongo is not configured. Please contact the administrator.'
+            ], 500);
+        }
+
+        // Construct full name from user fields
+        $fullName = trim($user->first_name . ' ' . ($user->middle_name ? $user->middle_name . ' ' : '') . $user->last_name);
+
+        // Validate user has required information
+        if (empty($fullName) || empty($user->email)) {
+            return response()->json([
+                'message' => 'Your account is missing required information (name or email). Please update your profile first.'
+            ], 400);
+        }
+
+        try {
+            $response = Http::withBasicAuth(config('services.paymongo.secret_key'), '')
+                ->post('https://api.paymongo.com/v1/checkout_sessions', [
+                    'data' => [
+                        'attributes' => [
+                            'line_items' => [
+                                [
+                                    'currency' => 'PHP',
+                                    'amount' => (int) round($plan->plan_price * 100), // Convert to centavos
+                                    'name' => 'ServeWise - ' . $plan->plan_name . ' ' . ucfirst($request->type),
+                                    'quantity' => 1,
+                                ],
+                            ],
+                            'payment_method_types' => [$request->payment_method],
+                            'success_url' => route('user-management.subscriptions.paymongo.success') . '?plan_id=' . $plan->plan_id . '&action_type=' . $request->type,
+                            'cancel_url' => route('user-management.subscriptions.paymongo.cancel'),
+                            'customer' => [
+                                'name' => $fullName,
+                                'email' => $user->email,
+                            ],
+                            'metadata' => [
+                                'plan_id' => $plan->plan_id,
+                                'user_id' => $user->id,
+                                'payment_method' => $request->payment_method,
+                                'action_type' => $request->type,
+                            ],
+                        ],
+                    ],
+                ]);
+
+            if ($response->failed()) {
+                $errorResponse = $response->json();
+                $errorMessage = 'Payment processing failed';
+
+                // Extract specific error message from PayMongo response
+                if (isset($errorResponse['errors']) && is_array($errorResponse['errors']) && count($errorResponse['errors']) > 0) {
+                    $errorMessage = $errorResponse['errors'][0]['detail'] ?? $errorMessage;
+                } elseif (isset($errorResponse['message'])) {
+                    $errorMessage = $errorResponse['message'];
+                }
+
+                Log::error('PayMongo ' . ucfirst($request->type) . ' Checkout Error', [
+                    'response' => $errorResponse,
+                    'plan_id' => $request->plan_id,
+                    'user_id' => $user->id,
+                    'status_code' => $response->status(),
+                ]);
+
+                return response()->json(['message' => $errorMessage], 400);
+            }
+
+            $checkoutData = $response->json();
+
+            // Store checkout session ID and action type in session for verification later
+            session(['paymongo_renewal_checkout_session_id' => $checkoutData['data']['id']]);
+            session(['paymongo_renewal_plan_id' => $plan->plan_id]);
+            session(['paymongo_renewal_action_type' => $request->type]);
+
+            Log::info('PayMongo ' . ucfirst($request->type) . ' Checkout Created', [
+                'plan_id' => $plan->plan_id,
+                'user_id' => $user->id,
+                'checkout_session_id' => $checkoutData['data']['id'],
+                'amount' => $plan->plan_price,
+                'payment_method' => $request->payment_method,
+                'action_type' => $request->type,
+            ]);
+
+            return response()->json([
+                'checkout_url' => $checkoutData['data']['attributes']['checkout_url'],
+                'checkout_session_id' => $checkoutData['data']['id'],
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('PayMongo ' . ucfirst($request->type) . ' Exception', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'plan_id' => $request->plan_id,
+                'user_id' => $user->id,
+            ]);
+
+            return response()->json([
+                'message' => 'Payment processing error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle PayMongo payment success for renewal/upgrade
+     */
+    public function payMongoRenewalUpgradeSuccess(Request $request)
+    {
+        $user = auth()->user();
+        $restaurant = \App\Models\Restaurant_Data::where('user_id', $user->id)->first();
+
+        if (!$restaurant) {
+            return redirect()->route('user-management.subscriptions')
+                ->withErrors('No restaurant data found for this user.');
+        }
+
+        $restaurantId = $restaurant->id;
+        $planId = $request->get('plan_id') ?? session('paymongo_renewal_plan_id');
+        $actionType = $request->get('action_type') ?? session('paymongo_renewal_action_type', 'renewal');
+        $checkoutSessionId = $request->get('checkout_session_id') ?? session('paymongo_renewal_checkout_session_id');
+
+        if (!$planId || !$checkoutSessionId) {
+            return redirect()->route('user-management.subscriptions')
+                ->withErrors('Missing payment information.');
+        }
+
+        $plan = \App\Models\Subscriptionpackage::findOrFail($planId);
+
+        try {
+            DB::beginTransaction();
+
+            // Get current active subscription with its package
+            $currentSubscription = UserSubscription::with('subscriptionPackage')
+                ->where('user_id', $user->id)
+                ->where('subscription_status', 'active')
+                ->where('plan_id', '!=', 4) // Exclude free trials
+                ->first();
+
+            $startDate = now();
+            $endDate = now()->addDays((int) $plan->plan_duration);
+            $remainingDaysToAdd = 0;
+
+            // Handle renewal logic - preserve remaining days
+            if ($actionType === 'renewal' && $currentSubscription) {
+                $currentSubscription->load('subscriptionPackage');
+                $remainingDaysToAdd = max(0, $currentSubscription->remaining_days);
+                $endDate = $endDate->addDays($remainingDaysToAdd);
+                $currentSubscription->update(['subscription_status' => 'archive']);
+            }
+
+            // Handle upgrade logic - expire current subscription WITHOUT adding remaining days
+            if ($actionType === 'upgrade' && $currentSubscription) {
+                $currentSubscription->update(['subscription_status' => 'expired']);
+            }
+
+            // Create new subscription
+            $userSubscription = UserSubscription::create([
+                'subscription_startDate' => $startDate,
+                'subscription_endDate' => $endDate,
+                'subscription_status' => 'active',
+                'plan_id' => $plan->plan_id,
+                'user_id' => $user->id,
+                'is_trial' => false,
+            ]);
+
+            $paymentInfo = \App\Models\Paymentinfo::create([
+                'payment_name' => 'PayMongo - GCash',
+                'payment_status' => 'completed',
+            ]);
+
+            \App\Models\Subpayment::create([
+                'amount' => $plan->plan_price,
+                'currency' => 'PHP',
+                'paypal_transaction_id' => $checkoutSessionId, // Reusing this field for PayMongo
+                'payment_id' => $paymentInfo->payment_id,
+                'restaurant_id' => $restaurantId,
+            ]);
+
+            $user->save();
+
+            DB::commit();
+
+            // Clear session data
+            session()->forget(['paymongo_renewal_checkout_session_id', 'paymongo_renewal_plan_id', 'paymongo_renewal_action_type']);
+
+            Log::info('PayMongo ' . ucfirst($actionType) . ' Activated', [
+                'user_id' => $user->id,
+                'plan_id' => $plan->plan_id,
+                'checkout_session_id' => $checkoutSessionId,
+                'subscription_id' => $userSubscription->userSubscription_id,
+                'action_type' => $actionType,
+            ]);
+
+            // Create success message based on action type
+            $successMessage = ucfirst($actionType) . ' successful! Your ' . $plan->plan_name . ' subscription is now active via GCash.';
+
+            if ($actionType === 'renewal' && $remainingDaysToAdd > 0) {
+                $successMessage .= ' Your remaining ' . $remainingDaysToAdd . ' days from your previous subscription have been added.';
+            }
+
+            return redirect()->route('user-management.subscriptions')
+                ->with('success', $successMessage);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            Log::error('PayMongo ' . ucfirst($actionType) . ' Activation Error: ' . $e->getMessage());
+
+            return redirect()->route('user-management.subscriptions')
+                ->withErrors(['error' => ucfirst($actionType) . ' activation failed. Please contact support.']);
+        }
+    }
+
+    /**
+     * Handle PayMongo payment cancellation for renewal/upgrade
+     */
+    public function payMongoRenewalUpgradeCancel()
+    {
+        // Clear session data
+        session()->forget(['paymongo_renewal_checkout_session_id', 'paymongo_renewal_plan_id', 'paymongo_renewal_action_type']);
+
+        return redirect()->route('user-management.subscriptions')
+            ->withErrors('Payment was cancelled.');
     }
 }

@@ -86,42 +86,34 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
 
       <!-- Summary Cards -->
       <div class="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Total Orders</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Total Orders</div>
             <div class="text-2xl font-bold">{{ purchaseOrders.length }}</div>
           </CardContent>
         </Card>
-        
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Pending</CardTitle>
-          </CardHeader>
-          <CardContent>
+
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Pending</div>
             <div class="text-2xl font-bold text-orange-600">
               {{ purchaseOrders.filter(po => ['draft', 'pending', 'sent'].includes(po.status)).length }}
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">In Transit</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">In Transit</div>
             <div class="text-2xl font-bold text-blue-600">
               {{ purchaseOrders.filter(po => ['confirmed', 'partially_delivered'].includes(po.status)).length }}
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">Delivered</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Delivered</div>
             <div class="text-2xl font-bold text-green-600">
               {{ purchaseOrders.filter(po => po.status === 'delivered').length }}
             </div>

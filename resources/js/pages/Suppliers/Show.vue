@@ -225,21 +225,6 @@ const formatDate = (dateString: string) => {
           </Table>
         </CardContent>
       </Card>
-
-      <!-- Empty state for ingredients -->
-      <Card v-else>
-        <CardHeader>
-          <CardTitle>Ingredients Supplied</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="text-center py-8">
-            <p class="text-muted-foreground">No ingredients assigned to this supplier yet.</p>
-            <Link :href="route('suppliers.edit', supplier.supplier_id)">
-              <Button variant="outline" class="mt-4">Add Ingredients</Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   </AppLayout>
 </template>

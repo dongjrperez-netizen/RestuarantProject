@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CustomerOrder;
 use App\Models\CustomerOrderItem;
+use App\Models\CustomerPayment;
 use App\Models\Ingredients;
 use App\Models\Employee;
 use Carbon\Carbon;
@@ -49,23 +50,26 @@ class DashboardController extends Controller
         $yesterday = Carbon::yesterday();
         $thisMonth = Carbon::now()->startOfMonth();
 
-        // Today's revenue
-        $todayRevenue = CustomerOrder::where('restaurant_id', $restaurantId)
-            ->whereDate('created_at', $today)
-            ->where('status', '!=', 'cancelled')
-            ->sum('total_amount');
+        // Today's revenue (sum final_amount from completed payments)
+        $todayRevenue = CustomerPayment::join('customer_orders', 'customer_payments.order_id', '=', 'customer_orders.order_id')
+            ->where('customer_orders.restaurant_id', $restaurantId)
+            ->whereDate('customer_payments.paid_at', $today)
+            ->where('customer_payments.status', 'completed')
+            ->sum('customer_payments.final_amount');
 
         // Yesterday's revenue for growth calculation
-        $yesterdayRevenue = CustomerOrder::where('restaurant_id', $restaurantId)
-            ->whereDate('created_at', $yesterday)
-            ->where('status', '!=', 'cancelled')
-            ->sum('total_amount');
+        $yesterdayRevenue = CustomerPayment::join('customer_orders', 'customer_payments.order_id', '=', 'customer_orders.order_id')
+            ->where('customer_orders.restaurant_id', $restaurantId)
+            ->whereDate('customer_payments.paid_at', $yesterday)
+            ->where('customer_payments.status', 'completed')
+            ->sum('customer_payments.final_amount');
 
         // This month's revenue
-        $thisMonthRevenue = CustomerOrder::where('restaurant_id', $restaurantId)
-            ->where('created_at', '>=', $thisMonth)
-            ->where('status', '!=', 'cancelled')
-            ->sum('total_amount');
+        $thisMonthRevenue = CustomerPayment::join('customer_orders', 'customer_payments.order_id', '=', 'customer_orders.order_id')
+            ->where('customer_orders.restaurant_id', $restaurantId)
+            ->where('customer_payments.paid_at', '>=', $thisMonth)
+            ->where('customer_payments.status', 'completed')
+            ->sum('customer_payments.final_amount');
 
         // Calculate growth percentage
         $growth = 0;
@@ -175,10 +179,11 @@ class DashboardController extends Controller
         for ($i = 0; $i < 7; $i++) {
             $date = $startOfWeek->copy()->addDays($i);
 
-            $dailyRevenue = CustomerOrder::where('restaurant_id', $restaurantId)
-                ->whereDate('created_at', $date)
-                ->where('status', '!=', 'cancelled')
-                ->sum('total_amount');
+            $dailyRevenue = CustomerPayment::join('customer_orders', 'customer_payments.order_id', '=', 'customer_orders.order_id')
+                ->where('customer_orders.restaurant_id', $restaurantId)
+                ->whereDate('customer_payments.paid_at', $date)
+                ->where('customer_payments.status', 'completed')
+                ->sum('customer_payments.final_amount');
 
             $dailyOrders = CustomerOrder::where('restaurant_id', $restaurantId)
                 ->whereDate('created_at', $date)

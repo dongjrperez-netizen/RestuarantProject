@@ -7,6 +7,9 @@ const plans = props.plans
 const subscriptions = props.subscriptions || []
 const success = props.success || null
 const loadingPlanId = ref(null)
+const showPaymentMethodModal = ref(false)
+const selectedPlan = ref(null)
+const processingPayment = ref(false)
 
 // Debug function to check CSRF token
 function debugCSRF() {
@@ -17,10 +20,85 @@ function debugCSRF() {
 // Call debug on component mount
 debugCSRF()
 
-// Helper function to handle form submission loading state
-function handleSubmit(planId) {
-  loadingPlanId.value = planId
-  // Form will submit normally, loading will reset on page change
+// Helper function to open payment method modal
+function openPaymentModal(plan) {
+  console.log('Opening payment modal for plan:', plan)
+  selectedPlan.value = plan
+  showPaymentMethodModal.value = true
+  console.log('Modal should be visible:', showPaymentMethodModal.value)
+}
+
+// Process payment with PayPal
+async function processPayPalPayment() {
+  if (!selectedPlan.value) return
+
+  processingPayment.value = true
+  loadingPlanId.value = selectedPlan.value.plan_id
+
+  // Submit form for PayPal payment
+  const form = document.createElement('form')
+  form.method = 'POST'
+  form.action = '/subscriptions/create'
+
+  const csrfInput = document.createElement('input')
+  csrfInput.type = 'hidden'
+  csrfInput.name = '_token'
+  csrfInput.value = props.csrf_token
+
+  const planInput = document.createElement('input')
+  planInput.type = 'hidden'
+  planInput.name = 'plan_id'
+  planInput.value = selectedPlan.value.plan_id
+
+  form.appendChild(csrfInput)
+  form.appendChild(planInput)
+  document.body.appendChild(form)
+  form.submit()
+}
+
+// Process payment with GCash/PayMongo
+async function processGCashPayment() {
+  if (!selectedPlan.value) return
+
+  processingPayment.value = true
+
+  try {
+    const csrfToken = props.csrf_token
+
+    const response = await fetch('/subscriptions/paymongo/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        plan_id: selectedPlan.value.plan_id,
+        payment_method: 'gcash',
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      alert(errorData.message || 'Payment processing failed')
+      processingPayment.value = false
+      return
+    }
+
+    const data = await response.json()
+
+    if (data.checkout_url) {
+      // Redirect to PayMongo checkout page
+      window.location.href = data.checkout_url
+    } else {
+      alert('Payment processing failed. Please try again.')
+      processingPayment.value = false
+    }
+  } catch (error) {
+    console.error('GCash payment error:', error)
+    alert('Payment processing failed. Please try again.')
+    processingPayment.value = false
+  }
 }
 
 // Helper function to convert days to minutes for display
@@ -178,30 +256,33 @@ function getPlanFeatures(planName) {
             </div>
 
             <!-- Subscribe / Free Trial Button -->
-            <form
-              method="POST"
-              :action="plan.plan_id == 4 ? route('subscriptions.free-trial') : route('subscriptions.create')"
-              @submit="handleSubmit(plan.plan_id)"
-            >
-              <input type="hidden" name="_token" :value="$page.props.csrf_token" />
-              <input type="hidden" name="plan_id" :value="plan.plan_id" />
+            <div v-if="plan.plan_id == 4">
+              <!-- Free Trial Form -->
+              <form
+                method="POST"
+                :action="route('subscriptions.free-trial')"
+              >
+                <input type="hidden" name="_token" :value="$page.props.csrf_token" />
+                <input type="hidden" name="plan_id" :value="plan.plan_id" />
+                <button
+                  type="submit"
+                  :disabled="loadingPlanId !== null"
+                  class="w-full py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-4 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg focus:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Start 30 Days Free Trial
+                </button>
+              </form>
+            </div>
+            <div v-else>
+              <!-- Paid Plan - Show Payment Method Modal -->
               <button
-                type="submit"
+                @click="openPaymentModal(plan)"
                 :disabled="loadingPlanId !== null"
                 class="w-full py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-4 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg focus:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <span v-if="loadingPlanId !== plan.plan_id">
-                  {{ plan.plan_id == 4 ? 'Start 30 Days Free Trial' : 'Subscribe Now' }}
-                </span>
-                <span v-else class="flex items-center justify-center">
-                  <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Processing...
-                </span>
+                Subscribe Now
               </button>
-            </form>
+            </div>
           </div>
         </div>
       </div>
@@ -252,6 +333,98 @@ function getPlanFeatures(planName) {
         </div>
       </div>
 
+    </div>
+
+    <!-- Payment Method Selection Modal -->
+    <div v-if="showPaymentMethodModal" class="fixed inset-0 z-[9999] overflow-y-auto flex items-center justify-center p-4" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <!-- Background overlay -->
+      <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" aria-hidden="true" @click="showPaymentMethodModal = false"></div>
+
+      <!-- Modal panel -->
+      <div class="relative bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all w-full max-w-lg z-10">
+        <div class="bg-white px-6 pt-6 pb-4">
+          <div class="sm:flex sm:items-start">
+            <div class="w-full mt-3 text-center sm:mt-0 sm:text-left">
+              <h3 class="text-2xl font-bold text-gray-900 mb-2" style="font-family: 'Playfair Display', serif;" id="modal-title">
+                Choose Payment Method
+              </h3>
+              <p class="text-sm text-gray-600 mb-6">
+                Select your preferred payment method for {{ selectedPlan?.plan_name }}
+              </p>
+
+              <!-- Payment Method Options -->
+              <div class="space-y-3">
+                <!-- PayPal Option -->
+                <button
+                  @click="processPayPalPayment"
+                  :disabled="processingPayment"
+                  class="w-full flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group"
+                >
+                  <div class="flex items-center space-x-4">
+                    <div class="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200">
+                      <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none">
+                        <path d="M20.067 8.478c.492.88.556 2.014.3 3.327-.74 3.806-3.276 5.12-6.514 5.12h-.5a.805.805 0 00-.794.68l-.04.22-.63 3.993-.028.15a.805.805 0 01-.794.679H7.72a.483.483 0 01-.477-.558L8.926 12.5" stroke="#003087" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M17.341 5.272c.305-.018.632-.01.96.028 1.993.232 3.317 1.307 3.766 3.178.492.88.556 2.014.3 3.327-.74 3.806-3.276 5.12-6.514 5.12h-.5a.805.805 0 00-.794.68l-.04.22-.63 3.993-.028.15a.805.805 0 01-.794.679H9.72" stroke="#009CDE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
+                    <div class="text-left">
+                      <p class="font-semibold text-gray-900">PayPal</p>
+                      <p class="text-sm text-gray-500">Pay securely with PayPal</p>
+                    </div>
+                  </div>
+                  <svg class="w-6 h-6 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                  </svg>
+                </button>
+
+                <!-- GCash Option -->
+                <button
+                  @click="processGCashPayment"
+                  :disabled="processingPayment"
+                  class="w-full flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl hover:border-blue-600 hover:bg-blue-50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group"
+                >
+                  <div class="flex items-center space-x-4">
+                    <div class="flex-shrink-0 w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100">
+                      <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none">
+                        <rect width="24" height="24" rx="4" fill="#007DFF"/>
+                        <path d="M12 6v12M6 12h12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                    </div>
+                    <div class="text-left">
+                      <p class="font-semibold text-gray-900">GCash</p>
+                      <p class="text-sm text-gray-500">Pay with GCash via PayMongo</p>
+                    </div>
+                  </div>
+                  <svg class="w-6 h-6 text-gray-400 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Processing Indicator -->
+              <div v-if="processingPayment" class="mt-4 flex items-center justify-center space-x-2 text-sm text-gray-600">
+                <svg class="animate-spin h-5 w-5 text-orange-500" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Processing payment...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
+          <button
+            type="button"
+            @click="showPaymentMethodModal = false"
+            :disabled="processingPayment"
+            class="w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>

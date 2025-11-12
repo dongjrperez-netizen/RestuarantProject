@@ -3,6 +3,8 @@ import { BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import AppLayoutSubscriptionRenewal from '../layouts/AppLayoutSubscriptionRenewal.vue';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
@@ -35,9 +37,89 @@ const subscriptions = (props.subscriptions as Subscription[]) || [];
 const lastSubscriptionPlanId = props.lastSubscriptionPlanId as number | string | null;
 const success = props.success || null;
 const loadingPlanId = ref<number | string | null>(null);
+const showPaymentMethodModal = ref(false);
+const selectedPlanForPayment = ref<Plan | null>(null);
+
+function openPaymentModal(plan: Plan) {
+  selectedPlanForPayment.value = plan;
+  showPaymentMethodModal.value = true;
+}
 
 function handleSubmit(planId: number | string) {
   loadingPlanId.value = planId;
+}
+
+// Process PayPal payment
+function processPayPalPayment() {
+  if (!selectedPlanForPayment.value) return;
+
+  showPaymentMethodModal.value = false;
+  loadingPlanId.value = selectedPlanForPayment.value.plan_id;
+
+  // Create and submit form for PayPal
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/subscriptions/renew';
+
+  const csrfInput = document.createElement('input');
+  csrfInput.type = 'hidden';
+  csrfInput.name = '_token';
+  csrfInput.value = (props.csrf_token as string) || '';
+  form.appendChild(csrfInput);
+
+  const planInput = document.createElement('input');
+  planInput.type = 'hidden';
+  planInput.name = 'plan_id';
+  planInput.value = selectedPlanForPayment.value.plan_id.toString();
+  form.appendChild(planInput);
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// Process GCash payment via PayMongo
+async function processGCashPayment() {
+  if (!selectedPlanForPayment.value) return;
+
+  showPaymentMethodModal.value = false;
+  loadingPlanId.value = selectedPlanForPayment.value.plan_id;
+
+  try {
+    const csrfToken = (props.csrf_token as string) || '';
+
+    const response = await fetch('/subscriptions/renew/paymongo', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        plan_id: selectedPlanForPayment.value.plan_id,
+        payment_method: 'gcash',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      alert(errorData.message || 'Payment processing failed');
+      loadingPlanId.value = null;
+      return;
+    }
+
+    const data = await response.json();
+
+    if (data.checkout_url) {
+      window.location.href = data.checkout_url;
+    } else {
+      alert('Payment processing failed. Please try again.');
+      loadingPlanId.value = null;
+    }
+  } catch (error) {
+    console.error('GCash payment error:', error);
+    alert('Payment processing failed. Please try again.');
+    loadingPlanId.value = null;
+  }
 }
 
 // Features for each plan based on plan name
@@ -150,11 +232,9 @@ function getPlanFeatures(planName: string): string[] {
             </div>
 
             <!-- Subscribe / Renew Button -->
-            <form method="POST" :action="route('subscriptions.renew.process')" @submit="handleSubmit(plan.plan_id)">
-              <input type="hidden" name="_token" :value="$page.props.csrf_token" />
-              <input type="hidden" name="plan_id" :value="plan.plan_id" />
             <button
-              type="submit"
+              type="button"
+              @click="openPaymentModal(plan)"
               :disabled="loadingPlanId !== null"
               class="w-full py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-4 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg focus:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -169,7 +249,6 @@ function getPlanFeatures(planName: string): string[] {
                 Processing...
               </span>
             </button>
-        </form>
       </div>
     </div>
   </div>
@@ -230,7 +309,59 @@ function getPlanFeatures(planName: string): string[] {
     </div>
   </div>
 </div>
-  
+
+  <!-- Payment Method Selection Modal -->
+  <Dialog v-model:open="showPaymentMethodModal">
+    <DialogContent class="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Choose Payment Method</DialogTitle>
+        <DialogDescription>
+          Select your preferred payment method to renew your subscription
+        </DialogDescription>
+      </DialogHeader>
+      <div class="grid gap-4 py-4">
+        <!-- PayPal Option -->
+        <button
+          @click="processPayPalPayment"
+          class="flex items-center gap-4 rounded-lg border-2 border-gray-200 p-4 transition-all hover:border-blue-500 hover:bg-blue-50"
+        >
+          <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
+            <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
+            </svg>
+          </div>
+          <div class="flex-1 text-left">
+            <div class="font-semibold text-gray-900">PayPal</div>
+            <div class="text-sm text-gray-500">Pay securely with PayPal</div>
+          </div>
+        </button>
+
+        <!-- GCash Option -->
+        <button
+          @click="processGCashPayment"
+          class="flex items-center gap-4 rounded-lg border-2 border-gray-200 p-4 transition-all hover:border-blue-500 hover:bg-blue-50"
+        >
+          <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
+            <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+            </svg>
+          </div>
+          <div class="flex-1 text-left">
+            <div class="font-semibold text-gray-900">GCash</div>
+            <div class="text-sm text-gray-500">Pay with GCash via PayMongo</div>
+          </div>
+        </button>
+      </div>
+      <DialogFooter>
+        <Button
+          variant="outline"
+          @click="showPaymentMethodModal = false"
+        >
+          Cancel
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 
   </AppLayoutSubscriptionRenewal>
 </template>

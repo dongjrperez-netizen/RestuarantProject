@@ -740,18 +740,18 @@ const getCurrentTotal = () => {
                                     <span>Discount ({{ tempDiscount.reason }}):</span>
                                     <span>-{{ formatCurrency(tempDiscount.amount) }}</span>
                                 </div>
-                                <div v-else-if="order?.discount_amount" class="flex justify-between text-sm text-red-600">
+                                <div v-else-if="order?.discount_amount && order.discount_amount > 0" class="flex justify-between text-sm text-red-600">
                                     <span>Discount:</span>
                                     <span>-{{ formatCurrency(order.discount_amount) }}</span>
                                 </div>
                                 <Separator />
                                 <div class="flex justify-between font-bold text-lg">
                                     <span>Total Amount:</span>
-                                    <span :class="(tempDiscount || order?.discount_amount) ? 'line-through text-muted-foreground' : ''">
+                                    <span :class="(tempDiscount || (order?.discount_amount && order.discount_amount > 0)) ? 'line-through text-muted-foreground' : ''">
                                         {{ formatCurrency(order?.total_amount || 0) }}
                                     </span>
                                 </div>
-                                <div v-if="tempDiscount || order?.discount_amount" class="flex justify-between font-bold text-lg text-green-600">
+                                <div v-if="tempDiscount || (order?.discount_amount && order.discount_amount > 0)" class="flex justify-between font-bold text-lg text-green-600">
                                     <span>Final Amount:</span>
                                     <span>{{ formatCurrency(getCurrentTotal()) }}</span>
                                 </div>
@@ -795,7 +795,7 @@ const getCurrentTotal = () => {
                         </CardHeader>
                         <CardContent class="space-y-4">
                             <div class="text-center">
-                                <div v-if="tempDiscount || order?.discount_amount">
+                                <div v-if="tempDiscount || (order?.discount_amount && order.discount_amount > 0)">
                                     <p class="text-lg line-through text-muted-foreground">{{ formatCurrency(order?.total_amount || 0) }}</p>
                                     <p class="text-2xl font-bold text-green-600">{{ formatCurrency(getCurrentTotal()) }}</p>
                                     <p class="text-sm text-muted-foreground">Final Amount</p>
@@ -843,7 +843,7 @@ const getCurrentTotal = () => {
 
                                 <!-- Discount Button -->
                                 <Button
-                                    v-if="order?.status !== 'paid' && !order?.discount_amount && !tempDiscount"
+                                    v-if="order?.status !== 'paid' && !(order?.discount_amount && order.discount_amount > 0) && !tempDiscount"
                                     variant="outline"
                                     class="w-full"
                                     @click="openDiscountModal"
@@ -980,7 +980,7 @@ const getCurrentTotal = () => {
                             <span>Order Total:</span>
                             <span>{{ formatCurrency(order?.total_amount || 0) }}</span>
                         </div>
-                        <div v-if="order?.discount_amount" class="flex justify-between text-sm text-red-600">
+                        <div v-if="order?.discount_amount && order.discount_amount > 0" class="flex justify-between text-sm text-red-600">
                             <span>Discount:</span>
                             <span>-{{ formatCurrency(order.discount_amount) }}</span>
                         </div>
@@ -1062,7 +1062,7 @@ const getCurrentTotal = () => {
                             <span>Order Total:</span>
                             <span>{{ formatCurrency(order?.total_amount || 0) }}</span>
                         </div>
-                        <div v-if="order?.discount_amount" class="flex justify-between text-sm text-red-600">
+                        <div v-if="order?.discount_amount && order.discount_amount > 0" class="flex justify-between text-sm text-red-600">
                             <span>Discount:</span>
                             <span>-{{ formatCurrency(order.discount_amount) }}</span>
                         </div>

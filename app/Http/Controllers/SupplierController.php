@@ -71,13 +71,6 @@ class SupplierController extends Controller
             'payment_terms' => 'required|in:COD,NET_7,NET_15,NET_30,NET_60,NET_90',
             'credit_limit' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
-            'ingredients' => 'array',
-            'ingredients.*.ingredient_id' => 'exists:ingredients,ingredient_id',
-            'ingredients.*.package_unit' => 'required|string|max:50',
-            'ingredients.*.package_quantity' => 'required|numeric|min:0.01',
-            'ingredients.*.package_price' => 'required|numeric|min:0.01',
-            'ingredients.*.lead_time_days' => 'nullable|numeric|min:0',
-            'ingredients.*.minimum_order_quantity' => 'nullable|numeric|min:1',
         ]);
 
         $validated['restaurant_id'] = auth()->user()->restaurantData->id;
@@ -88,19 +81,6 @@ class SupplierController extends Controller
         }
 
         $supplier = Supplier::create($validated);
-
-        if (isset($validated['ingredients'])) {
-            foreach ($validated['ingredients'] as $ingredient) {
-                $supplier->ingredients()->attach($ingredient['ingredient_id'], [
-                    'package_unit' => $ingredient['package_unit'],
-                    'package_quantity' => $ingredient['package_quantity'],
-                    'package_price' => $ingredient['package_price'],
-                    'lead_time_days' => $ingredient['lead_time_days'] ?? 0,
-                    'minimum_order_quantity' => $ingredient['minimum_order_quantity'] ?? 1,
-                    'is_active' => true,
-                ]);
-            }
-        }
 
         return redirect()->route('suppliers.index')->with('success', 'Supplier created successfully.');
     }
@@ -133,30 +113,9 @@ class SupplierController extends Controller
             'credit_limit' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
             'is_active' => 'boolean',
-            'ingredients' => 'array',
-            'ingredients.*.ingredient_id' => 'exists:ingredients,ingredient_id',
-            'ingredients.*.package_unit' => 'required|string|max:50',
-            'ingredients.*.package_quantity' => 'required|numeric|min:0.01',
-            'ingredients.*.package_price' => 'required|numeric|min:0.01',
-            'ingredients.*.lead_time_days' => 'nullable|numeric|min:0',
-            'ingredients.*.minimum_order_quantity' => 'nullable|numeric|min:1',
         ]);
 
         $supplier->update($validated);
-
-        if (isset($validated['ingredients'])) {
-            $supplier->ingredients()->detach();
-            foreach ($validated['ingredients'] as $ingredient) {
-                $supplier->ingredients()->attach($ingredient['ingredient_id'], [
-                    'package_unit' => $ingredient['package_unit'],
-                    'package_quantity' => $ingredient['package_quantity'],
-                    'package_price' => $ingredient['package_price'],
-                    'lead_time_days' => $ingredient['lead_time_days'] ?? 0,
-                    'minimum_order_quantity' => $ingredient['minimum_order_quantity'] ?? 1,
-                    'is_active' => true,
-                ]);
-            }
-        }
 
         return redirect()->route('suppliers.index')->with('success', 'Supplier updated successfully.');
     }

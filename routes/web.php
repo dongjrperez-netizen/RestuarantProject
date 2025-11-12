@@ -541,6 +541,11 @@ Route::post('/subscriptions/free-trial', [SubscriptionpackageController::class, 
 Route::get('/subscriptions/success', [SubscriptionpackageController::class, 'success'])->name('subscriptions.success');
 Route::get('/subscriptions/cancel', [SubscriptionpackageController::class, 'cancel'])->name('subscriptions.cancel');
 
+// PayMongo/GCash subscription routes
+Route::post('/subscriptions/paymongo/create', [SubscriptionpackageController::class, 'createPayMongoSubscription'])->name('subscriptions.paymongo.create');
+Route::get('/subscriptions/paymongo/success', [SubscriptionpackageController::class, 'payMongoSuccess'])->name('subscriptions.paymongo.success');
+Route::get('/subscriptions/paymongo/cancel', [SubscriptionpackageController::class, 'payMongoCancel'])->name('subscriptions.paymongo.cancel');
+
 // inventory and stock in routes
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
     Route::get('/stock-list', [StockInController::class, 'index'])->name('stock-in.index');
@@ -563,6 +568,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/subscriptions/renew', [RenewSubscriptionController::class, 'renew'])->name('subscriptions.renew.process');
     Route::get('/subscriptions/renew/success', [RenewSubscriptionController::class, 'renewSuccess'])->name('subscriptions.renew.success');
     Route::get('/subscriptions/renew/cancel', [RenewSubscriptionController::class, 'renewCancel'])->name('subscriptions.renew.cancel');
+    // PayMongo routes for renewal
+    Route::post('/subscriptions/renew/paymongo', [RenewSubscriptionController::class, 'renewWithPayMongo'])->name('subscriptions.renew.paymongo');
+    Route::get('/subscriptions/renew/paymongo/success', [RenewSubscriptionController::class, 'renewPayMongoSuccess'])->name('subscriptions.renew.paymongo.success');
+    Route::get('/subscriptions/renew/paymongo/cancel', [RenewSubscriptionController::class, 'renewPayMongoCancel'])->name('subscriptions.renew.paymongo.cancel');
 });
 
 // User Management Routes
@@ -574,6 +583,10 @@ Route::middleware(['auth', 'verified'])->prefix('user-management')->group(functi
     Route::post('/subscriptions/process', [UsersubscriptionController::class, 'processRenewalOrUpgrade'])->name('user-management.subscriptions.process');
     Route::get('/subscriptions/success', [UsersubscriptionController::class, 'paymentSuccess'])->name('user-management.subscriptions.success');
     Route::get('/subscriptions/cancel', [UsersubscriptionController::class, 'paymentCancel'])->name('user-management.subscriptions.cancel');
+    // PayMongo routes for renewal/upgrade
+    Route::post('/subscriptions/paymongo/process', [UsersubscriptionController::class, 'processPayMongoRenewalOrUpgrade'])->name('user-management.subscriptions.paymongo.process');
+    Route::get('/subscriptions/paymongo/success', [UsersubscriptionController::class, 'payMongoRenewalUpgradeSuccess'])->name('user-management.subscriptions.paymongo.success');
+    Route::get('/subscriptions/paymongo/cancel', [UsersubscriptionController::class, 'payMongoRenewalUpgradeCancel'])->name('user-management.subscriptions.paymongo.cancel');
 });
 
 // Supplier Management Routes

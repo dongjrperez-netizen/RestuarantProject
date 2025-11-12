@@ -125,37 +125,25 @@ const getPaymentProgress = (bill: Bill) => {
 
       <!-- Summary Cards -->
       <div class="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader
-            class="flex flex-row items-center justify-between space-y-0 pb-2"
-          >
-            <CardTitle class="text-sm font-medium">Total Bills</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Total Bills</div>
             <div class="text-2xl font-bold">{{ summary.total_bills }}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader
-            class="flex flex-row items-center justify-between space-y-0 pb-2"
-          >
-            <CardTitle class="text-sm font-medium">Outstanding</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Outstanding</div>
             <div class="text-2xl font-bold text-orange-600">
               {{ formatCurrency(summary.total_outstanding) }}
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader
-            class="flex flex-row items-center justify-between space-y-0 pb-2"
-          >
-            <CardTitle class="text-sm font-medium">Overdue</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Overdue</div>
             <div class="text-2xl font-bold text-red-600">
               {{ formatCurrency(summary.overdue_amount) }}
             </div>
@@ -165,13 +153,9 @@ const getPaymentProgress = (bill: Bill) => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader
-            class="flex flex-row items-center justify-between space-y-0 pb-2"
-          >
-            <CardTitle class="text-sm font-medium">Paid This Month</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card class="h-24 flex flex-col justify-center">
+          <CardContent class="p-4">
+            <div class="text-sm font-medium text-muted-foreground mb-1">Paid This Month</div>
             <div class="text-2xl font-bold text-green-600">
               {{ formatCurrency(summary.paid_this_month) }}
             </div>

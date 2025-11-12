@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CreditCard, TrendingUp, ArrowLeft, Check, Star, AlertTriangle } from 'lucide-vue-next';
+import { CreditCard, TrendingUp, ArrowLeft, Check, Star, AlertTriangle, Smartphone } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -58,6 +58,7 @@ const props = defineProps<{
 const selectedPlan = ref<number | null>(null);
 const isProcessing = ref(false);
 const showConfirmModal = ref(false);
+const showPaymentMethodModal = ref(false);
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-PH', {
@@ -73,7 +74,7 @@ const selectPlan = (planId: number) => {
 
 const confirmUpgrade = () => {
   showConfirmModal.value = false;
-  processUpgrade();
+  showPaymentMethodModal.value = true;
 };
 
 const cancelUpgrade = () => {
@@ -81,12 +82,14 @@ const cancelUpgrade = () => {
   selectedPlan.value = null;
 };
 
-const processUpgrade = async () => {
+// Process PayPal payment
+const processPayPalPayment = () => {
   if (!selectedPlan.value) return;
 
+  showPaymentMethodModal.value = false;
   isProcessing.value = true;
 
-  // Create form data
+  // Create form data for PayPal
   const form = document.createElement('form');
   form.method = 'POST';
   form.action = '/user-management/subscriptions/process';
@@ -114,6 +117,52 @@ const processUpgrade = async () => {
 
   document.body.appendChild(form);
   form.submit();
+};
+
+// Process GCash payment via PayMongo
+const processGCashPayment = async () => {
+  if (!selectedPlan.value) return;
+
+  showPaymentMethodModal.value = false;
+  isProcessing.value = true;
+
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    const response = await fetch('/user-management/subscriptions/paymongo/process', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        plan_id: selectedPlan.value,
+        type: 'upgrade',
+        payment_method: 'gcash',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      alert(errorData.message || 'Payment processing failed');
+      isProcessing.value = false;
+      return;
+    }
+
+    const data = await response.json();
+
+    if (data.checkout_url) {
+      window.location.href = data.checkout_url;
+    } else {
+      alert('Payment processing failed. Please try again.');
+      isProcessing.value = false;
+    }
+  } catch (error) {
+    console.error('GCash payment error:', error);
+    alert('Payment processing failed. Please try again.');
+    isProcessing.value = false;
+  }
 };
 
 const goBack = () => {
@@ -230,7 +279,7 @@ const calculateUpgradeCost = (newPrice: number) => {
                     Cancel
                 </Button>
                 <Button
-                    @click="processUpgrade"
+                    @click="() => { if (selectedPlan) showConfirmModal = true; }"
                     :disabled="!selectedPlan || isProcessing"
                     class="flex items-center gap-2"
                 >
@@ -279,6 +328,55 @@ const calculateUpgradeCost = (newPrice: number) => {
                         type="button"
                     >
                         Yes, Upgrade Now
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <!-- Payment Method Selection Modal -->
+        <Dialog v-model:open="showPaymentMethodModal">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Choose Payment Method</DialogTitle>
+                    <DialogDescription>
+                        Select your preferred payment method to upgrade your subscription
+                    </DialogDescription>
+                </DialogHeader>
+                <div class="grid gap-4 py-4">
+                    <!-- PayPal Option -->
+                    <button
+                        @click="processPayPalPayment"
+                        class="flex items-center gap-4 rounded-lg border-2 border-gray-200 p-4 transition-all hover:border-blue-500 hover:bg-blue-50"
+                    >
+                        <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
+                            <CreditCard class="h-6 w-6 text-blue-600" />
+                        </div>
+                        <div class="flex-1 text-left">
+                            <div class="font-semibold text-gray-900">PayPal</div>
+                            <div class="text-sm text-gray-500">Pay securely with PayPal</div>
+                        </div>
+                    </button>
+
+                    <!-- GCash Option -->
+                    <button
+                        @click="processGCashPayment"
+                        class="flex items-center gap-4 rounded-lg border-2 border-gray-200 p-4 transition-all hover:border-blue-500 hover:bg-blue-50"
+                    >
+                        <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
+                            <Smartphone class="h-6 w-6 text-blue-600" />
+                        </div>
+                        <div class="flex-1 text-left">
+                            <div class="font-semibold text-gray-900">GCash</div>
+                            <div class="text-sm text-gray-500">Pay with GCash via PayMongo</div>
+                        </div>
+                    </button>
+                </div>
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        @click="showPaymentMethodModal = false"
+                    >
+                        Cancel
                     </Button>
                 </DialogFooter>
             </DialogContent>
