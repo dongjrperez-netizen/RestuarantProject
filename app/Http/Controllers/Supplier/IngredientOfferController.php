@@ -21,7 +21,7 @@ class IngredientOfferController extends Controller
             ->with(['restaurant' => function ($query) {
                 $query->select('id', 'restaurant_name', 'address');
             }])
-            ->withPivot(['package_unit', 'package_quantity', 'package_contents_quantity', 'package_contents_unit', 'package_price', 'lead_time_days', 'minimum_order_quantity', 'is_active'])
+            ->withPivot(['package_unit', 'package_quantity', 'package_contents_quantity', 'package_contents_unit', 'package_price', 'minimum_order_quantity', 'is_active'])
             ->orderBy('ingredient_name')
             ->get();
 
@@ -56,7 +56,6 @@ class IngredientOfferController extends Controller
             'package_contents_quantity' => 'required|numeric|min:0.01',
             'package_contents_unit' => 'required|string|max:50',
             'package_price' => 'required|numeric|min:0.01',
-            'lead_time_days' => 'required|numeric|min:0',
             'minimum_order_quantity' => 'required|numeric|min:0.01',
         ]);
 
@@ -100,7 +99,6 @@ class IngredientOfferController extends Controller
                 'package_contents_quantity' => $request->package_contents_quantity,
                 'package_contents_unit' => $request->package_contents_unit,
                 'package_price' => $request->package_price,
-                'lead_time_days' => $request->lead_time_days,
                 'minimum_order_quantity' => $request->minimum_order_quantity,
                 'is_active' => true,
                 'created_at' => now(),
@@ -129,8 +127,8 @@ class IngredientOfferController extends Controller
             ->with(['restaurant' => function ($query) {
                 $query->select('id', 'restaurant_name');
             }])
-            ->withPivot(['package_unit', 'package_quantity', 'package_contents_quantity', 'package_contents_unit', 'package_price', 'lead_time_days', 'minimum_order_quantity', 'is_active'])
-            ->where('ingredient_id', $ingredientId)
+            ->withPivot(['package_unit', 'package_quantity', 'package_contents_quantity', 'package_contents_unit', 'package_price', 'minimum_order_quantity', 'is_active'])
+            ->where('ingredients.ingredient_id', $ingredientId)
             ->firstOrFail();
 
         return Inertia::render('Supplier/Ingredients/Edit', [
@@ -149,7 +147,6 @@ class IngredientOfferController extends Controller
             'package_contents_quantity' => 'required|numeric|min:0.01',
             'package_contents_unit' => 'required|string|max:50',
             'package_price' => 'required|numeric|min:0.01',
-            'lead_time_days' => 'required|numeric|min:0',
             'minimum_order_quantity' => 'required|numeric|min:0.01',
             'is_active' => 'required|boolean',
         ]);
@@ -160,7 +157,6 @@ class IngredientOfferController extends Controller
             'package_contents_quantity' => $request->package_contents_quantity,
             'package_contents_unit' => $request->package_contents_unit,
             'package_price' => $request->package_price,
-            'lead_time_days' => $request->lead_time_days,
             'minimum_order_quantity' => $request->minimum_order_quantity,
             'is_active' => $request->is_active,
             'updated_at' => now(),

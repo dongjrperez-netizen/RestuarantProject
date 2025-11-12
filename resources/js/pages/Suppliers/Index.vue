@@ -27,7 +27,6 @@ interface Supplier {
   email: string;
   address: string;
   payment_terms: string;
-  credit_limit: number;
   is_active: boolean;
   ingredients?: any[];
   purchase_orders?: any[];
@@ -253,7 +252,6 @@ const copyInvitationLink = async (supplier: Supplier) => {
                 <TableHead>Name</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Payment Terms</TableHead>
-                <TableHead>Credit Limit</TableHead>
                 <TableHead>Ingredients</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
@@ -281,12 +279,6 @@ const copyInvitationLink = async (supplier: Supplier) => {
                 </TableCell>
                 <TableCell>
                   {{ getPaymentTermsLabel(supplier.payment_terms) }}
-                </TableCell>
-                <TableCell>
-                  <span v-if="supplier.credit_limit">
-                    ₱{{ Number(supplier.credit_limit).toLocaleString() }}
-                  </span>
-                  <span v-else class="text-muted-foreground">-</span>
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline">

@@ -221,7 +221,7 @@ class MenuController extends Controller
             DB::transaction(function () use ($request, $user, $finalImageUrl) {
                 // Create the dish
                 $dish = Dish::create([
-                    'restaurant_id' => $this->getRestaurantId(),
+                    'restaurant_id' => $user->restaurant_id ?? ($user->restaurantData->id ?? null),
                     'dish_name' => $request->dish_name,
                     'description' => $request->description,
                     'category_id' => $request->category_id,

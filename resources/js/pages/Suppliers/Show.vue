@@ -15,7 +15,6 @@ interface Supplier {
   email: string;
   address: string;
   payment_terms: string;
-  credit_limit: number;
   is_active: boolean;
   created_at: string;
   ingredients?: any[];
@@ -133,10 +132,6 @@ const formatDate = (dateString: string) => {
             <div>
               <label class="text-sm font-medium text-muted-foreground">Payment Terms</label>
               <p class="text-sm">{{ getPaymentTermsLabel(supplier.payment_terms) }}</p>
-            </div>
-            <div v-if="supplier.credit_limit">
-              <label class="text-sm font-medium text-muted-foreground">Credit Limit</label>
-              <p class="text-sm">{{ formatCurrency(supplier.credit_limit) }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-muted-foreground">Status</label>

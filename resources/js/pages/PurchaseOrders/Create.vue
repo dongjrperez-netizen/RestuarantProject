@@ -24,7 +24,6 @@ interface SupplierOffering {
   package_unit: string;
   package_quantity: number;
   package_price: number;
-  lead_time_days: number;
   minimum_order_quantity: number;
   ingredient: {
     ingredient_id: number;
@@ -71,7 +70,6 @@ const orderItems = ref<OrderItem[]>([{
 
 const form = useForm({
   supplier_id: null as number | null,
-  expected_delivery_date: '',
   notes: '',
   delivery_instructions: '',
   items: [] as OrderItem[]
@@ -87,31 +85,6 @@ const subtotal = computed(() => {
   return orderItems.value.reduce((sum, item) => {
     return sum + (item.ordered_quantity * item.unit_price);
   }, 0);
-});
-
-const expectedDeliveryDate = computed(() => {
-  if (!selectedSupplier.value || orderItems.value.length === 0) return '';
-  
-  // Find the maximum lead time from all selected ingredients
-  let maxLeadTime = 0;
-  
-  for (const item of orderItems.value) {
-    if (item.ingredient_id) {
-      const offering = availableIngredients.value.find(off => off.ingredient.ingredient_id === item.ingredient_id);
-      if (offering && offering.lead_time_days > maxLeadTime) {
-        maxLeadTime = offering.lead_time_days;
-      }
-    }
-  }
-  
-  if (maxLeadTime === 0) return '';
-  
-  // Calculate delivery date: today + max lead time
-  const today = new Date();
-  const deliveryDate = new Date(today);
-  deliveryDate.setDate(today.getDate() + Math.ceil(maxLeadTime));
-  
-  return deliveryDate.toISOString().split('T')[0];
 });
 
 const addOrderItem = () => {
@@ -167,11 +140,6 @@ watch(selectedSupplier, (newValue) => {
   }];
 });
 
-// Watch for changes in expected delivery date and update form
-watch(expectedDeliveryDate, (newDate) => {
-  form.expected_delivery_date = newDate;
-});
-
 const submit = () => {
   // Filter out empty items and validate
   const validItems = orderItems.value.filter(item => 
@@ -203,48 +171,24 @@ const submit = () => {
             <CardTitle>Order Information</CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="grid gap-4 md:grid-cols-2">
-              <div class="space-y-2">
-                <Label for="supplier">Supplier *</Label>
-                <Select v-model="selectedSupplier" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a supplier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem 
-                      v-for="supplier in suppliers" 
-                      :key="supplier.supplier_id"
-                      :value="supplier.supplier_id"
-                    >
-                      {{ supplier.supplier_name }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <div v-if="form.errors.supplier_id" class="text-sm text-red-600">
-                  {{ form.errors.supplier_id }}
-                </div>
-              </div>
-
-              <div class="space-y-2">
-                <Label for="expected_delivery_date">Expected Delivery Date</Label>
-                <Input
-                  id="expected_delivery_date"
-                  v-model="form.expected_delivery_date"
-                  type="date"
-                  readonly
-                  class="bg-muted cursor-not-allowed"
-                />
-                <div class="text-xs text-muted-foreground">
-                  <span v-if="expectedDeliveryDate">
-                    Automatically calculated based on supplier lead times
-                  </span>
-                  <span v-else>
-                    Select ingredients to calculate delivery date
-                  </span>
-                </div>
-                <div v-if="form.errors.expected_delivery_date" class="text-sm text-red-600">
-                  {{ form.errors.expected_delivery_date }}
-                </div>
+            <div class="space-y-2">
+              <Label for="supplier">Supplier *</Label>
+              <Select v-model="selectedSupplier" required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="supplier in suppliers"
+                    :key="supplier.supplier_id"
+                    :value="supplier.supplier_id"
+                  >
+                    {{ supplier.supplier_name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <div v-if="form.errors.supplier_id" class="text-sm text-red-600">
+                {{ form.errors.supplier_id }}
               </div>
             </div>
 

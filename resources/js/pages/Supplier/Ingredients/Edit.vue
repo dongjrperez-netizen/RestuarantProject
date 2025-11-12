@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import  Switch  from '@/components/ui/switch/Switch.vue';
+import { Switch } from '@/components/ui/switch';
 
 interface Restaurant {
   id: number;
@@ -23,7 +23,6 @@ interface IngredientOffer {
     package_contents_quantity: number;
     package_contents_unit: string;
     package_price: number;
-    lead_time_days: number;
     minimum_order_quantity: number;
     is_active: boolean;
   };
@@ -48,9 +47,8 @@ const form = useForm({
   package_contents_quantity: props.ingredient.pivot.package_contents_quantity,
   package_contents_unit: props.ingredient.pivot.package_contents_unit,
   package_price: props.ingredient.pivot.package_price,
-  lead_time_days: props.ingredient.pivot.lead_time_days,
   minimum_order_quantity: props.ingredient.pivot.minimum_order_quantity,
-  is_active: props.ingredient.pivot.is_active,
+  is_active: !!props.ingredient.pivot.is_active,
 });
 
 const submit = () => {
@@ -70,7 +68,7 @@ const submit = () => {
       </div>
 
       <!-- Form -->
-      <Card class="max-w-2xl">
+      <Card class="max-w-2xl mx-auto">
         <CardHeader>
           <CardTitle>{{ ingredient.ingredient_name }}</CardTitle>
           <CardDescription>
@@ -173,42 +171,30 @@ const submit = () => {
               </div>
 
               <div class="space-y-2">
-                <Label for="lead_time_days">Lead Time (days) *</Label>
+                <Label for="minimum_order_quantity">Maximum Order Quantity *</Label>
                 <Input
-                  id="lead_time_days"
-                  v-model.number="form.lead_time_days"
+                  id="minimum_order_quantity"
+                  v-model.number="form.minimum_order_quantity"
                   type="number"
-                  min="0"
+                  step="0.01"
+                  min="0.01"
                   required
                 />
-                <div v-if="form.errors.lead_time_days" class="text-sm text-red-600">
-                  {{ form.errors.lead_time_days }}
+                <div v-if="form.errors.minimum_order_quantity" class="text-sm text-red-600">
+                  {{ form.errors.minimum_order_quantity }}
                 </div>
               </div>
             </div>
 
-            <div class="space-y-2">
-              <Label for="minimum_order_quantity">Minimum Order Quantity *</Label>
-              <Input
-                id="minimum_order_quantity"
-                v-model.number="form.minimum_order_quantity"
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-              />
-              <div v-if="form.errors.minimum_order_quantity" class="text-sm text-red-600">
-                {{ form.errors.minimum_order_quantity }}
-              </div>
-            </div>
-
             <!-- Status -->
-            <div class="flex items-center space-x-2">
-              <Switch 
-                id="is_active" 
-                v-model:checked="form.is_active"
-              />
-              <Label for="is_active">Active Offer</Label>
+            <div class="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+              <Switch v-model="form.is_active" />
+              <div>
+                <Label class="font-medium">Active Offer</Label>
+                <p class="text-sm text-muted-foreground">
+                  {{ form.is_active ? 'This offer is active' : 'This offer is inactive' }}
+                </p>
+              </div>
             </div>
             <div v-if="form.errors.is_active" class="text-sm text-red-600">
               {{ form.errors.is_active }}

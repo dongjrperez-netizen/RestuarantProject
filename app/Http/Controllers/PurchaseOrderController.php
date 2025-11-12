@@ -131,7 +131,6 @@ class PurchaseOrderController extends Controller
     {
         $validated = $request->validate([
             'supplier_id' => 'required|exists:suppliers,supplier_id',
-            'expected_delivery_date' => 'nullable|date',
             'notes' => 'nullable|string',
             'delivery_instructions' => 'nullable|string',
             'items' => 'required|array|min:1',
@@ -173,18 +172,12 @@ class PurchaseOrderController extends Controller
                 return redirect()->back()->with('error', 'No restaurant data found.');
             }
 
-            // Calculate expected delivery date if not provided
-            $expectedDeliveryDate = $validated['expected_delivery_date'];
-            if (empty($expectedDeliveryDate)) {
-                $expectedDeliveryDate = $this->calculateExpectedDeliveryDate($validated['supplier_id'], $validated['items']);
-            }
-
             $purchaseOrder = PurchaseOrder::create([
                 'restaurant_id' => $user->restaurantData->id,
                 'supplier_id' => $validated['supplier_id'],
                 'status' => 'draft',
                 'order_date' => now(),
-                'expected_delivery_date' => $expectedDeliveryDate,
+                'expected_delivery_date' => null,
                 'subtotal' => $subtotal,
                 'tax_amount' => 0,
                 'shipping_amount' => 0,
@@ -276,7 +269,6 @@ class PurchaseOrderController extends Controller
 
         $validated = $request->validate([
             'supplier_id' => 'required|exists:suppliers,supplier_id',
-            'expected_delivery_date' => 'nullable|date',
             'notes' => 'nullable|string',
             'delivery_instructions' => 'nullable|string',
             'items' => 'required|array|min:1',
@@ -313,15 +305,9 @@ class PurchaseOrderController extends Controller
                 return $item['ordered_quantity'] * $item['unit_price'];
             });
 
-            // Calculate expected delivery date if not provided
-            $expectedDeliveryDate = $validated['expected_delivery_date'];
-            if (empty($expectedDeliveryDate)) {
-                $expectedDeliveryDate = $this->calculateExpectedDeliveryDate($validated['supplier_id'], $validated['items']);
-            }
-
             $purchaseOrder->update([
                 'supplier_id' => $validated['supplier_id'],
-                'expected_delivery_date' => $expectedDeliveryDate,
+                'expected_delivery_date' => null,
                 'subtotal' => $subtotal,
                 'total_amount' => $subtotal,
                 'notes' => $validated['notes'],
@@ -402,9 +388,9 @@ class PurchaseOrderController extends Controller
     {
         $purchaseOrder = PurchaseOrder::findOrFail($id);
 
-        if (in_array($purchaseOrder->status, ['delivered', 'cancelled'])) {
+        if (!in_array($purchaseOrder->status, ['draft', 'pending', 'sent'])) {
             return redirect()->back()
-                ->with('error', 'Cannot cancel purchase order with status: '.$purchaseOrder->status);
+                ->with('error', 'Cannot cancel purchase order once confirmed by supplier. Current status: '.$purchaseOrder->status);
         }
 
         $purchaseOrder->update(['status' => 'cancelled']);
@@ -422,8 +408,31 @@ class PurchaseOrderController extends Controller
                 ->with('error', 'Can only receive confirmed purchase orders.');
         }
 
+        $user = auth()->user();
+
+        // Get employees from the restaurant
+        $employees = \App\Models\Employee::where('user_id', $user->id)
+            ->select('employee_id', 'firstname', 'lastname')
+            ->get()
+            ->map(function ($employee) {
+                return [
+                    'id' => $employee->employee_id,
+                    'name' => $employee->firstname . ' ' . $employee->lastname,
+                ];
+            });
+
+        // Get the restaurant owner
+        $owner = [
+            'id' => $user->id,
+            'name' => $user->name,
+        ];
+
+        // Combine owner and employees
+        $staff = collect([$owner])->concat($employees);
+
         return Inertia::render('PurchaseOrders/Receive', [
             'purchaseOrder' => $purchaseOrder,
+            'staff' => $staff,
         ]);
     }
 

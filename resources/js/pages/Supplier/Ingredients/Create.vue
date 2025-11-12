@@ -5,7 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-// Removed Select components as restaurant selection is no longer needed
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface Restaurant {
   id: number;
@@ -26,7 +32,6 @@ const form = useForm({
   package_contents_quantity: 1,
   package_contents_unit: '',
   package_price: 0,
-  lead_time_days: 0,
   minimum_order_quantity: 1,
 });
 
@@ -48,7 +53,7 @@ const submit = () => {
       </div>
 
       <!-- Form -->
-      <Card class="max-w-2xl">
+      <Card class="max-w-2xl mx-auto">
         <CardHeader>
           <CardTitle>New Ingredient Offer</CardTitle>
           <CardDescription>
@@ -102,12 +107,22 @@ const submit = () => {
 
               <div class="space-y-2">
                 <Label for="package_unit">Package Unit *</Label>
-                <Input
-                  id="package_unit"
-                  v-model="form.package_unit"
-                  placeholder="box, bag, sack, etc."
-                  required
-                />
+                <Select v-model="form.package_unit">
+                  <SelectTrigger :class="{ 'border-red-500': form.errors.package_unit }">
+                    <SelectValue placeholder="Select package unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="box">Box</SelectItem>
+                    <SelectItem value="bag">Bag</SelectItem>
+                    <SelectItem value="sack">Sack</SelectItem>
+                    <SelectItem value="crate">Crate</SelectItem>
+                    <SelectItem value="carton">Carton</SelectItem>
+                    <SelectItem value="container">Container</SelectItem>
+                    <SelectItem value="pack">Pack</SelectItem>
+                    <SelectItem value="bundle">Bundle</SelectItem>
+                    <SelectItem value="pallet">Pallet</SelectItem>
+                  </SelectContent>
+                </Select>
                 <div v-if="form.errors.package_unit" class="text-sm text-red-600">
                   {{ form.errors.package_unit }}
                 </div>
@@ -138,12 +153,16 @@ const submit = () => {
 
                 <div class="space-y-2">
                   <Label for="package_contents_unit">Contents Unit *</Label>
-                  <Input
-                    id="package_contents_unit"
-                    v-model="form.package_contents_unit"
-                    placeholder="pcs, kg, lbs, liters, etc."
-                    required
-                  />
+                  <Select v-model="form.package_contents_unit">
+                    <SelectTrigger :class="{ 'border-red-500': form.errors.package_contents_unit }">
+                      <SelectValue placeholder="Select contents unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pcs">Pieces (pcs)</SelectItem>
+                      <SelectItem value="kg">Kilograms (kg)</SelectItem>
+                      <SelectItem value="l">Liters (l)</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <div v-if="form.errors.package_contents_unit" class="text-sm text-red-600">
                     {{ form.errors.package_contents_unit }}
                   </div>
@@ -175,32 +194,18 @@ const submit = () => {
               </div>
 
               <div class="space-y-2">
-                <Label for="lead_time_days">Lead Time (days) *</Label>
+                <Label for="minimum_order_quantity">Maximum Order Quantity *</Label>
                 <Input
-                  id="lead_time_days"
-                  v-model.number="form.lead_time_days"
+                  id="minimum_order_quantity"
+                  v-model.number="form.minimum_order_quantity"
                   type="number"
-                  min="0"
+                  step="0.01"
+                  min="0.01"
                   required
                 />
-                <div v-if="form.errors.lead_time_days" class="text-sm text-red-600">
-                  {{ form.errors.lead_time_days }}
+                <div v-if="form.errors.minimum_order_quantity" class="text-sm text-red-600">
+                  {{ form.errors.minimum_order_quantity }}
                 </div>
-              </div>
-            </div>
-
-            <div class="space-y-2">
-              <Label for="minimum_order_quantity">Minimum Order Quantity *</Label>
-              <Input
-                id="minimum_order_quantity"
-                v-model.number="form.minimum_order_quantity"
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-              />
-              <div v-if="form.errors.minimum_order_quantity" class="text-sm text-red-600">
-                {{ form.errors.minimum_order_quantity }}
               </div>
             </div>
 

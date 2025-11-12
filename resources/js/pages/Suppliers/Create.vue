@@ -41,7 +41,6 @@ const form = useForm({
   business_registration: '',
   tax_id: '',
   payment_terms: '',
-  credit_limit: '',
   notes: '',
   ingredients: [] as any[],
 });
@@ -81,7 +80,7 @@ const submit = () => {
       </div>
 
       <!-- Form -->
-      <Card class="max-w-3xl">
+      <Card class="max-w-3xl mx-auto">
         <CardHeader>
           <CardTitle>Supplier Information</CardTitle>
           <CardDescription>
@@ -236,23 +235,6 @@ const submit = () => {
                   class="text-red-500 text-sm mt-1"
                 >
                   {{ form.errors.payment_terms }}
-                </div>
-              </div>
-
-              <div>
-                <Label for="credit_limit">Credit Limit</Label>
-                <Input
-                  id="credit_limit"
-                  v-model="form.credit_limit"
-                  type="number"
-                  step="0.01"
-                  :class="{ 'border-red-500': form.errors.credit_limit }"
-                />
-                <div
-                  v-if="form.errors.credit_limit"
-                  class="text-red-500 text-sm mt-1"
-                >
-                  {{ form.errors.credit_limit }}
                 </div>
               </div>
             </div>

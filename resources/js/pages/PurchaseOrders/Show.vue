@@ -165,8 +165,8 @@ const cancelOrder = () => {
           <Button>Receive Delivery</Button>
         </Link>
 
-        <Button 
-          v-if="!['delivered', 'cancelled'].includes(purchaseOrder.status)"
+        <Button
+          v-if="['draft', 'pending', 'sent'].includes(purchaseOrder.status)"
           @click="cancelOrder"
           variant="destructive"
           :disabled="cancelForm.processing"

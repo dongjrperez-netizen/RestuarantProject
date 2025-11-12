@@ -36,7 +36,6 @@ interface Supplier {
   business_registration: string | null;
   tax_id: string | null;
   payment_terms: string;
-  credit_limit: number | null;
   notes: string | null;
   is_active: boolean;
   ingredients: Array<{
@@ -67,7 +66,6 @@ const form = useForm({
   business_registration: props.supplier.business_registration || '',
   tax_id: props.supplier.tax_id || '',
   payment_terms: props.supplier.payment_terms,
-  credit_limit: props.supplier.credit_limit || '',
   notes: props.supplier.notes || '',
   is_active: !!props.supplier.is_active,
   ingredients: (props.supplier.ingredients || []).map((ingredient) => ({
@@ -75,7 +73,6 @@ const form = useForm({
     package_unit: ingredient.pivot.package_unit,
     package_quantity: ingredient.pivot.package_quantity,
     package_price: ingredient.pivot.package_price,
-    lead_time_days: ingredient.pivot.lead_time_days,
     minimum_order_quantity: ingredient.pivot.minimum_order_quantity,
   })),
 });
@@ -115,7 +112,7 @@ const submit = () => {
       </div>
 
       <!-- Form -->
-      <Card class="max-w-3xl">
+      <Card class="max-w-3xl mx-auto">
         <CardHeader>
           <CardTitle>Supplier Information</CardTitle>
           <CardDescription>
@@ -261,23 +258,6 @@ const submit = () => {
                   class="text-red-500 text-sm mt-1"
                 >
                   {{ form.errors.payment_terms }}
-                </div>
-              </div>
-
-              <div>
-                <Label for="credit_limit">Credit Limit</Label>
-                <Input
-                  id="credit_limit"
-                  v-model="form.credit_limit"
-                  type="number"
-                  step="0.01"
-                  :class="{ 'border-red-500': form.errors.credit_limit }"
-                />
-                <div
-                  v-if="form.errors.credit_limit"
-                  class="text-red-500 text-sm mt-1"
-                >
-                  {{ form.errors.credit_limit }}
                 </div>
               </div>
             </div>

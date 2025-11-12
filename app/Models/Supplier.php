@@ -27,7 +27,6 @@ class Supplier extends Authenticatable
         'business_registration',
         'tax_id',
         'payment_terms',
-        'credit_limit',
         'notes',
         'is_active',
     ];
@@ -38,7 +37,6 @@ class Supplier extends Authenticatable
     ];
 
     protected $casts = [
-        'credit_limit' => 'decimal:2',
         'is_active' => 'boolean',
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
@@ -52,7 +50,7 @@ class Supplier extends Authenticatable
     public function ingredients()
     {
         return $this->belongsToMany(Ingredients::class, 'ingredient_suppliers', 'supplier_id', 'ingredient_id')
-            ->withPivot(['package_unit', 'package_quantity', 'package_contents_quantity', 'package_contents_unit', 'package_price', 'lead_time_days', 'minimum_order_quantity', 'is_active'])
+            ->withPivot(['package_unit', 'package_quantity', 'package_contents_quantity', 'package_contents_unit', 'package_price', 'minimum_order_quantity', 'is_active'])
             ->withTimestamps();
     }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Combobox,
+  ComboboxAnchor,
+  ComboboxInput,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+  ComboboxTrigger
+} from '@/components/ui/combobox';
+import { ChevronDown, Search } from 'lucide-vue-next';
 import { type BreadcrumbItem } from '@/types';
 
 interface PurchaseOrderItem {
@@ -44,8 +54,14 @@ interface ReceiveItem {
   discrepancy_reason: string;
 }
 
+interface Staff {
+  id: number;
+  name: string;
+}
+
 interface Props {
   purchaseOrder: PurchaseOrder;
+  staff: Staff[];
 }
 
 const props = defineProps<Props>();
@@ -68,6 +84,9 @@ const receiveItems = ref<ReceiveItem[]>(
   }))
 );
 
+const staffSearchTerm = ref('');
+const comboboxValue = ref<Staff | undefined>();
+
 const form = useForm({
   actual_delivery_date: new Date().toISOString().split('T')[0],
   delivery_condition: 'good',
@@ -75,6 +94,26 @@ const form = useForm({
   general_notes: '',
   items: receiveItems.value
 });
+
+// Filtered staff based on search
+const filteredStaff = computed(() => {
+  if (!staffSearchTerm.value) {
+    // Show only first 5 by default
+    return props.staff.slice(0, 5);
+  }
+  // Show all matching results when searching
+  return props.staff.filter(staff =>
+    staff.name.toLowerCase().includes(staffSearchTerm.value.toLowerCase())
+  );
+});
+
+// Handle staff selection
+const handleStaffSelect = (value: any) => {
+  if (value && typeof value === 'object' && 'name' in value) {
+    form.received_by = value.name;
+    comboboxValue.value = value;
+  }
+};
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString();
@@ -236,13 +275,40 @@ const submit = () => {
 
               <div class="space-y-2">
                 <Label for="received_by">Received By *</Label>
-                <Input
-                  id="received_by"
-                  v-model="form.received_by"
-                  type="text"
-                  placeholder="Enter receiver name"
-                  required
-                />
+                <Combobox v-model="comboboxValue" by="name" @update:model-value="handleStaffSelect">
+                  <ComboboxAnchor as-child>
+                    <ComboboxTrigger as-child>
+                      <Button variant="outline" class="w-full justify-between">
+                        {{ comboboxValue?.name ?? 'Select staff member...' }}
+                        <ChevronDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </ComboboxTrigger>
+                  </ComboboxAnchor>
+
+                  <ComboboxList class="w-[--reka-combobox-trigger-width] max-h-[200px]">
+                    <div class="relative w-full max-w-sm items-center">
+                      <ComboboxInput
+                        v-model:search-term="staffSearchTerm"
+                        class="pl-9 focus-visible:ring-0 border-0 border-b rounded-none h-10"
+                        placeholder="Search staff..."
+                      />
+                      <span class="absolute start-0 inset-y-0 flex items-center justify-center px-3">
+                        <Search class="size-4 text-muted-foreground" />
+                      </span>
+                    </div>
+
+                    <ComboboxEmpty>No staff found</ComboboxEmpty>
+
+                    <ComboboxItem
+                      v-for="staff in filteredStaff"
+                      :key="staff.id"
+                      :value="staff"
+                      class="cursor-pointer"
+                    >
+                      {{ staff.name }}
+                    </ComboboxItem>
+                  </ComboboxList>
+                </Combobox>
                 <div v-if="form.errors.received_by" class="text-sm text-red-600">
                   {{ form.errors.received_by }}
                 </div>

@@ -25,7 +25,6 @@ interface IngredientOffer {
     package_contents_quantity: number;
     package_contents_unit: string;
     package_price: number;
-    lead_time_days: number;
     minimum_order_quantity: number;
     is_active: boolean;
   };
@@ -102,8 +101,7 @@ const deleteOffer = (ingredientId: number) => {
                   <TableHead>Restaurant</TableHead>
                   <TableHead>Package</TableHead>
                   <TableHead>Price</TableHead>
-                  <TableHead>Lead Time</TableHead>
-                  <TableHead>Min Order</TableHead>
+                  <TableHead>Max Order</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead class="text-right">Actions</TableHead>
                 </TableRow>
@@ -132,9 +130,6 @@ const deleteOffer = (ingredientId: number) => {
                   </TableCell>
                   <TableCell>
                     {{ formatCurrency(ingredient.pivot.package_price) }}
-                  </TableCell>
-                  <TableCell>
-                    {{ ingredient.pivot.lead_time_days }} {{ ingredient.pivot.lead_time_days === 1 ? 'day' : 'days' }}
                   </TableCell>
                   <TableCell>
                     {{ ingredient.pivot.minimum_order_quantity }} {{ ingredient.pivot.package_unit }}
@@ -196,11 +191,7 @@ const deleteOffer = (ingredientId: number) => {
                     <div class="font-semibold">{{ formatCurrency(ingredient.pivot.package_price) }}</div>
                   </div>
                   <div>
-                    <div class="text-muted-foreground text-xs">Lead Time</div>
-                    <div>{{ ingredient.pivot.lead_time_days }} {{ ingredient.pivot.lead_time_days === 1 ? 'day' : 'days' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-muted-foreground text-xs">Min Order</div>
+                    <div class="text-muted-foreground text-xs">Max Order</div>
                     <div>{{ ingredient.pivot.minimum_order_quantity }} {{ ingredient.pivot.package_unit }}</div>
                   </div>
                 </div>
