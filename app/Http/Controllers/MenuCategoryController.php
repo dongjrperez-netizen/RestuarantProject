@@ -27,8 +27,8 @@ class MenuCategoryController extends Controller
 
     public function store(Request $request)
     {
-        $user = $this->getAuthUser();
-        $restaurantId = $this->getRestaurantId();
+        $user = Auth::user();
+        $restaurantId = $user->restaurant_id ?? ($user->restaurantData->id ?? null);
 
         $request->validate([
             'category_name' => 'required|string|max:255',
