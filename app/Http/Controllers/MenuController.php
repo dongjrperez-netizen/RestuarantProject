@@ -240,7 +240,7 @@ class MenuController extends Controller
                     } else {
                         // Custom ingredient - create new one
                         $ingredient = Ingredients::create([
-                            'restaurant_id' => $this->getRestaurantId(),
+                            'restaurant_id' => $user->restaurant_id ?? ($user->restaurantData->id ?? null),
                             'ingredient_name' => $ingredientData['ingredient_name'],
                             'base_unit' => $ingredientData['unit'],
                             'current_stock' => 0,

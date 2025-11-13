@@ -123,10 +123,8 @@ class InventoryController extends Controller
     public function getLowStockIngredients(Request $request): JsonResponse
     {
         try {
-             $user = auth()->user();
+            $user = auth()->user();
             $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
-            // Get restaurant ID from the user's restaurant data
-            $restaurantId = $this->getRestaurantId();
 
             if (! $restaurantId) {
                 return response()->json([
@@ -285,7 +283,7 @@ class InventoryController extends Controller
                     $query->where('restaurant_id', $restaurantId)
                         ->wherePivot('is_active', true);
                 }])
-                ->where('restaurant_id', $user->id); // Filter by ingredient's restaurant
+                ->where('restaurant_id', $restaurantId); // Filter by ingredient's restaurant
 
             // 🔍 Apply search filter (if provided)
             if ($request->filled('search')) {
