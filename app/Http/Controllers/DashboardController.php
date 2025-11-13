@@ -18,22 +18,27 @@ class DashboardController extends Controller
     public function index()
     {
         $user = Auth::user();
-        $restaurantId = $user->id;
+        $userId = $user->id; // For CustomerOrder and Employee (references users.id)
+        $restaurantDataId = $user->restaurantData ? $user->restaurantData->id : null; // For Ingredients (references restaurant_data.id)
+
+        if (!$restaurantDataId) {
+            return redirect()->back()->with('error', 'Restaurant data not found. Please complete your restaurant setup.');
+        }
 
         // Get dashboard statistics
-        $stats = $this->getDashboardStats($restaurantId);
+        $stats = $this->getDashboardStats($userId, $restaurantDataId);
 
         // Get recent orders
-        $recentOrders = $this->getRecentOrders($restaurantId);
+        $recentOrders = $this->getRecentOrders($userId);
 
         // Get low stock items
-        $lowStockItems = $this->getLowStockItems($restaurantId);
+        $lowStockItems = $this->getLowStockItems($restaurantDataId);
 
         // Get weekly performance data
-        $weeklyData = $this->getWeeklyPerformanceData($restaurantId);
+        $weeklyData = $this->getWeeklyPerformanceData($userId);
 
         // Get order status distribution
-        $orderStatusData = $this->getOrderStatusDistribution($restaurantId);
+        $orderStatusData = $this->getOrderStatusDistribution($userId);
 
         return Inertia::render('Dashboard', [
             'stats' => $stats,
@@ -44,7 +49,7 @@ class DashboardController extends Controller
         ]);
     }
 
-    private function getDashboardStats($restaurantId)
+    private function getDashboardStats($userId, $restaurantDataId)
     {
         $today = Carbon::today();
         $yesterday = Carbon::yesterday();
@@ -52,21 +57,21 @@ class DashboardController extends Controller
 
         // Today's revenue (sum final_amount from completed payments)
         $todayRevenue = CustomerPayment::join('customer_orders', 'customer_payments.order_id', '=', 'customer_orders.order_id')
-            ->where('customer_orders.restaurant_id', $restaurantId)
+            ->where('customer_orders.restaurant_id', $userId)
             ->whereDate('customer_payments.paid_at', $today)
             ->where('customer_payments.status', 'completed')
             ->sum('customer_payments.final_amount');
 
         // Yesterday's revenue for growth calculation
         $yesterdayRevenue = CustomerPayment::join('customer_orders', 'customer_payments.order_id', '=', 'customer_orders.order_id')
-            ->where('customer_orders.restaurant_id', $restaurantId)
+            ->where('customer_orders.restaurant_id', $userId)
             ->whereDate('customer_payments.paid_at', $yesterday)
             ->where('customer_payments.status', 'completed')
             ->sum('customer_payments.final_amount');
 
         // This month's revenue
         $thisMonthRevenue = CustomerPayment::join('customer_orders', 'customer_payments.order_id', '=', 'customer_orders.order_id')
-            ->where('customer_orders.restaurant_id', $restaurantId)
+            ->where('customer_orders.restaurant_id', $userId)
             ->where('customer_payments.paid_at', '>=', $thisMonth)
             ->where('customer_payments.status', 'completed')
             ->sum('customer_payments.final_amount');
@@ -80,34 +85,34 @@ class DashboardController extends Controller
         }
 
         // Today's orders
-        $todayOrders = CustomerOrder::where('restaurant_id', $restaurantId)
+        $todayOrders = CustomerOrder::where('restaurant_id', $userId)
             ->whereDate('created_at', $today)
             ->count();
 
-        $pendingOrders = CustomerOrder::where('restaurant_id', $restaurantId)
+        $pendingOrders = CustomerOrder::where('restaurant_id', $userId)
             ->whereIn('status', ['pending', 'in_progress'])
             ->count();
 
-        $completedTodayOrders = CustomerOrder::where('restaurant_id', $restaurantId)
+        $completedTodayOrders = CustomerOrder::where('restaurant_id', $userId)
             ->whereDate('created_at', $today)
             ->where('status', 'completed')
             ->count();
 
         // Employee stats
-        $activeEmployees = Employee::where('user_id', $restaurantId)
+        $activeEmployees = Employee::where('user_id', $userId)
             ->where('status', 'active')
             ->count();
 
-        $totalEmployees = Employee::where('user_id', $restaurantId)
+        $totalEmployees = Employee::where('user_id', $userId)
             ->count();
 
         // Inventory stats
-        $lowStockCount = Ingredients::where('restaurant_id', $restaurantId)
+        $lowStockCount = Ingredients::where('restaurant_id', $restaurantDataId)
             ->whereNotNull('reorder_level')
             ->whereRaw('CAST(current_stock AS DECIMAL(10,2)) <= CAST(reorder_level AS DECIMAL(10,2))')
             ->count();
 
-        $totalItems = Ingredients::where('restaurant_id', $restaurantId)
+        $totalItems = Ingredients::where('restaurant_id', $restaurantDataId)
             ->count();
 
         return [
@@ -132,9 +137,9 @@ class DashboardController extends Controller
         ];
     }
 
-    private function getRecentOrders($restaurantId)
+    private function getRecentOrders($userId)
     {
-        return CustomerOrder::where('restaurant_id', $restaurantId)
+        return CustomerOrder::where('restaurant_id', $userId)
             ->with(['orderItems'])
             ->orderBy('created_at', 'desc')
             ->limit(4)
@@ -152,9 +157,9 @@ class DashboardController extends Controller
             });
     }
 
-    private function getLowStockItems($restaurantId)
+    private function getLowStockItems($restaurantDataId)
     {
-        return Ingredients::where('restaurant_id', $restaurantId)
+        return Ingredients::where('restaurant_id', $restaurantDataId)
             ->whereNotNull('reorder_level')
             ->whereRaw('CAST(current_stock AS DECIMAL(10,2)) <= CAST(reorder_level AS DECIMAL(10,2))')
             ->orderBy('current_stock', 'asc')
@@ -171,7 +176,7 @@ class DashboardController extends Controller
             });
     }
 
-    private function getWeeklyPerformanceData($restaurantId)
+    private function getWeeklyPerformanceData($userId)
     {
         $startOfWeek = Carbon::now()->startOfWeek();
         $weeklyData = [];
@@ -180,12 +185,12 @@ class DashboardController extends Controller
             $date = $startOfWeek->copy()->addDays($i);
 
             $dailyRevenue = CustomerPayment::join('customer_orders', 'customer_payments.order_id', '=', 'customer_orders.order_id')
-                ->where('customer_orders.restaurant_id', $restaurantId)
+                ->where('customer_orders.restaurant_id', $userId)
                 ->whereDate('customer_payments.paid_at', $date)
                 ->where('customer_payments.status', 'completed')
                 ->sum('customer_payments.final_amount');
 
-            $dailyOrders = CustomerOrder::where('restaurant_id', $restaurantId)
+            $dailyOrders = CustomerOrder::where('restaurant_id', $userId)
                 ->whereDate('created_at', $date)
                 ->count();
 
@@ -203,9 +208,9 @@ class DashboardController extends Controller
         return $weeklyData;
     }
 
-    private function getOrderStatusDistribution($restaurantId)
+    private function getOrderStatusDistribution($userId)
     {
-        $statusCounts = CustomerOrder::where('restaurant_id', $restaurantId)
+        $statusCounts = CustomerOrder::where('restaurant_id', $userId)
             ->whereDate('created_at', '>=', Carbon::now()->subDays(30)) // Last 30 days
             ->select('status', DB::raw('count(*) as count'))
             ->groupBy('status')
