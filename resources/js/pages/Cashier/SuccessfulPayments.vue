@@ -158,9 +158,19 @@ const mockStats = {
                                 </div>
                             </div>
                             <div class="text-right">
-                                <div class="text-2xl font-bold">₱{{ Number(order.total_amount || 0).toFixed(2) }}</div>
+                                <div class="flex flex-col items-end">
+                                    <div v-if="order.discount_amount" class="text-sm line-through text-muted-foreground">
+                                        ₱{{ Number(order.total_amount || 0).toFixed(2) }}
+                                    </div>
+                                    <div class="text-2xl font-bold">
+                                        ₱{{ Number((order.total_amount || 0) - (order.discount_amount || 0)).toFixed(2) }}
+                                    </div>
+                                    <div v-if="order.discount_amount" class="text-xs text-red-600">
+                                        ({{ order.discount_reason || 'Discount' }} -₱{{ Number(order.discount_amount).toFixed(2) }})
+                                    </div>
+                                </div>
                                 <div class="flex gap-2 mt-2">
-                            
+
                                 </div>
                             </div>
                         </div>

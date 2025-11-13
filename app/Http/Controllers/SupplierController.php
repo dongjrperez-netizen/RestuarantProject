@@ -10,16 +10,37 @@ use Inertia\Inertia;
 
 class SupplierController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $suppliers = Supplier::with(['ingredients', 'purchaseOrders'])
-            ->where('restaurant_id', auth()->user()->restaurantData->id)
-            ->orderBy('supplier_name')
-            ->get();
+        $restaurantId = auth()->user()->restaurantData->id;
+        $statusFilter = $request->get('status', 'active'); // Default to 'active' suppliers
+        $search = $request->get('search');
+
+        $query = Supplier::with(['ingredients', 'purchaseOrders'])
+            ->where('restaurant_id', $restaurantId);
+
+        // Apply search filter (supplier name)
+        if ($search) {
+            $query->where('supplier_name', 'like', '%' . $search . '%');
+        }
+
+        // Apply status filter
+        if ($statusFilter === 'active') {
+            $query->where('is_active', true);
+        } elseif ($statusFilter === 'inactive') {
+            $query->where('is_active', false);
+        }
+        // If 'all', no additional filtering
+
+        $suppliers = $query->orderBy('supplier_name')->get();
 
         return Inertia::render('Suppliers/Index', [
             'suppliers' => $suppliers,
-            'restaurant_id' => auth()->user()->restaurantData->id,
+            'restaurant_id' => $restaurantId,
+            'filters' => [
+                'status' => $statusFilter,
+                'search' => $search,
+            ],
         ]);
     }
 

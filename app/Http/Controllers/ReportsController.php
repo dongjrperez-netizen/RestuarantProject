@@ -108,12 +108,22 @@ class ReportsController extends Controller
             'items_count' => count($inventoryData['items']),
         ]);
 
+        // Get stock-in history from purchase orders
+        $stockInHistory = $this->getStockInHistory($restaurantId, $request);
+
+        // Check for stock-in history export
+        if ($request->get('export_history')) {
+            return $this->exportStockInHistoryReport($stockInHistory, $request);
+        }
+
+        // Check for regular inventory export
         if ($request->get('export')) {
             return $this->exportInventoryReport($inventoryData, $request->get('export'));
         }
 
         return Inertia::render('Reports/Inventory', [
             'inventoryData' => $inventoryData,
+            'stockInHistory' => $stockInHistory,
         ]);
     }
 
@@ -318,6 +328,90 @@ class ReportsController extends Controller
         ];
     }
 
+    private function getStockInHistory($restaurantId, Request $request)
+    {
+        // Get filter parameters (default to last 3 months)
+        $dateFrom = $request->get('history_date_from', Carbon::now()->subMonths(3)->startOfMonth()->toDateString());
+        $dateTo = $request->get('history_date_to', Carbon::now()->toDateString());
+        $ingredientFilter = $request->get('history_ingredient');
+        $supplierFilter = $request->get('history_supplier');
+
+        // Query purchase order items that have been received
+        $query = \App\Models\PurchaseOrderItem::whereHas('purchaseOrder', function($q) use ($restaurantId, $dateFrom, $dateTo) {
+                $q->where('restaurant_id', $restaurantId)
+                  ->whereNotNull('actual_delivery_date')
+                  ->whereBetween('actual_delivery_date', [$dateFrom, $dateTo]);
+            })
+            ->where('received_quantity', '>', 0)
+            ->with(['ingredient', 'purchaseOrder.supplier']);
+
+        // Apply ingredient filter
+        if ($ingredientFilter) {
+            $query->where('ingredient_id', $ingredientFilter);
+        }
+
+        // Apply supplier filter
+        if ($supplierFilter) {
+            $query->whereHas('purchaseOrder', function($q) use ($supplierFilter) {
+                $q->where('supplier_id', $supplierFilter);
+            });
+        }
+
+        $stockInRecords = $query->get()->map(function($item) {
+            $po = $item->purchaseOrder;
+            $ingredient = $item->ingredient;
+
+            // Calculate stock increase (packages × package quantity)
+            $packageQuantity = $ingredient->getPackageQuantityForSupplier($po->supplier_id) ?? 1;
+            $stockIncrease = $item->received_quantity * $packageQuantity;
+            $totalValue = $item->received_quantity * $item->unit_price;
+
+            return [
+                'date_received' => $po->actual_delivery_date,
+                'ingredient_id' => $ingredient->ingredient_id,
+                'ingredient_name' => $ingredient->ingredient_name,
+                'supplier_name' => $po->supplier->supplier_name ?? 'Unknown',
+                'quantity_received' => $item->received_quantity,
+                'unit' => 'packages',
+                'stock_increase' => $stockIncrease,
+                'base_unit' => $ingredient->base_unit,
+                'cost_per_unit' => $item->unit_price / $packageQuantity,
+                'total_value' => $totalValue,
+                'po_number' => $po->po_number,
+                'po_id' => $po->purchase_order_id,
+                'received_by' => $po->received_by ?? 'Unknown',
+                'quality_rating' => $item->quality_rating,
+                'condition_notes' => $item->condition_notes,
+            ];
+        })->sortByDesc('date_received')->values();
+
+        // Calculate summary stats
+        $summary = [
+            'total_transactions' => $stockInRecords->count(),
+            'total_value' => $stockInRecords->sum('total_value'),
+            'total_packages' => $stockInRecords->sum('quantity_received'),
+            'unique_ingredients' => $stockInRecords->pluck('ingredient_id')->unique()->count(),
+        ];
+
+        // Get all suppliers for filter dropdown
+        $suppliers = \App\Models\Supplier::where('restaurant_id', $restaurantId)
+            ->where('is_active', true)
+            ->orderBy('supplier_name')
+            ->get(['supplier_id', 'supplier_name']);
+
+        return [
+            'records' => $stockInRecords,
+            'summary' => $summary,
+            'suppliers' => $suppliers,
+            'filters' => [
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+                'ingredient' => $ingredientFilter,
+                'supplier' => $supplierFilter,
+            ],
+        ];
+    }
+
     private function getPurchaseOrdersData($restaurantId, $dateFrom, $dateTo, $status)
     {
         $query = PurchaseOrder::where('restaurant_id', $restaurantId)
@@ -498,6 +592,33 @@ class ReportsController extends Controller
         }
     }
 
+    private function exportStockInHistoryReport($data, Request $request)
+    {
+        $dateFrom = $data['filters']['date_from'];
+        $dateTo = $data['filters']['date_to'];
+        $format = $request->get('export_history');
+        $filename = "stock_in_history_{$dateFrom}_to_{$dateTo}";
+
+        switch ($format) {
+            case 'pdf':
+                return $this->generatePDF('reports.stock_in_history_pdf', [
+                    'data' => $data,
+                    'dateFrom' => $dateFrom,
+                    'dateTo' => $dateTo,
+                    'title' => 'Stock-In History Report'
+                ], $filename);
+
+            case 'csv':
+                return $this->generateCSV($this->prepareStockInHistoryCSVData($data), $filename);
+
+            case 'excel':
+                return $this->generateCSV($this->prepareStockInHistoryCSVData($data), $filename, 'xlsx');
+
+            default:
+                return response()->json(['error' => 'Invalid format'], 400);
+        }
+    }
+
     // Helper methods for export functionality
     private function generatePDF($view, $data, $filename)
     {
@@ -641,6 +762,41 @@ class ReportsController extends Controller
                 'Estimated Cost' => '₱' . number_format($log->estimated_cost, 2),
                 'Reason' => $log->reason,
                 'Reported By' => $log->user->name ?? 'N/A'
+            ];
+        }
+
+        return $csvData;
+    }
+
+    private function prepareStockInHistoryCSVData($data)
+    {
+        $csvData = [];
+
+        // Add header summary
+        $csvData[] = [
+            'Report Type' => 'Stock-In History Summary',
+            'Total Transactions' => $data['summary']['total_transactions'],
+            'Total Value' => '₱' . number_format($data['summary']['total_value'], 2),
+            'Total Packages' => $data['summary']['total_packages'],
+            'Unique Ingredients' => $data['summary']['unique_ingredients'],
+        ];
+
+        // Add empty row
+        $csvData[] = [];
+
+        // Add detail records
+        foreach ($data['records'] as $record) {
+            $csvData[] = [
+                'Date Received' => $record['date_received'],
+                'PO Number' => $record['po_number'],
+                'Ingredient' => $record['ingredient_name'],
+                'Supplier' => $record['supplier_name'],
+                'Quantity Received' => $record['quantity_received'] . ' ' . $record['unit'],
+                'Stock Increase' => number_format($record['stock_increase'], 2) . ' ' . $record['base_unit'],
+                'Cost Per Unit' => '₱' . number_format($record['cost_per_unit'], 2),
+                'Total Value' => '₱' . number_format($record['total_value'], 2),
+                'Received By' => $record['received_by'],
+                'Quality Rating' => $record['quality_rating'] ?? 'N/A',
             ];
         }
 

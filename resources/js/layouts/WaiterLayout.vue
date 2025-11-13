@@ -131,8 +131,6 @@ const startAutoRefresh = () => {
   refreshInterval = setInterval(() => {
     router.reload({
       only: ['readyOrders'],
-      preserveScroll: true,
-      preserveState: true,
       onSuccess: () => {
         const page = usePage();
         const newReadyOrders = (page.props.readyOrders as ReadyOrder[]) || [];

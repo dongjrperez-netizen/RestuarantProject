@@ -81,12 +81,21 @@ class SupplierBill extends Model
             return 0;
         }
 
-        return $this->due_date < now() ? now()->diffInDays($this->due_date) : 0;
+        if (!$this->due_date || now()->startOfDay() <= $this->due_date->startOfDay()) {
+            return 0;
+        }
+
+        return (int) now()->startOfDay()->diffInDays($this->due_date->startOfDay());
     }
 
     public function getIsOverdueAttribute()
     {
-        return $this->due_date < now() && $this->outstanding_amount > 0;
+        if (!$this->due_date || $this->outstanding_amount <= 0) {
+            return false;
+        }
+
+        // Only overdue if current date is AFTER the due date (not equal to)
+        return now()->startOfDay() > $this->due_date->startOfDay();
     }
 
     public function getPaymentProgressAttribute()
@@ -150,7 +159,7 @@ class SupplierBill extends Model
 
     public function scopeOverdue($query)
     {
-        return $query->where('due_date', '<', now())
+        return $query->where('due_date', '<', now()->startOfDay())
             ->where('outstanding_amount', '>', 0)
             ->whereNotIn('status', ['paid', 'cancelled']);
     }

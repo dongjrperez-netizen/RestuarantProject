@@ -301,7 +301,7 @@ const maintenanceTables = computed(() =>
 
 // Auto-refresh interval for tables
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
-const REFRESH_INTERVAL = 30000; // Refresh every 30 seconds
+const REFRESH_INTERVAL = 15000; // Refresh every 15 seconds
 
 const startAutoRefresh = () => {
   if (refreshInterval) {
@@ -312,8 +312,6 @@ const startAutoRefresh = () => {
     // Reload only the tables data to update table statuses
     router.reload({
       only: ['tables'],
-      preserveScroll: true,
-      preserveState: true,
     });
   }, REFRESH_INTERVAL);
 };
@@ -362,8 +360,6 @@ onMounted(() => {
           console.log('Order paid - refreshing table statuses');
           router.reload({
             only: ['tables'],
-            preserveScroll: true,
-            preserveState: true,
           });
         }
       })

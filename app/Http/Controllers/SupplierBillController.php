@@ -24,13 +24,55 @@ class SupplierBillController extends Controller
         $this->billingService = $billingService;
     }
 
-    public function index()
+    public function index(Request $request)
     {
          $restaurantId = auth()->user()->restaurantData->id;
 
-        $bills = SupplierBill::with(['supplier', 'purchaseOrder', 'payments'])
-            ->where('restaurant_id', $restaurantId)
-            ->orderBy('created_at', 'desc')
+        $statusFilter = $request->get('status', 'active'); // Default to 'active' (pending, overdue, partially_paid)
+        $search = $request->get('search');
+
+        $query = SupplierBill::with(['supplier', 'purchaseOrder', 'payments'])
+            ->where('restaurant_id', $restaurantId);
+
+        // Apply search filter (bill number or supplier name)
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('bill_number', 'like', '%' . $search . '%')
+                  ->orWhereHas('supplier', function ($supplierQuery) use ($search) {
+                      $supplierQuery->where('supplier_name', 'like', '%' . $search . '%');
+                  });
+            });
+        }
+
+        // Apply status filter
+        if ($statusFilter === 'active') {
+            // Show only pending, overdue, and partially paid
+            $query->where(function ($q) {
+                $q->where('status', 'pending')
+                  ->orWhere('status', 'partially_paid')
+                  ->orWhere(function ($subQ) {
+                      $subQ->where('due_date', '<', now()->startOfDay())
+                           ->where('outstanding_amount', '>', 0)
+                           ->whereNotIn('status', ['paid', 'cancelled']);
+                  });
+            });
+        } elseif ($statusFilter === 'overdue') {
+            // Show all bills that are overdue (current date is AFTER due date)
+            $query->where('due_date', '<', now()->startOfDay())
+                  ->where('outstanding_amount', '>', 0)
+                  ->whereNotIn('status', ['paid', 'cancelled']);
+        } elseif ($statusFilter === 'due_today') {
+            // Show all bills that are due today
+            $query->whereDate('due_date', '=', now()->startOfDay())
+                  ->where('outstanding_amount', '>', 0)
+                  ->whereNotIn('status', ['paid', 'cancelled']);
+        } elseif ($statusFilter !== 'all') {
+            // Filter by specific status
+            $query->where('status', $statusFilter);
+        }
+        // If 'all', no additional filtering
+
+        $bills = $query->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($bill) {
                 return [
@@ -57,6 +99,10 @@ class SupplierBillController extends Controller
         return Inertia::render('Bills/Index', [
             'bills' => $bills,
             'summary' => $summary,
+            'filters' => [
+                'status' => $statusFilter,
+                'search' => $search,
+            ],
         ]);
     }
 
@@ -252,7 +298,7 @@ class SupplierBillController extends Controller
 
     public function markOverdue()
     {
-        $overdueBills = SupplierBill::where('due_date', '<', now())
+        $overdueBills = SupplierBill::where('due_date', '<', now()->startOfDay())
             ->where('outstanding_amount', '>', 0)
             ->whereNotIn('status', ['paid', 'cancelled'])
             ->get();

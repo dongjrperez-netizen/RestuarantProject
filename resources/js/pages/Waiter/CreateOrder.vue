@@ -362,10 +362,10 @@ const addDishToOrder = () => {
   }
 
   // Find existing item with same dish_id AND variant_id (size)
-  // Use null comparison to handle undefined/null variant_id consistently
-  const variantIdToMatch = selectedVariant.value?.variant_id ?? null;
+  // Use undefined to match the OrderItem interface type
+  const variantIdToMatch = selectedVariant.value?.variant_id ?? undefined;
   const existingItemIndex = orderItems.value.findIndex(item => {
-    const itemVariantId = item.variant_id ?? null;
+    const itemVariantId = item.variant_id ?? undefined;
     return item.dish_id === selectedDish.value!.dish_id && itemVariantId === variantIdToMatch;
   });
   const isNewItem = existingItemIndex === -1;

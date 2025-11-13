@@ -91,8 +91,6 @@ const startAutoRefresh = () => {
     refreshInterval = setInterval(() => {
         router.reload({
             only: ['orders'],
-            preserveScroll: true,
-            preserveState: true,
         });
     }, REFRESH_INTERVAL);
 };

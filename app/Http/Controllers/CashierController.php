@@ -33,6 +33,7 @@ class CashierController extends Controller
             $payment = $order->payments()->where('status', 'completed')->latest()->first();
             if ($payment) {
                 $order->discount_amount = $payment->discount_amount;
+                $order->discount_reason = $payment->discount_reason;
                 $order->final_amount = $payment->final_amount;
                 $order->payment_method = $payment->payment_method;
                 $order->amount_paid = $payment->amount_paid;
@@ -49,7 +50,14 @@ class CashierController extends Controller
             ->whereDate('created_at', today())
             ->get();
 
-        $todayRevenue = $todayOrders->where('status', 'paid')->sum('total_amount');
+        // Calculate revenue from actual payments (after discounts)
+        $todayRevenue = \App\Models\CustomerPayment::whereHas('order', function ($query) use ($employee) {
+                $query->where('restaurant_id', $employee->user_id);
+            })
+            ->where('status', 'completed')
+            ->whereDate('paid_at', today())
+            ->sum('final_amount');
+
         $todayOrderCount = $todayOrders->where('status', 'paid')->count();
         $pendingOrdersCount = $todayOrders->whereIn('status', ['ready', 'completed'])->count();
 

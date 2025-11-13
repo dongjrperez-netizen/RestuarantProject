@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Alert from '@/components/ui/alert/Alert.vue';
 import AlertDescription from '@/components/ui/alert/AlertDescription.vue';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { type BreadcrumbItem } from '@/types';
 
 interface Bill {
@@ -36,12 +45,29 @@ interface Summary {
   paid_this_month: number;
 }
 
+interface Filters {
+  status: string;
+  search?: string;
+}
+
 interface Props {
   bills: Bill[];
   summary: Summary;
+  filters: Filters;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
+
+const selectedStatus = ref(props.filters.status);
+const searchQuery = ref(props.filters.search || '');
+
+watch(selectedStatus, (newValue) => {
+  router.get('/bills', { status: newValue, search: searchQuery.value }, { preserveState: true, preserveScroll: true });
+});
+
+const handleSearch = () => {
+  router.get('/bills', { status: selectedStatus.value, search: searchQuery.value }, { preserveState: true, preserveScroll: true });
+};
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Dashboard', href: '/dashboard' },
@@ -166,7 +192,33 @@ const getPaymentProgress = (bill: Bill) => {
       <!-- Bills Table -->
       <Card>
         <CardHeader>
-          <CardTitle>Bills</CardTitle>
+          <div class="flex items-center justify-between">
+            <CardTitle>Bills</CardTitle>
+            <div class="flex items-center gap-2">
+              <Input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Search by bill number or supplier..."
+                class="w-[280px]"
+                @keyup.enter="handleSearch"
+              />
+              <Select v-model="selectedStatus">
+                <SelectTrigger class="w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active Bills</SelectItem>
+                  <SelectItem value="all">All Bills</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                  <SelectItem value="due_today">Due Today</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button @click="handleSearch" variant="default">Search</Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>

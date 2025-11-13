@@ -2,6 +2,7 @@
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,7 +18,14 @@ import {
   DialogDescription,
   DialogFooter,
   DialogOverlay,
-} from '@/components/ui/dialog'
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 
 interface Supplier {
@@ -32,9 +40,15 @@ interface Supplier {
   purchase_orders?: any[];
 }
 
+interface Filters {
+  status: string;
+  search?: string;
+}
+
 interface Props {
   suppliers: Supplier[];
   restaurant_id: number;
+  filters: Filters;
 }
 
 const props = defineProps<Props>();
@@ -45,8 +59,18 @@ const notificationType = ref<'success' | 'error'>('success');
 const showModal = ref(false)
 const showInviteModal = ref(false);
 const selectedSupplier = ref<Supplier | null>(null);
+const selectedStatus = ref(props.filters.status);
+const searchQuery = ref(props.filters.search || '');
 
 const page = usePage();
+
+watch(selectedStatus, (newValue) => {
+  router.get('/suppliers', { status: newValue, search: searchQuery.value }, { preserveState: true, preserveScroll: true });
+});
+
+const handleSearch = () => {
+  router.get('/suppliers', { status: selectedStatus.value, search: searchQuery.value }, { preserveState: true, preserveScroll: true });
+};
 
 // Watch for flash messages
 watch(() => (page.props as any).flash?.success, (success) => {
@@ -243,7 +267,29 @@ const copyInvitationLink = async (supplier: Supplier) => {
       <!-- Suppliers Table -->
       <Card>
         <CardHeader>
-          <CardTitle>Suppliers List</CardTitle>
+          <div class="flex items-center justify-between">
+            <CardTitle>Suppliers List</CardTitle>
+            <div class="flex items-center gap-2">
+              <Input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Search by supplier name..."
+                class="w-[280px]"
+                @keyup.enter="handleSearch"
+              />
+              <Select v-model="selectedStatus">
+                <SelectTrigger class="w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="all">All Suppliers</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button @click="handleSearch" variant="default">Search</Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
