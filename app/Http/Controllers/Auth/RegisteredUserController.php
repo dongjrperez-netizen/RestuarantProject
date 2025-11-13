@@ -106,6 +106,9 @@ class RegisteredUserController extends Controller
 
         $user = User::where('email', $validated['email'])->first();
         event(new Registered($user));
+
+        // Temporarily log in user to complete document upload
+        // Email verification will be enforced on next login attempt
         Auth::login($user);
 
         return redirect()->route('register.documents');
@@ -243,7 +246,7 @@ class RegisteredUserController extends Controller
                 'restaurant_id' => $restaurantId,
             ]);
 
-            return redirect()->route('login')->with('success', "{$uploadedCount} document(s) uploaded successfully. You can now login.");
+            return redirect()->route('login')->with('success', "{$uploadedCount} document(s) uploaded successfully. Please check your email to verify your account before logging in.");
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();

@@ -22,6 +22,7 @@ interface PurchaseOrder {
   order_date: string;
   expected_delivery_date: string;
   total_amount: number;
+  received_by?: string;
   supplier: {
     supplier_name: string;
   };
@@ -64,7 +65,10 @@ const formatCurrency = (amount: number) => {
 };
 
 const getTotalItems = (items: PurchaseOrderItem[]) => {
-  return items.reduce((sum, item) => sum + item.ordered_quantity, 0);
+  const total = items.reduce((sum, item) => sum + Number(item.ordered_quantity), 0);
+  // Format number: remove trailing zeros and unnecessary decimals
+  const formatted = parseFloat(total.toFixed(3));
+  return formatted % 1 === 0 ? formatted.toFixed(0) : formatted.toString();
 };
 </script>
 
@@ -104,18 +108,23 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
 
         <Card class="h-24 flex flex-col justify-center">
           <CardContent class="p-4">
-            <div class="text-sm font-medium text-muted-foreground mb-1">In Transit</div>
+            <div class="text-sm font-medium text-muted-foreground mb-1">Ready to Receive</div>
             <div class="text-2xl font-bold text-blue-600">
-              {{ purchaseOrders.filter(po => ['confirmed', 'partially_delivered'].includes(po.status)).length }}
+              {{ purchaseOrders.filter(po => {
+                const status = po.status;
+                const receivedBy = po.received_by;
+                // Count orders that can be received: confirmed, partially_delivered, or delivered but not yet received
+                return status === 'confirmed' || status === 'partially_delivered' || (status === 'delivered' && !receivedBy);
+              }).length }}
             </div>
           </CardContent>
         </Card>
 
         <Card class="h-24 flex flex-col justify-center">
           <CardContent class="p-4">
-            <div class="text-sm font-medium text-muted-foreground mb-1">Delivered</div>
+            <div class="text-sm font-medium text-muted-foreground mb-1">Completed</div>
             <div class="text-2xl font-bold text-green-600">
-              {{ purchaseOrders.filter(po => po.status === 'delivered').length }}
+              {{ purchaseOrders.filter(po => po.status === 'delivered' && po.received_by).length }}
             </div>
           </CardContent>
         </Card>

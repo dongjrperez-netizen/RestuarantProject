@@ -309,6 +309,13 @@
                         <td class="text-right">Php {{ number_format($po['total_cost'], 2) }}</td>
                         <td>{{ $po['date_received'] }}</td>
                     </tr>
+                    @if(isset($po['received_items']) && $po['received_items'] !== 'Not yet received')
+                    <tr>
+                        <td colspan="5" style="background-color: #f9fafb; padding-left: 30px; font-size: 11px; border-top: none;">
+                            <strong>Received:</strong> {{ $po['received_items'] }}
+                        </td>
+                    </tr>
+                    @endif
                 @endforeach
             </tbody>
         </table>

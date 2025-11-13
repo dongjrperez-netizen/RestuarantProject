@@ -504,6 +504,15 @@ class AuthenticationService
 
         // Perform type-specific validations
         if ($userInfo['type'] === 'user') {
+            // Check if email is verified (restaurant owners must verify email)
+            if (!$userInfo['model']->hasVerifiedEmail()) {
+                return [
+                    'success' => false,
+                    'errors' => ['email' => 'Please verify your email address before logging in. Check your inbox for the verification link.'],
+                    'user_type' => 'user'
+                ];
+            }
+
             $statusErrors = $this->validateUserStatus($userInfo['model']);
             if ($statusErrors) {
                 // Allow login for 'Rejected' status but will redirect to account update

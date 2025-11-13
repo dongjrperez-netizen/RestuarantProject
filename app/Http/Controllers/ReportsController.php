@@ -603,13 +603,24 @@ class ReportsController extends Controller
         $csvData = [];
 
         foreach ($data['orders'] as $order) {
+            // Get received items info
+            $receivedItems = [];
+            foreach ($order->items as $item) {
+                if ($item->received_quantity > 0) {
+                    $receivedItems[] = $item->ingredient->ingredient_name . ' (' . number_format($item->received_quantity, 2) . ' ' . $item->unit_of_measure . ')';
+                }
+            }
+
+            $receivedItemsText = !empty($receivedItems) ? implode(', ', $receivedItems) : 'Not yet received';
+
             $csvData[] = [
                 'Order Number' => $order->order_number,
                 'Supplier' => $order->supplier->supplier_name ?? 'N/A',
                 'Date' => $order->created_at->format('Y-m-d'),
                 'Status' => ucfirst($order->status),
                 'Total Amount' => '₱' . number_format($order->total_amount, 2),
-                'Expected Delivery' => $order->expected_delivery_date ?? 'N/A'
+                'Expected Delivery' => $order->expected_delivery_date ?? 'N/A',
+                'Received Items' => $receivedItemsText
             ];
         }
 
@@ -827,10 +838,18 @@ class ReportsController extends Controller
             ->orderBy('created_at')
             ->get()
             ->map(function ($po) {
+                // Build received items list with quantities
+                $receivedItems = $po->items->filter(function($item) {
+                    return $item->received_quantity > 0;
+                })->map(function($item) {
+                    return $item->ingredient->ingredient_name . ' (' . number_format($item->received_quantity, 2) . ' ' . $item->unit_of_measure . ')';
+                })->join(', ');
+
                 return [
                     'po_no' => $po->order_number,
                     'supplier' => $po->supplier ? $po->supplier->supplier_name : 'N/A',
                     'items' => $po->items->pluck('ingredient.ingredient_name')->join(', '),
+                    'received_items' => $receivedItems ?: 'Not yet received',
                     'total_cost' => $po->total_amount,
                     'date_received' => $po->updated_at->format('M j, Y'),
                 ];

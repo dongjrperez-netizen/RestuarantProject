@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { type BreadcrumbItem } from '@/types';
+import { computed } from 'vue';
 
 interface PurchaseOrderItem {
   purchase_order_item_id: number;
@@ -113,6 +114,26 @@ const cancelOrder = () => {
     cancelForm.post(`/purchase-orders/${props.purchaseOrder.purchase_order_id}/cancel`);
   }
 };
+
+// Determine if the "Receive Delivery" button should be shown
+const canReceiveDelivery = computed(() => {
+  const status = props.purchaseOrder.status;
+  const receivedBy = props.purchaseOrder.received_by;
+
+  // Always show for confirmed or partially_delivered
+  if (status === 'confirmed' || status === 'partially_delivered') {
+    return true;
+  }
+
+  // For 'delivered' status, only show if not yet received by owner
+  // (supplier marked as delivered but owner hasn't received it yet)
+  if (status === 'delivered' && !receivedBy) {
+    return true;
+  }
+
+  // Hide in all other cases (including when delivered and already received)
+  return false;
+});
 </script>
 
 <template>
@@ -158,8 +179,8 @@ const cancelOrder = () => {
           Approve & Send
         </Button>
 
-        <Link 
-          v-if="['confirmed', 'partially_delivered'].includes(purchaseOrder.status)"
+        <Link
+          v-if="canReceiveDelivery"
           :href="`/purchase-orders/${purchaseOrder.purchase_order_id}/receive`"
         >
           <Button>Receive Delivery</Button>

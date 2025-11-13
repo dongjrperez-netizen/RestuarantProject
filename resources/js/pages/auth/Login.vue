@@ -6,9 +6,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthBase from '@/layouts/AuthLayout.vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, router } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 defineProps<{
     status?: string;
@@ -22,11 +22,21 @@ const form = useForm({
     remember: false,
 });
 
+const resendForm = useForm({
+    email: '',
+});
+
 const loginError = ref('');
+const showResendButton = ref(false);
+
+// Check if error message is about email verification
+const isEmailVerificationError = computed(() => {
+    return form.errors.email?.includes('verify your email') || loginError.value.includes('verify your email');
+});
 
 const submit = () => {
-    loginError.value = ''; 
-
+    loginError.value = '';
+    showResendButton.value = false;
 
     form.post(route('login'), {
         onFinish: () => form.reset('password'),
@@ -35,9 +45,23 @@ const submit = () => {
                 // Handle custom status errors from backend
                 loginError.value = errors.status;
             }
+            // Show resend button if verification error
+            if (errors.email?.includes('verify your email')) {
+                showResendButton.value = true;
+            }
         },
         onSuccess: () => {
-          
+
+        }
+    });
+};
+
+const resendVerification = () => {
+    resendForm.email = form.email;
+    resendForm.post(route('verification.resend.public'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showResendButton.value = false;
         }
     });
 };
@@ -78,6 +102,21 @@ const submit = () => {
                         class="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors text-sm sm:text-base"
                     />
                     <InputError :message="form.errors.email" />
+
+                    <!-- Resend verification email button -->
+                    <div v-if="showResendButton && form.email" class="mt-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            @click="resendVerification"
+                            :disabled="resendForm.processing"
+                            class="w-full text-orange-600 border-orange-300 hover:bg-orange-50"
+                        >
+                            <LoaderCircle v-if="resendForm.processing" class="w-4 h-4 mr-2 animate-spin" />
+                            {{ resendForm.processing ? 'Sending...' : 'Resend Verification Email' }}
+                        </Button>
+                    </div>
                 </div>
 
                 <div class="space-y-2">

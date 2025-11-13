@@ -32,6 +32,11 @@ Route::middleware('guest')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
+
+    // Public resend verification email (for unverified users who can't log in)
+    Route::post('email/resend-verification', [EmailVerificationNotificationController::class, 'resendPublic'])
+        ->middleware('throttle:6,1')
+        ->name('verification.resend.public');
 });
 
 // Email verification route - accessible without authentication (uses signed URL for security)

@@ -403,9 +403,15 @@ class PurchaseOrderController extends Controller
     {
         $purchaseOrder = PurchaseOrder::with('items.ingredient', 'supplier')->findOrFail($id);
 
-        if (! in_array($purchaseOrder->status, ['confirmed', 'partially_delivered'])) {
+        if (! in_array($purchaseOrder->status, ['confirmed', 'partially_delivered', 'delivered'])) {
             return redirect()->back()
-                ->with('error', 'Can only receive confirmed purchase orders.');
+                ->with('error', 'Can only receive confirmed or delivered purchase orders.');
+        }
+
+        // Prevent re-receiving already processed orders
+        if ($purchaseOrder->status === 'delivered' && $purchaseOrder->received_by) {
+            return redirect()->route('purchase-orders.show', $id)
+                ->with('error', 'This order has already been received and processed.');
         }
 
         $user = auth()->user();
@@ -439,6 +445,12 @@ class PurchaseOrderController extends Controller
     public function processReceive(Request $request, $id)
     {
         $purchaseOrder = PurchaseOrder::with(['items.ingredient'])->findOrFail($id);
+
+        // Prevent processing already received orders
+        if ($purchaseOrder->status === 'delivered' && $purchaseOrder->received_by) {
+            return redirect()->route('purchase-orders.show', $id)
+                ->with('error', 'This order has already been received and processed.');
+        }
 
         $validated = $request->validate([
             'items' => 'required|array',

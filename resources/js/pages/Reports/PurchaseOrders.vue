@@ -24,6 +24,15 @@ import {
   Banknote
 } from 'lucide-vue-next';
 
+interface PurchaseOrderItem {
+  purchase_order_item_id: number;
+  received_quantity: number;
+  unit_of_measure: string;
+  ingredient: {
+    ingredient_name: string;
+  };
+}
+
 interface PurchaseOrder {
   id: number;
   order_number: string;
@@ -34,6 +43,7 @@ interface PurchaseOrder {
   supplier: {
     supplier_name: string;
   };
+  items?: PurchaseOrderItem[];
 }
 
 interface Summary {
@@ -193,6 +203,23 @@ const statusOptions = [
   { value: 'received', label: 'Received' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
+
+const getReceivedItems = (order: PurchaseOrder) => {
+  if (!order.items || order.items.length === 0) {
+    return 'Not yet received';
+  }
+
+  const receivedItems = order.items
+    .filter(item => item.received_quantity > 0)
+    .map(item => {
+      // Convert to number first, then format
+      const qty = Number(item.received_quantity);
+      const formattedQty = qty % 1 === 0 ? qty.toFixed(0) : qty.toFixed(2);
+      return `${item.ingredient.ingredient_name} (${formattedQty} ${item.unit_of_measure})`;
+    });
+
+  return receivedItems.length > 0 ? receivedItems.join(', ') : 'Not yet received';
+};
 </script>
 
 <template>
@@ -432,6 +459,7 @@ const statusOptions = [
                   <th class="text-left p-4 font-semibold">Status</th>
                   <th class="text-left p-4 font-semibold">Amount</th>
                   <th class="text-left p-4 font-semibold">Expected Delivery</th>
+                  <th class="text-left p-4 font-semibold">Received Items</th>
                 </tr>
               </thead>
               <tbody>
@@ -451,6 +479,9 @@ const statusOptions = [
                   <td class="p-4">{{ formatCurrency(order.total_amount) }}</td>
                   <td class="p-4">
                     {{ order.expected_delivery_date ? formatDate(order.expected_delivery_date) : 'Not set' }}
+                  </td>
+                  <td class="p-4 text-sm text-muted-foreground">
+                    {{ getReceivedItems(order) }}
                   </td>
                 </tr>
               </tbody>
@@ -476,6 +507,7 @@ const statusOptions = [
                   <th class="text-left p-4 font-semibold">Status</th>
                   <th class="text-left p-4 font-semibold">Amount</th>
                   <th class="text-left p-4 font-semibold">Expected Delivery</th>
+                  <th class="text-left p-4 font-semibold">Received Items</th>
                 </tr>
               </thead>
               <tbody>
@@ -495,6 +527,9 @@ const statusOptions = [
                   <td class="p-4">{{ formatCurrency(order.total_amount) }}</td>
                   <td class="p-4">
                     {{ order.expected_delivery_date ? formatDate(order.expected_delivery_date) : 'Not set' }}
+                  </td>
+                  <td class="p-4 text-sm text-muted-foreground">
+                    {{ getReceivedItems(order) }}
                   </td>
                 </tr>
               </tbody>
