@@ -280,7 +280,7 @@ const onDamageReportSuccess = () => {
         <Card
           v-for="order in orders"
           :key="order.order_id"
-          class="flex-shrink-0 w-80 border-2 border-gray-300 hover:shadow-lg transition-all duration-200 flex flex-col h-full"
+          class="flex-shrink-0 w-80 border-2 border-gray-300 hover:shadow-lg transition-all duration-200 flex flex-col h-full !bg-white !text-gray-900"
         >
           <CardHeader class="pb-3">
             <div class="flex items-center justify-between mb-2">
