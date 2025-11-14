@@ -40,9 +40,10 @@ class BillingService
 
             $supplier = $purchaseOrder->supplier;
 
-            // Calculate due date based on supplier payment terms
+            // Calculate due date based on supplier payment terms (or default for manual receives)
             $billDate = $options['bill_date'] ?? ($purchaseOrder->actual_delivery_date ?? now());
-            $dueDate = $this->calculateDueDate($billDate, $supplier->payment_terms);
+            $paymentTerms = $supplier ? $supplier->payment_terms : 'NET_30'; // Default to NET_30 for manual receives
+            $dueDate = $this->calculateDueDate($billDate, $paymentTerms);
 
             // Calculate bill amounts (use received quantities, not ordered)
             $billAmounts = $this->calculateBillAmounts($purchaseOrder, $options);
@@ -51,7 +52,7 @@ class BillingService
             $bill = SupplierBill::create([
                 'purchase_order_id' => $purchaseOrder->purchase_order_id,
                 'restaurant_id' => $purchaseOrder->restaurant_id,
-                'supplier_id' => $purchaseOrder->supplier_id,
+                'supplier_id' => $purchaseOrder->supplier_id, // Can be null for manual receives
                 'supplier_invoice_number' => $options['supplier_invoice_number'] ?? null,
                 'bill_date' => $billDate,
                 'due_date' => $dueDate,
@@ -64,22 +65,43 @@ class BillingService
                 'notes' => $options['notes'] ?? "Auto-generated from PO {$purchaseOrder->po_number}",
             ]);
 
+            $supplierName = $supplier ? $supplier->supplier_name : $this->extractSupplierNameFromNotes($purchaseOrder->notes);
+
             Log::info('Bill generated from purchase order', [
                 'bill_id' => $bill->bill_id,
                 'bill_number' => $bill->bill_number,
                 'purchase_order_id' => $purchaseOrderId,
                 'po_number' => $purchaseOrder->po_number,
-                'supplier' => $supplier->supplier_name ?? 'Unknown',
+                'supplier' => $supplierName ?? 'Unknown',
+                'is_manual_receive' => is_null($purchaseOrder->supplier_id),
                 'total_amount' => $bill->total_amount,
             ]);
 
             return [
                 'success' => true,
                 'bill' => $bill,
+                'bill_number' => $bill->bill_number,
                 'purchase_order' => $purchaseOrder,
                 'message' => "Bill {$bill->bill_number} generated successfully",
             ];
         });
+    }
+
+    /**
+     * Extract supplier name from purchase order notes (for manual receives)
+     */
+    private function extractSupplierNameFromNotes(?string $notes): ?string
+    {
+        if (!$notes) {
+            return null;
+        }
+
+        // Notes format: "Manual Receive - Supplier: {name} | ..."
+        if (preg_match('/Supplier:\s*([^|]+)/', $notes, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return null;
     }
 
     /**

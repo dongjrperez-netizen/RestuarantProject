@@ -30,7 +30,8 @@ interface Bill {
   total_amount: number;
   paid_amount: number;
   outstanding_amount: number;
-  supplier: Supplier;
+  supplier: Supplier | null;
+  notes?: string;
 }
 
 interface Props {
@@ -96,6 +97,27 @@ const onBillSelect = (billId: number) => {
   selectedBillId.value = billId;
   form.bill_id = billId;
   form.payment_amount = 0; // Reset amount when switching bills
+};
+
+const getSupplierName = (bill: Bill) => {
+  if (bill.supplier) {
+    return bill.supplier.supplier_name;
+  }
+
+  // Manual receive - extract from notes
+  if (bill.notes) {
+    const manualReceiveMatch = bill.notes.match(/manual receive\s*-\s*([^|]+)/i);
+    if (manualReceiveMatch) {
+      return manualReceiveMatch[1].trim();
+    }
+
+    const supplierMatch = bill.notes.match(/Supplier:\s*([^|]+)/);
+    if (supplierMatch) {
+      return supplierMatch[1].trim();
+    }
+  }
+
+  return 'Unknown Supplier';
 };
 
 const payFullAmount = () => {
@@ -297,7 +319,7 @@ const submit = async () => {
                     :class="{ 'bg-muted/50': selectedBillId === bill.bill_id }"
                   >
                     <TableCell class="font-medium">{{ bill.bill_number }}</TableCell>
-                    <TableCell>{{ bill.supplier.supplier_name }}</TableCell>
+                    <TableCell>{{ getSupplierName(bill) }}</TableCell>
                     <TableCell>{{ formatDate(bill.due_date) }}</TableCell>
                     <TableCell>{{ formatCurrency(bill.outstanding_amount) }}</TableCell>
                     <TableCell>
@@ -339,7 +361,7 @@ const submit = async () => {
                 <div class="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <span class="text-muted-foreground">Supplier:</span>
-                    <span class="ml-1">{{ selectedBill.supplier.supplier_name }}</span>
+                    <span class="ml-1">{{ getSupplierName(selectedBill) }}</span>
                   </div>
                   <div>
                     <span class="text-muted-foreground">Outstanding:</span>

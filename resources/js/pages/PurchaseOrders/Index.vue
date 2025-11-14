@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { type BreadcrumbItem } from '@/types';
 
 interface PurchaseOrderItem {
@@ -25,24 +28,45 @@ interface PurchaseOrder {
   received_by?: string;
   supplier: {
     supplier_name: string;
-  };
+  } | null;
   items: PurchaseOrderItem[];
+}
+
+interface Filters {
+  search: string;
+  status: string;
 }
 
 interface Props {
   purchaseOrders: PurchaseOrder[];
+  filters: Filters;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Dashboard', href: '/dashboard' },
   { title: 'Purchase Orders', href: '/purchase-orders' },
 ];
 
+// Filter state
+const search = ref(props.filters.search);
+const status = ref(props.filters.status);
+
+// Handle search button click
+const handleSearch = () => {
+  router.get('/purchase-orders', {
+    search: search.value,
+    status: status.value,
+  }, {
+    preserveState: true,
+    preserveScroll: true,
+  });
+};
+
 const getStatusBadge = (status: string) => {
   type BadgeVariant = "default" | "destructive" | "outline" | "secondary" | "success" | "warning" | undefined;
-  
+
   const statusConfig: Record<string, { variant: BadgeVariant; label: string }> = {
     'draft': { variant: 'secondary', label: 'Draft' },
     'pending': { variant: 'default', label: 'Pending' },
@@ -52,7 +76,7 @@ const getStatusBadge = (status: string) => {
     'delivered': { variant: 'default', label: 'Delivered' },
     'cancelled': { variant: 'destructive', label: 'Cancelled' }
   };
-  
+
   return statusConfig[status] || { variant: 'secondary' as BadgeVariant, label: status };
 };
 
@@ -83,9 +107,14 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
           <h1 class="text-3xl font-bold tracking-tight">Purchase Orders</h1>
           <p class="text-muted-foreground">Manage your purchase orders and track deliveries</p>
         </div>
-        <Link href="/purchase-orders/create">
-          <Button>Create Purchase Order</Button>
-        </Link>
+        <div class="flex gap-2">
+          <Link href="/purchase-orders/manual-receive">
+            <Button variant="outline">Manual Receive</Button>
+          </Link>
+          <Link href="/purchase-orders/create">
+            <Button>Create Purchase Order</Button>
+          </Link>
+        </div>
       </div>
 
       <!-- Summary Cards -->
@@ -133,7 +162,35 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
       <!-- Purchase Orders Table -->
       <Card>
         <CardHeader>
-          <CardTitle>Purchase Orders</CardTitle>
+          <div class="flex items-center justify-between gap-4">
+            <CardTitle>Purchase Orders</CardTitle>
+            <div class="flex items-center gap-3">
+              <Input
+                v-model="search"
+                type="text"
+                placeholder="Search by PO number or supplier name..."
+                class="w-80"
+                @keyup.enter="handleSearch"
+              />
+              <Select v-model="status">
+                <SelectTrigger class="w-52">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="sent,draft,confirmed,pending">Default (Sent, Draft, Confirmed, Pending)</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="sent">Sent</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="partially_delivered">Partially Delivered</SelectItem>
+                  <SelectItem value="delivered">Delivered</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button @click="handleSearch">Search</Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -155,7 +212,7 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                   {{ order.po_number }}
                 </TableCell>
                 <TableCell>
-                  {{ order.supplier.supplier_name }}
+                  {{ order.supplier?.supplier_name || 'Manual Receive' }}
                 </TableCell>
                 <TableCell>
                   {{ formatDate(order.order_date) }}

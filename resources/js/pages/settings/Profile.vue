@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
 
 import DeleteUser from '@/components/DeleteUser.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
@@ -34,45 +33,9 @@ const form = useForm({
     first_name: user.first_name,
     last_name: user.last_name,
     middle_name: user.middle_name || '',
-    date_of_birth: user.date_of_birth,
+    date_of_birth: user.date_of_birth || '',
     gender: user.gender,
     email: user.email,
-});
-
-// Calculate age dynamically based on form's date of birth
-const age = computed(() => {
-    if (!form.date_of_birth) return null;
-
-    try {
-        const today = new Date();
-        let birthDate;
-
-        // Handle different date formats
-        if (typeof form.date_of_birth === 'string') {
-            birthDate = new Date(form.date_of_birth);
-        } else if (form.date_of_birth instanceof Date) {
-            birthDate = form.date_of_birth;
-        } else {
-            return null;
-        }
-
-        // Check if date is valid
-        if (isNaN(birthDate.getTime())) {
-            return null;
-        }
-
-        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-            calculatedAge--;
-        }
-
-        return calculatedAge >= 0 ? calculatedAge : null;
-    } catch (error) {
-        console.error('Error calculating age:', error, form.date_of_birth);
-        return null;
-    }
 });
 
 const submit = () => {
@@ -132,30 +95,17 @@ const submit = () => {
                         <InputError class="mt-2" :message="form.errors.middle_name" />
                     </div>
 
-                    <!-- Date of Birth and Age -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="grid gap-2">
-                            <Label for="date_of_birth">Date of Birth</Label>
-                            <DatePicker
-                                id="date_of_birth"
-                                v-model="form.date_of_birth"
-                                :required="true"
-                                autocomplete="bday"
-                                placeholder="Select your birth date"
-                            />
-                            <InputError class="mt-2" :message="form.errors.date_of_birth" />
-                        </div>
-
-                        <div class="grid gap-2">
-                            <Label for="age">Age</Label>
-                            <Input
-                                id="age"
-                                class="mt-1 block w-full bg-muted"
-                                :value="age !== null ? age + ' years old' : 'N/A'"
-                                disabled
-                                readonly
-                            />
-                        </div>
+                    <!-- Date of Birth -->
+                    <div class="grid gap-2">
+                        <Label for="date_of_birth">Date of Birth</Label>
+                        <DatePicker
+                            id="date_of_birth"
+                            v-model="form.date_of_birth"
+                            :required="true"
+                            autocomplete="bday"
+                            placeholder="Select your birth date"
+                        />
+                        <InputError class="mt-2" :message="form.errors.date_of_birth" />
                     </div>
 
                     <!-- Gender -->

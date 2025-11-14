@@ -188,13 +188,13 @@ const hasRequiredDocuments = () => {
             </Button>
           </div>
           
-          <Input 
+          <Input
             :id="`document-${document.id}`"
             :name="`document-${document.id}`"
-            type="file" 
-            accept=".pdf,.jpg,.jpeg,.png" 
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
             @change="handleFileChange($event, document.id)"
-            :class="document.file ? 'border-green-500' : ''"
+            :class="document.file ? 'border-green-500 !bg-white !text-gray-900 dark:!bg-white dark:!text-gray-900' : '!bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300'"
           />
           
           <InputError :message="document.error" />

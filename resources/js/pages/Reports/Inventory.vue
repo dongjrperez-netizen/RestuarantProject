@@ -136,7 +136,7 @@ const getStockPercentage = (current: number, reorder: number) => {
 };
 
 const getStockColor = (status: string) => {
-  return status === 'low' ? 'text-red-600' : 'text-green-600';
+  return status === 'low' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400';
 };
 
 const getStockBadgeVariant = (status: string) => {
@@ -243,8 +243,8 @@ const getQualityBadgeVariant = (rating?: string) => {
                 <p class="text-2xl font-bold">{{ formatNumber(inventoryData.summary.total_items) }}</p>
                 <p class="text-xs text-muted-foreground mt-1">Inventory items</p>
               </div>
-              <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <Package class="h-4 w-4 text-blue-600" />
+              <div class="h-8 w-8 bg-blue-100 dark:bg-blue-950/30 rounded-full flex items-center justify-center">
+                <Package class="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </CardContent>
@@ -255,11 +255,11 @@ const getQualityBadgeVariant = (rating?: string) => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium text-muted-foreground">Low Stock Items</p>
-                <p class="text-2xl font-bold text-red-600">{{ formatNumber(inventoryData.summary.low_stock_items) }}</p>
+                <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ formatNumber(inventoryData.summary.low_stock_items) }}</p>
                 <p class="text-xs text-muted-foreground mt-1">Need reordering</p>
               </div>
-              <div class="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertTriangle class="h-4 w-4 text-red-600" />
+              <div class="h-8 w-8 bg-red-100 dark:bg-red-950/30 rounded-full flex items-center justify-center">
+                <AlertTriangle class="h-4 w-4 text-red-600 dark:text-red-400" />
               </div>
             </div>
           </CardContent>
@@ -273,8 +273,8 @@ const getQualityBadgeVariant = (rating?: string) => {
                 <p class="text-2xl font-bold">{{ formatCurrency(inventoryData.summary.total_value) }}</p>
                 <p class="text-xs text-muted-foreground mt-1">Inventory worth</p>
               </div>
-              <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                <Banknote class="h-4 w-4 text-green-600" />
+              <div class="h-8 w-8 bg-green-100 dark:bg-green-950/30 rounded-full flex items-center justify-center">
+                <Banknote class="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
             </div>
           </CardContent>
@@ -305,20 +305,31 @@ const getQualityBadgeVariant = (rating?: string) => {
         <CardContent>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-4">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium">Normal Stock</span>
-                <span class="text-sm text-muted-foreground">{{ inventoryData.stock_levels.normal || 0 }} items</span>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">Normal Stock</span>
+                  <span class="text-sm font-semibold">{{ inventoryData.stock_levels.normal || 0 }} items ({{ inventoryData.summary.total_items > 0 ? Math.round(((inventoryData.stock_levels.normal || 0) / inventoryData.summary.total_items) * 100) : 0 }}%)</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                  <div
+                    class="bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all"
+                    :style="{ width: `${inventoryData.summary.total_items > 0 ? ((inventoryData.stock_levels.normal || 0) / inventoryData.summary.total_items) * 100 : 0}%` }"
+                  ></div>
+                </div>
               </div>
-              <Progress :value="((inventoryData.stock_levels.normal || 0) / inventoryData.summary.total_items) * 100" class="h-2" />
 
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-red-600">Low Stock</span>
-                <span class="text-sm text-muted-foreground">{{ inventoryData.stock_levels.low || 0 }} items</span>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-red-600 dark:text-red-400">Low Stock</span>
+                  <span class="text-sm font-semibold text-red-600 dark:text-red-400">{{ inventoryData.stock_levels.low || 0 }} items ({{ inventoryData.summary.total_items > 0 ? Math.round(((inventoryData.stock_levels.low || 0) / inventoryData.summary.total_items) * 100) : 0 }}%)</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                  <div
+                    class="bg-red-600 dark:bg-red-500 h-3 rounded-full transition-all"
+                    :style="{ width: `${inventoryData.summary.total_items > 0 ? ((inventoryData.stock_levels.low || 0) / inventoryData.summary.total_items) * 100 : 0}%` }"
+                  ></div>
+                </div>
               </div>
-              <Progress
-                :value="((inventoryData.stock_levels.low || 0) / inventoryData.summary.total_items) * 100"
-                class="h-2 text-red-600"
-              />
             </div>
             <div class="flex items-center justify-center">
               <div class="text-center">
@@ -333,7 +344,7 @@ const getQualityBadgeVariant = (rating?: string) => {
       <!-- Low Stock Alert -->
       <Card v-if="lowStockItems.length > 0">
         <CardHeader>
-          <CardTitle class="flex items-center gap-2 text-red-600">
+          <CardTitle class="flex items-center gap-2 text-red-600 dark:text-red-400">
             <AlertTriangle class="h-5 w-5" />
             Low Stock Alert
           </CardTitle>
@@ -344,7 +355,7 @@ const getQualityBadgeVariant = (rating?: string) => {
             <div
               v-for="item in lowStockItems"
               :key="item.ingredient_id"
-              class="flex items-center justify-between p-3 border border-red-200 rounded-lg bg-red-50"
+              class="flex items-center justify-between p-3 border border-red-200 dark:border-red-900/50 rounded-lg bg-red-50 dark:bg-red-950/20"
             >
               <div>
                 <p class="font-medium">{{ item.ingredient_name }}</p>
@@ -376,8 +387,8 @@ const getQualityBadgeVariant = (rating?: string) => {
               class="flex items-center justify-between p-3 border rounded-lg"
             >
               <div class="flex items-center space-x-3">
-                <div class="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
-                  <span class="text-sm font-bold text-blue-600">{{ index + 1 }}</span>
+                <div class="flex items-center justify-center w-8 h-8 bg-blue-100 dark:bg-blue-950/30 rounded-full">
+                  <span class="text-sm font-bold text-blue-600 dark:text-blue-400">{{ index + 1 }}</span>
                 </div>
                 <div>
                   <p class="font-medium">{{ item.ingredient_name }}</p>
@@ -419,6 +430,12 @@ const getQualityBadgeVariant = (rating?: string) => {
                 </tr>
               </thead>
               <tbody>
+                <tr v-if="inventoryData.items.length === 0">
+                  <td colspan="8" class="p-8 text-center text-muted-foreground">
+                    <Package class="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No inventory items found</p>
+                  </td>
+                </tr>
                 <tr
                   v-for="item in inventoryData.items"
                   :key="item.ingredient_id"
@@ -439,7 +456,7 @@ const getQualityBadgeVariant = (rating?: string) => {
                   <td class="p-4">{{ formatCurrency(item.cost_per_unit) }}</td>
                   <td class="p-4 font-medium">{{ formatCurrency(item.total_value) }}</td>
                   <td class="p-4">
-                    <span v-if="item.exclusion_count > 0" class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800">
+                    <span v-if="item.exclusion_count > 0" class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-amber-400">
                       {{ item.exclusion_count }}x excluded
                     </span>
                     <span v-else class="text-sm text-muted-foreground">-</span>
@@ -450,12 +467,17 @@ const getQualityBadgeVariant = (rating?: string) => {
                     </Badge>
                   </td>
                   <td class="p-4">
-                    <div class="w-20">
-                      <Progress
-                        :value="getStockPercentage(item.current_stock, item.reorder_level)"
-                        :class="item.stock_status === 'low' ? 'text-red-600' : ''"
-                        class="h-2"
-                      />
+                    <div class="space-y-1">
+                      <div class="text-xs text-muted-foreground">
+                        {{ Math.round(getStockPercentage(item.current_stock, item.reorder_level)) }}%
+                      </div>
+                      <div class="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div
+                          class="h-2 rounded-full transition-all"
+                          :class="item.stock_status === 'low' ? 'bg-red-600 dark:bg-red-500' : 'bg-green-600 dark:bg-green-500'"
+                          :style="{ width: `${getStockPercentage(item.current_stock, item.reorder_level)}%` }"
+                        ></div>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -590,7 +612,7 @@ const getQualityBadgeVariant = (rating?: string) => {
                     <span class="text-xs text-muted-foreground ml-1">{{ record.unit }}</span>
                   </td>
                   <td class="p-3">
-                    <span class="font-medium text-green-600 text-xs">+{{ formatNumber(record.stock_increase) }}</span>
+                    <span class="font-medium text-green-600 dark:text-green-400 text-xs">+{{ formatNumber(record.stock_increase) }}</span>
                     <span class="text-xs text-muted-foreground ml-1">{{ record.base_unit }}</span>
                   </td>
                   <td class="p-3 text-xs">{{ formatCurrency(record.cost_per_unit) }}</td>
@@ -598,7 +620,7 @@ const getQualityBadgeVariant = (rating?: string) => {
                   <td class="p-3">
                     <a
                       :href="`/purchase-orders/${record.po_id}`"
-                      class="text-blue-600 hover:underline font-medium text-xs"
+                      class="text-blue-600 dark:text-blue-400 hover:underline font-medium text-xs"
                       target="_blank"
                     >
                       {{ record.po_number }}

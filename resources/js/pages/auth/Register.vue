@@ -142,17 +142,17 @@ const closeModal = () => {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div class="space-y-2">
               <Label for="first_name" class="text-sm">First Name</Label>
-              <Input id="first_name" type="text" required autofocus autocomplete="given-name" v-model="form.first_name" placeholder="John" class="text-sm" />
+              <Input id="first_name" type="text" required autofocus autocomplete="given-name" v-model="form.first_name" placeholder="John" class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500" />
             </div>
             <div class="space-y-2">
               <Label for="last_name" class="text-sm">Last Name</Label>
-              <Input id="last_name" type="text" required autocomplete="family-name" v-model="form.last_name" placeholder="Doe" class="text-sm" />
+              <Input id="last_name" type="text" required autocomplete="family-name" v-model="form.last_name" placeholder="Doe" class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500" />
             </div>
           </div>
 
           <div class="space-y-2">
             <Label for="middle_name" class="text-sm">Middle Name <span class="text-gray-400 text-xs">(Optional)</span></Label>
-            <Input id="middle_name" type="text" autocomplete="additional-name" v-model="form.middle_name" placeholder="Middle name" class="text-sm" />
+            <Input id="middle_name" type="text" autocomplete="additional-name" v-model="form.middle_name" placeholder="Middle name" class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500" />
           </div>
 
           <div class="space-y-2">
@@ -207,7 +207,7 @@ const closeModal = () => {
 
           <div class="space-y-2">
             <Label for="email" class="text-sm">Email Address</Label>
-            <Input id="email" type="email" required autocomplete="email" v-model="form.email" placeholder="john@example.com" class="text-sm" />
+            <Input id="email" type="email" required autocomplete="email" v-model="form.email" placeholder="john@example.com" class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500" />
           </div>
 
         </div>
@@ -227,22 +227,22 @@ const closeModal = () => {
 
           <div class="space-y-2">
             <Label for="restaurant_name" class="text-sm">Restaurant Name</Label>
-            <Input id="restaurant_name" type="text" required autocomplete="organization" v-model="form.restaurant_name" placeholder="Bella Vista Restaurant" class="text-sm" />
+            <Input id="restaurant_name" type="text" required autocomplete="organization" v-model="form.restaurant_name" placeholder="Bella Vista Restaurant" class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500" />
           </div>
 
           <div class="space-y-2">
             <Label for="address" class="text-sm">Restaurant Address</Label>
-            <Input id="address" type="text" required autocomplete="street-address" v-model="form.address" placeholder="123 Main Street, City" class="text-sm" />
+            <Input id="address" type="text" required autocomplete="street-address" v-model="form.address" placeholder="123 Main Street, City" class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500" />
           </div>
 
           <div class="space-y-2">
             <Label for="postal_code" class="text-sm">Postal Code <span class="text-gray-400 text-xs">(Optional)</span></Label>
-            <Input id="postal_code" type="text" autocomplete="postal-code" v-model="form.postal_code" placeholder="12345" class="text-sm" />
+            <Input id="postal_code" type="text" autocomplete="postal-code" v-model="form.postal_code" placeholder="12345" class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500" />
           </div>
 
           <div class="space-y-2">
             <Label for="contact_number" class="text-sm">Restaurant Phone</Label>
-            <Input id="contact_number" type="tel" required autocomplete="tel" v-model="form.contact_number" placeholder="+1 (555) 987-6543" class="text-sm" />
+            <Input id="contact_number" type="tel" required autocomplete="tel" v-model="form.contact_number" placeholder="+1 (555) 987-6543" class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500" />
           </div>
         </div>
 
@@ -273,7 +273,7 @@ const closeModal = () => {
               autocomplete="new-password"
               v-model="form.password"
               placeholder="Create a strong password"
-              class="text-sm"
+              class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500"
             />
             <p class="text-xs text-gray-500 mt-1">Password must be at least 8 characters long</p>
           </div>
@@ -287,7 +287,7 @@ const closeModal = () => {
               autocomplete="new-password"
               v-model="form.password_confirmation"
               placeholder="Confirm your password"
-              class="text-sm"
+              class="text-sm !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500"
             />
           </div>
 

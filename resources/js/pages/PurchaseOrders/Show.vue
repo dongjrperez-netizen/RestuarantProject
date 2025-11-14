@@ -50,7 +50,7 @@ interface PurchaseOrder {
     contact_person?: string;
     phone?: string;
     email?: string;
-  };
+  } | null;
   items: PurchaseOrderItem[];
   created_by?: {
     name: string;
@@ -100,6 +100,34 @@ const formatDate = (dateString: string) => {
 const formatCurrency = (amount: number) => {
   return `₱${Number(amount).toLocaleString()}`;
 };
+
+// Extract supplier info from notes for manual receives
+const supplierInfo = computed(() => {
+  if (props.purchaseOrder.supplier) {
+    return {
+      name: props.purchaseOrder.supplier.supplier_name,
+      contactPerson: props.purchaseOrder.supplier.contact_person,
+      phone: props.purchaseOrder.supplier.phone,
+      email: props.purchaseOrder.supplier.email,
+      isManual: false,
+    };
+  }
+
+  // Manual receive - extract from notes
+  const notes = props.purchaseOrder.notes || '';
+  const supplierMatch = notes.match(/Supplier:\s*([^|]+)/);
+  const contactMatch = notes.match(/Contact:\s*([^|]+)/);
+  const refMatch = notes.match(/Ref:\s*([^|]+)/);
+
+  return {
+    name: supplierMatch ? supplierMatch[1].trim() : 'Manual Receive - Unknown Supplier',
+    contactPerson: contactMatch ? contactMatch[1].trim() : null,
+    phone: null,
+    email: null,
+    referenceNumber: refMatch ? refMatch[1].trim() : null,
+    isManual: true,
+  };
+});
 
 const submitOrder = () => {
   submitForm.post(`/purchase-orders/${props.purchaseOrder.purchase_order_id}/submit`);
@@ -270,22 +298,30 @@ const canReceiveDelivery = computed(() => {
           <CardContent class="space-y-4">
             <div>
               <label class="text-sm font-medium text-muted-foreground">Supplier Name</label>
-              <div class="font-medium">{{ purchaseOrder.supplier.supplier_name }}</div>
+              <div class="font-medium">
+                {{ supplierInfo.name }}
+                <Badge v-if="supplierInfo.isManual" variant="secondary" class="ml-2">Unregistered</Badge>
+              </div>
             </div>
-            
-            <div v-if="purchaseOrder.supplier.contact_person">
+
+            <div v-if="supplierInfo.contactPerson">
               <label class="text-sm font-medium text-muted-foreground">Contact Person</label>
-              <div>{{ purchaseOrder.supplier.contact_person }}</div>
+              <div>{{ supplierInfo.contactPerson }}</div>
             </div>
 
-            <div v-if="purchaseOrder.supplier.phone">
+            <div v-if="supplierInfo.phone">
               <label class="text-sm font-medium text-muted-foreground">Phone</label>
-              <div>{{ purchaseOrder.supplier.phone }}</div>
+              <div>{{ supplierInfo.phone }}</div>
             </div>
 
-            <div v-if="purchaseOrder.supplier.email">
+            <div v-if="supplierInfo.email">
               <label class="text-sm font-medium text-muted-foreground">Email</label>
-              <div>{{ purchaseOrder.supplier.email }}</div>
+              <div>{{ supplierInfo.email }}</div>
+            </div>
+
+            <div v-if="supplierInfo.isManual && supplierInfo.referenceNumber">
+              <label class="text-sm font-medium text-muted-foreground">Reference Number</label>
+              <div>{{ supplierInfo.referenceNumber }}</div>
             </div>
           </CardContent>
         </Card>

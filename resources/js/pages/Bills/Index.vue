@@ -31,10 +31,11 @@ interface Bill {
   days_overdue: number;
   supplier: {
     supplier_name: string;
-  };
+  } | null;
   purchase_order?: {
     po_number: string;
-  };
+  } | null;
+  notes?: string;
 }
 
 interface Summary {
@@ -111,6 +112,29 @@ const formatDate = (dateString: string) => {
 
 const formatCurrency = (amount: number) => {
   return `₱${Number(amount).toLocaleString()}`;
+};
+
+const getSupplierName = (bill: Bill) => {
+  if (bill.supplier) {
+    return bill.supplier.supplier_name;
+  }
+
+  // Manual receive - extract from notes
+  if (bill.notes) {
+    // Pattern: "Auto-generated from manual receive - {supplier_name}"
+    const manualReceiveMatch = bill.notes.match(/manual receive\s*-\s*([^|]+)/i);
+    if (manualReceiveMatch) {
+      return manualReceiveMatch[1].trim() + ' (Unregistered)';
+    }
+
+    // Fallback pattern: "Supplier: {name}"
+    const supplierMatch = bill.notes.match(/Supplier:\s*([^|]+)/);
+    if (supplierMatch) {
+      return supplierMatch[1].trim() + ' (Unregistered)';
+    }
+  }
+
+  return 'Unknown Supplier';
 };
 
 const getPaymentProgress = (bill: Bill) => {
@@ -239,7 +263,7 @@ const getPaymentProgress = (bill: Bill) => {
               <TableRow
                 v-for="bill in bills"
                 :key="bill.bill_id"
-                :class="{ 'bg-red-50': bill.is_overdue }"
+                :class="{ 'bg-red-50 dark:bg-red-950/20': bill.is_overdue }"
               >
                 <TableCell class="font-medium">
                   <div>
@@ -253,7 +277,7 @@ const getPaymentProgress = (bill: Bill) => {
                   </div>
                 </TableCell>
                 <TableCell>
-                  {{ bill.supplier.supplier_name }}
+                  {{ getSupplierName(bill) }}
                 </TableCell>
                 <TableCell>{{ formatDate(bill.bill_date) }}</TableCell>
                 <TableCell>
@@ -261,7 +285,7 @@ const getPaymentProgress = (bill: Bill) => {
                     {{ formatDate(bill.due_date) }}
                     <div
                       v-if="bill.is_overdue"
-                      class="text-xs text-red-600"
+                      class="text-xs text-red-600 dark:text-red-400"
                     >
                       {{ bill.days_overdue }} days overdue
                     </div>
@@ -274,7 +298,7 @@ const getPaymentProgress = (bill: Bill) => {
                   <div class="text-right">
                     <div
                       class="font-medium"
-                      :class="bill.outstanding_amount > 0 ? 'text-orange-600' : 'text-green-600'"
+                      :class="bill.outstanding_amount > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'"
                     >
                       {{ formatCurrency(bill.outstanding_amount) }}
                     </div>
@@ -282,10 +306,10 @@ const getPaymentProgress = (bill: Bill) => {
                 </TableCell>
                 <TableCell>
                   <div class="space-y-1">
-                    <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                       <div
                         class="h-2 rounded-full transition-all"
-                        :class="getPaymentProgress(bill) === 100 ? 'bg-green-600' : 'bg-blue-600'"
+                        :class="getPaymentProgress(bill) === 100 ? 'bg-green-600 dark:bg-green-500' : 'bg-blue-600 dark:bg-blue-500'"
                         :style="{ width: `${getPaymentProgress(bill)}%` }"
                       ></div>
                     </div>

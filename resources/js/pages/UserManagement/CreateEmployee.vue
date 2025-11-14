@@ -20,17 +20,36 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import Alert from '@/components/ui/alert/Alert.vue';
+import AlertDescription from '@/components/ui/alert/AlertDescription.vue';
+import { AlertCircle } from 'lucide-vue-next';
 
 interface Role {
   id: number;
   role_name: string;
 }
 
-interface Props {
-  roles: Role[];
+interface SubscriptionLimits {
+  allowed: boolean;
+  message: string;
+  current: number;
+  limit: number;
 }
 
-defineProps<Props>();
+interface Props {
+  roles: Role[];
+  subscriptionLimits: SubscriptionLimits;
+}
+
+const props = defineProps<Props>();
 
 const form = useForm({
   firstname: '',
@@ -76,8 +95,26 @@ const submit = () => {
                 </Link>
             </div>
 
+            <!-- Subscription Limit Warning -->
+            <Alert v-if="!subscriptionLimits.allowed" variant="destructive" class="mb-6 max-w-2xl mx-auto">
+                <AlertCircle class="h-4 w-4" />
+                <AlertDescription>
+                    <div class="font-semibold mb-1">Employee Limit Reached</div>
+                    <p>{{ subscriptionLimits.message }}</p>
+                    <p class="mt-2">
+                        You currently have <strong>{{ subscriptionLimits.current }}</strong> employees
+                        out of <strong>{{ subscriptionLimits.limit }}</strong> allowed.
+                    </p>
+                    <p class="mt-2">
+                        <Link href="/user-management/subscriptions" class="underline font-medium">
+                            Upgrade your subscription
+                        </Link> to add more employees.
+                    </p>
+                </AlertDescription>
+            </Alert>
+
             <!-- Form -->
-            <Card class="max-w-2xl mx-auto">
+            <Card class="max-w-2xl mx-auto" :class="{ 'opacity-60 pointer-events-none': !subscriptionLimits.allowed }">
                 <CardHeader>
                     <CardTitle>Employee Information</CardTitle>
                     <CardDescription>
@@ -236,7 +273,10 @@ const submit = () => {
                             <Link :href="route('employees.index')">
                                 <Button type="button" variant="outline">Cancel</Button>
                             </Link>
-                            <Button type="submit" :disabled="form.processing">
+                            <Button
+                                type="submit"
+                                :disabled="form.processing || !subscriptionLimits.allowed"
+                            >
                                 {{ form.processing ? 'Creating...' : 'Create Employee' }}
                             </Button>
                         </div>

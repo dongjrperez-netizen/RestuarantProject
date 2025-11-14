@@ -306,6 +306,31 @@ class InventoryController extends Controller
                     $primarySupplier = $ingredient->suppliers->first();
                     $isLowStock = $ingredient->current_stock <= $ingredient->reorder_level;
 
+                    $supplierName = 'No supplier';
+
+                    // If no supplier relationship, check for manual receive in purchase orders
+                    if (!$primarySupplier) {
+                        // Get the most recent purchase order for this ingredient
+                        $recentPO = \App\Models\PurchaseOrderItem::with('purchaseOrder')
+                            ->where('ingredient_id', $ingredient->ingredient_id)
+                            ->whereHas('purchaseOrder', function($query) {
+                                $query->whereNull('supplier_id'); // Manual receives have null supplier_id
+                            })
+                            ->latest('created_at')
+                            ->first();
+
+                        if ($recentPO && $recentPO->purchaseOrder) {
+                            // Extract supplier name from notes
+                            // Format: "Manual Receive - Supplier: [name] | Contact: ..."
+                            $notes = $recentPO->purchaseOrder->notes;
+                            if (preg_match('/Supplier:\s*([^|]+)/', $notes, $matches)) {
+                                $supplierName = trim($matches[1]) . ' (Manual)';
+                            }
+                        }
+                    } else {
+                        $supplierName = $primarySupplier->supplier_name;
+                    }
+
                     return [
                         'ingredient_id' => $ingredient->ingredient_id,
                         'ingredient_name' => $ingredient->ingredient_name,
@@ -313,7 +338,7 @@ class InventoryController extends Controller
                         'packages' => (float) $ingredient->packages,
                         'reorder_level' => (float) $ingredient->reorder_level,
                         'base_unit' => $ingredient->base_unit,
-                        'supplier_name' => $primarySupplier ? $primarySupplier->supplier_name : 'No supplier',
+                        'supplier_name' => $supplierName,
                         'is_low_stock' => $isLowStock,
                     ];
                 });

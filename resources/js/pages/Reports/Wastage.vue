@@ -260,11 +260,11 @@ const avgCostPerIncident = computed(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium text-muted-foreground">Total Incidents</p>
-                <p class="text-2xl font-bold text-red-600">{{ formatNumber(wastageData.summary.total_incidents) }}</p>
+                <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ formatNumber(wastageData.summary.total_incidents) }}</p>
                 <p class="text-xs text-muted-foreground mt-1">Wastage events</p>
               </div>
-              <div class="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertTriangle class="h-4 w-4 text-red-600" />
+              <div class="h-8 w-8 bg-red-100 dark:bg-red-950/30 rounded-full flex items-center justify-center">
+                <AlertTriangle class="h-4 w-4 text-red-600 dark:text-red-400" />
               </div>
             </div>
           </CardContent>
@@ -275,11 +275,11 @@ const avgCostPerIncident = computed(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium text-muted-foreground">Total Cost</p>
-                <p class="text-2xl font-bold text-red-600">{{ formatCurrency(wastageData.summary.total_cost) }}</p>
+                <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ formatCurrency(wastageData.summary.total_cost) }}</p>
                 <p class="text-xs text-muted-foreground mt-1">Financial impact</p>
               </div>
-              <div class="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
-                <Banknote class="h-4 w-4 text-red-600" />
+              <div class="h-8 w-8 bg-red-100 dark:bg-red-950/30 rounded-full flex items-center justify-center">
+                <Banknote class="h-4 w-4 text-red-600 dark:text-red-400" />
               </div>
             </div>
           </CardContent>
@@ -290,13 +290,13 @@ const avgCostPerIncident = computed(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium text-muted-foreground">Damage Incidents</p>
-                <p class="text-2xl font-bold text-orange-600">{{ formatNumber(wastageData.summary.damage_incidents) }}</p>
+                <p class="text-2xl font-bold text-orange-600 dark:text-orange-400">{{ formatNumber(wastageData.summary.damage_incidents) }}</p>
                 <p class="text-xs text-muted-foreground mt-1">
                   {{ wastageData.summary.total_incidents > 0 ? ((wastageData.summary.damage_incidents / wastageData.summary.total_incidents) * 100).toFixed(0) : 0 }}% of total
                 </p>
               </div>
-              <div class="h-8 w-8 bg-orange-100 rounded-full flex items-center justify-center">
-                <Package class="h-4 w-4 text-orange-600" />
+              <div class="h-8 w-8 bg-orange-100 dark:bg-orange-950/30 rounded-full flex items-center justify-center">
+                <Package class="h-4 w-4 text-orange-600 dark:text-orange-400" />
               </div>
             </div>
           </CardContent>
@@ -307,13 +307,13 @@ const avgCostPerIncident = computed(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium text-muted-foreground">Spoilage Incidents</p>
-                <p class="text-2xl font-bold text-purple-600">{{ formatNumber(wastageData.summary.spoilage_incidents) }}</p>
+                <p class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{ formatNumber(wastageData.summary.spoilage_incidents) }}</p>
                 <p class="text-xs text-muted-foreground mt-1">
                   {{ wastageData.summary.total_incidents > 0 ? ((wastageData.summary.spoilage_incidents / wastageData.summary.total_incidents) * 100).toFixed(0) : 0 }}% of total
                 </p>
               </div>
-              <div class="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center">
-                <TrendingDown class="h-4 w-4 text-purple-600" />
+              <div class="h-8 w-8 bg-purple-100 dark:bg-purple-950/30 rounded-full flex items-center justify-center">
+                <TrendingDown class="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </CardContent>
@@ -329,26 +329,26 @@ const avgCostPerIncident = computed(() => {
           </CardHeader>
           <CardContent>
             <div class="space-y-4">
-              <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+              <div class="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950/20 rounded-lg">
                 <div class="flex items-center space-x-2">
                   <div class="w-3 h-3 bg-red-500 rounded-full"></div>
                   <span class="font-medium">Damage Costs</span>
                 </div>
                 <div class="text-right">
-                  <span class="font-bold text-red-600">
+                  <span class="font-bold text-red-600 dark:text-red-400">
                     {{ formatCurrency(wastageData.by_type.damage?.total_cost || 0) }}
                   </span>
                   <p class="text-xs text-muted-foreground">{{ costDistribution.damage.toFixed(1) }}%</p>
                 </div>
               </div>
 
-              <div class="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+              <div class="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
                 <div class="flex items-center space-x-2">
                   <div class="w-3 h-3 bg-purple-500 rounded-full"></div>
                   <span class="font-medium">Spoilage Costs</span>
                 </div>
                 <div class="text-right">
-                  <span class="font-bold text-purple-600">
+                  <span class="font-bold text-purple-600 dark:text-purple-400">
                     {{ formatCurrency(wastageData.by_type.spoilage?.total_cost || 0) }}
                   </span>
                   <p class="text-xs text-muted-foreground">{{ costDistribution.spoilage.toFixed(1) }}%</p>
@@ -416,8 +416,8 @@ const avgCostPerIncident = computed(() => {
               class="flex items-center justify-between p-4 border rounded-lg"
             >
               <div class="flex items-center space-x-3">
-                <div class="flex items-center justify-center w-8 h-8 bg-red-100 rounded-full">
-                  <span class="text-sm font-bold text-red-600">{{ index + 1 }}</span>
+                <div class="flex items-center justify-center w-8 h-8 bg-red-100 dark:bg-red-950/30 rounded-full">
+                  <span class="text-sm font-bold text-red-600 dark:text-red-400">{{ index + 1 }}</span>
                 </div>
                 <div>
                   <p class="font-medium">{{ item.name }}</p>
@@ -427,7 +427,7 @@ const avgCostPerIncident = computed(() => {
                 </div>
               </div>
               <div class="text-right">
-                <p class="font-bold text-red-600">{{ formatCurrency(item.total_cost) }}</p>
+                <p class="font-bold text-red-600 dark:text-red-400">{{ formatCurrency(item.total_cost) }}</p>
                 <p class="text-sm text-muted-foreground">Cost impact</p>
               </div>
             </div>

@@ -178,10 +178,10 @@ const clearFilters = () => {
   <AppLayout :breadcrumbs="breadcrumbs">
     <div class="mx-6 space-y-6">
       <!-- Success/Error Messages -->
-      <div v-if="successMessage" class="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md">
+      <div v-if="successMessage" class="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-md">
         {{ successMessage }}
       </div>
-      <div v-if="errorMessage" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+      <div v-if="errorMessage" class="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
         {{ errorMessage }}
       </div>
 
@@ -201,7 +201,7 @@ const clearFilters = () => {
         <Card class="h-24 flex flex-col justify-center">
           <CardContent class="p-4">
             <div class="text-sm font-medium text-muted-foreground mb-1">Low Stock Ingredients</div>
-            <div class="text-2xl font-bold text-yellow-600">{{ formatNumber(stats.low_stock_count) }}</div>
+            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{{ formatNumber(stats.low_stock_count) }}</div>
             <p class="text-xs text-muted-foreground mt-1">
               {{ stats.low_stock_count === 0 ? 'All ingredients are well stocked' : 'Items need reordering' }}
             </p>
@@ -259,16 +259,16 @@ const clearFilters = () => {
               <TableRow
                 v-for="ingredient in paginatedIngredients"
                 :key="ingredient.ingredient_id"
-                :class="{ 'bg-yellow-50 border-l-4 border-yellow-400': ingredient.is_low_stock }"
+                :class="{ 'bg-yellow-50 dark:bg-yellow-950/20 border-l-4 border-yellow-400 dark:border-yellow-600': ingredient.is_low_stock }"
               >
                 <TableCell class="font-medium">
                   {{ ingredient.ingredient_name }}
-                  <Badge v-if="ingredient.is_low_stock" variant="secondary" class="ml-2 text-xs">
+                  <Badge v-if="ingredient.is_low_stock" variant="secondary" class="ml-2 text-xs bg-yellow-100 dark:bg-yellow-950/50 text-yellow-800 dark:text-yellow-300">
                     Low Stock
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <span :class="{ 'text-yellow-600 font-semibold': ingredient.is_low_stock }">
+                  <span :class="{ 'text-yellow-600 dark:text-yellow-400 font-semibold': ingredient.is_low_stock }">
                     {{ formatNumber(ingredient.current_stock) }}
                   </span>
                 </TableCell>

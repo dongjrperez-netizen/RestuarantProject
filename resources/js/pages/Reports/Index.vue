@@ -105,6 +105,16 @@ const reportModules = [
     count: 'Supplier insights'
   },
   {
+    id: 'bills',
+    title: 'Supplier Bills',
+    description: 'Track supplier bills, payments, and outstanding amounts',
+    icon: FileText,
+    href: '/reports/bills',
+    color: 'bg-amber-500',
+    stats: 'Payment tracking',
+    count: 'Monitor expenses'
+  },
+  {
     id: 'wastage',
     title: 'Wastage & Spoilage',
     description: 'Monitor waste, spoilage costs, and identify areas for improvement',

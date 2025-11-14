@@ -494,6 +494,7 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->prefix('reports')
     Route::get('/sales', [ReportsController::class, 'sales'])->name('sales');
     Route::get('/inventory', [ReportsController::class, 'inventory'])->name('inventory');
     Route::get('/purchase-orders', [ReportsController::class, 'purchaseOrders'])->name('purchase-orders');
+    Route::get('/bills', [ReportsController::class, 'bills'])->name('bills');
     Route::get('/wastage', [ReportsController::class, 'wastage'])->name('wastage');
     Route::get('/comprehensive', [ReportsController::class, 'comprehensiveReport'])->name('comprehensive');
 });
@@ -600,6 +601,8 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
 // Purchase Order Management Routes
 Route::middleware(['auth', 'verified', 'check.subscription'])->group(function () {
     Route::get('/purchase-orders/pending-approvals', [PurchaseOrderController::class, 'pendingApprovals'])->name('purchase-orders.pending-approvals');
+    Route::get('/purchase-orders/manual-receive', [PurchaseOrderController::class, 'manualReceive'])->name('purchase-orders.manual-receive');
+    Route::post('/purchase-orders/manual-receive', [PurchaseOrderController::class, 'storeManualReceive'])->name('purchase-orders.store-manual-receive');
     Route::resource('purchase-orders', PurchaseOrderController::class);
     Route::post('/purchase-orders/{id}/submit', [PurchaseOrderController::class, 'submit'])->name('purchase-orders.submit');
     Route::post('/purchase-orders/{id}/approve', [PurchaseOrderController::class, 'approve'])->name('purchase-orders.approve');

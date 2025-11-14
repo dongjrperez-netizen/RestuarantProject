@@ -87,8 +87,8 @@ const submit = () => {
             <!-- Header -->
             <div class="flex justify-between items-center mb-6">
                 <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Edit Employee</h1>
-                    <p class="text-gray-600 mt-1">Update {{ employee.firstname }} {{ employee.lastname }}'s information</p>
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Edit Employee</h1>
+                    <p class="text-gray-600 dark:text-gray-300 mt-1">Update {{ employee.firstname }} {{ employee.lastname }}'s information</p>
                 </div>
                 <div class="flex gap-2">
                     <Link :href="route('employees.show', employee.employee_id)">
@@ -224,7 +224,7 @@ const submit = () => {
 
                         <!-- Account Information -->
                         <div class="space-y-4">
-                            <h3 class="text-lg font-semibold text-gray-900">Account Information</h3>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Account Information</h3>
                             
                             <div>
                                 <Label for="email">Email *</Label>
@@ -252,7 +252,7 @@ const submit = () => {
                                     <div v-if="form.errors.password" class="text-red-500 text-sm mt-1">
                                         {{ form.errors.password }}
                                     </div>
-                                    <div class="text-gray-500 text-sm mt-1">
+                                    <div class="text-gray-500 dark:text-gray-400 text-sm mt-1">
                                         Leave blank to keep current password
                                     </div>
                                 </div>

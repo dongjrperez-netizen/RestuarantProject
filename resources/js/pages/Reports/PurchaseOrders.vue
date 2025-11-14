@@ -40,9 +40,10 @@ interface PurchaseOrder {
   total_amount: number;
   created_at: string;
   expected_delivery_date?: string;
-  supplier: {
+  supplier?: {
     supplier_name: string;
-  };
+  } | null;
+  notes?: string;
   items?: PurchaseOrderItem[];
 }
 
@@ -106,6 +107,22 @@ const formatDate = (dateString: string) => {
     month: 'short',
     day: 'numeric'
   });
+};
+
+const getSupplierName = (order: PurchaseOrder) => {
+  if (order.supplier) {
+    return order.supplier.supplier_name;
+  }
+
+  // Manual receive - extract from notes
+  if (order.notes) {
+    const match = order.notes.match(/Supplier:\s*([^|]+)/);
+    if (match) {
+      return match[1].trim() + ' (Manual)';
+    }
+  }
+
+  return 'Unknown Supplier';
 };
 
 const applyFilters = () => {
@@ -428,7 +445,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
               <div>
                 <p class="font-medium">{{ order.order_number }}</p>
                 <p class="text-sm text-muted-foreground">
-                  {{ order.supplier.supplier_name }} • {{ formatDate(order.created_at) }}
+                  {{ getSupplierName(order) }} • {{ formatDate(order.created_at) }}
                 </p>
               </div>
               <div class="text-right">
@@ -469,7 +486,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
                   class="border-b hover:bg-muted/50"
                 >
                   <td class="p-4 font-medium">{{ order.order_number }}</td>
-                  <td class="p-4">{{ order.supplier.supplier_name }}</td>
+                  <td class="p-4">{{ getSupplierName(order) }}</td>
                   <td class="p-4">{{ formatDate(order.created_at) }}</td>
                   <td class="p-4">
                     <Badge :variant="getStatusBadgeVariant(order.status)">
@@ -517,7 +534,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
                   class="border-b hover:bg-muted/50"
                 >
                   <td class="p-4 font-medium">{{ order.order_number }}</td>
-                  <td class="p-4">{{ order.supplier.supplier_name }}</td>
+                  <td class="p-4">{{ getSupplierName(order) }}</td>
                   <td class="p-4">{{ formatDate(order.created_at) }}</td>
                   <td class="p-4">
                     <Badge :variant="getStatusBadgeVariant(order.status)">

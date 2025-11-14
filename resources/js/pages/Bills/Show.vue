@@ -64,12 +64,12 @@ interface Bill {
     contact_number?: string;
     email?: string;
     payment_terms?: string;
-  };
+  } | null;
   purchase_order?: {
     po_number: string;
     order_date: string;
     items: PurchaseOrderItem[];
-  };
+  } | null;
   payments: Payment[];
 }
 
@@ -124,6 +124,33 @@ const formatDate = (dateString: string) => {
 const formatStatus = (status: string) => {
   return status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
+
+// Extract supplier info (handles manual receives)
+const supplierInfo = ref({
+  name: bill.supplier ? bill.supplier.supplier_name : extractSupplierNameFromNotes(bill.notes),
+  contactNumber: bill.supplier?.contact_number || null,
+  email: bill.supplier?.email || null,
+  paymentTerms: bill.supplier?.payment_terms || 'NET 30',
+  isManual: !bill.supplier,
+});
+
+function extractSupplierNameFromNotes(notes?: string): string {
+  if (!notes) return 'Unknown Supplier';
+
+  // Pattern: "Auto-generated from manual receive - {supplier_name}"
+  const manualReceiveMatch = notes.match(/manual receive\s*-\s*([^|]+)/i);
+  if (manualReceiveMatch) {
+    return manualReceiveMatch[1].trim();
+  }
+
+  // Fallback pattern for PO notes: "Supplier: {name}"
+  const supplierMatch = notes.match(/Supplier:\s*([^|]+)/);
+  if (supplierMatch) {
+    return supplierMatch[1].trim();
+  }
+
+  return 'Unknown Supplier';
+}
 
 // Payment form
 const showPaymentDialog = ref(false);
@@ -374,7 +401,7 @@ const payFullAmountPaypal = () => {
         <div>
           <h2 class="text-2xl font-bold tracking-tight">{{ bill.bill_number }}</h2>
           <p class="text-muted-foreground">
-            Supplier: {{ bill.supplier.supplier_name }}
+            Supplier: {{ supplierInfo.name }}
           </p>
         </div>
         <div class="flex items-center space-x-3">
@@ -613,21 +640,24 @@ const payFullAmountPaypal = () => {
           <CardContent class="space-y-4">
             <div>
               <p class="text-sm font-medium text-muted-foreground">Supplier</p>
-              <p class="font-medium">{{ bill.supplier.supplier_name }}</p>
+              <p class="font-medium">
+                {{ supplierInfo.name }}
+                <Badge v-if="supplierInfo.isManual" variant="secondary" class="ml-2">Unregister</Badge>
+              </p>
             </div>
-            <div v-if="bill.supplier.contact_number" class="grid grid-cols-2 gap-4">
-              <div>
+            <div v-if="supplierInfo.contactNumber || supplierInfo.paymentTerms" class="grid grid-cols-2 gap-4">
+              <div v-if="supplierInfo.contactNumber">
                 <p class="text-sm font-medium text-muted-foreground">Contact</p>
-                <p class="font-medium">{{ bill.supplier.contact_number }}</p>
+                <p class="font-medium">{{ supplierInfo.contactNumber }}</p>
               </div>
-              <div v-if="bill.supplier.payment_terms">
+              <div v-if="supplierInfo.paymentTerms">
                 <p class="text-sm font-medium text-muted-foreground">Terms</p>
-                <p class="font-medium">{{ bill.supplier.payment_terms }}</p>
+                <p class="font-medium">{{ supplierInfo.paymentTerms }}</p>
               </div>
             </div>
-            <div v-if="bill.supplier.email">
+            <div v-if="supplierInfo.email">
               <p class="text-sm font-medium text-muted-foreground">Email</p>
-              <p class="font-medium">{{ bill.supplier.email }}</p>
+              <p class="font-medium">{{ supplierInfo.email }}</p>
             </div>
           </CardContent>
         </Card>
@@ -754,9 +784,9 @@ const payFullAmountPaypal = () => {
         </Button>
 
         <div class="space-x-2">
-          <Button v-if="bill.status !== 'paid'" variant="outline" as-child>
+          <!-- <Button v-if="bill.status !== 'paid'" variant="outline" as-child>
             <Link :href="`/bills/${bill.bill_id}/edit`">Edit Bill</Link>
-          </Button>
+          </Button> -->
           <Button variant="outline" as-child>
             <a :href="route('bills.download-pdf', bill.bill_id)" target="_blank">
               <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

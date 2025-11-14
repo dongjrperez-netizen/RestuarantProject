@@ -155,6 +155,35 @@ class ReportsController extends Controller
         ]);
     }
 
+    public function bills(Request $request)
+    {
+        $restaurantId = $this->getRestaurantId();
+
+        if (!$restaurantId) {
+            return redirect()->route('dashboard')->with('error', 'No restaurant data found.');
+        }
+
+        $dateFrom = $request->get('date_from', Carbon::now()->subMonths(3)->startOfMonth()->toDateString());
+        $dateTo = $request->get('date_to', Carbon::now()->toDateString());
+        $status = $request->get('status', 'all');
+        $supplierId = $request->get('supplier_id', 'all');
+
+        $billsData = $this->getBillsData($restaurantId, $dateFrom, $dateTo, $status, $supplierId);
+
+        if ($request->get('export')) {
+            return $this->exportBillsReport($billsData, $request->get('export'), $dateFrom, $dateTo);
+        }
+
+        return Inertia::render('Reports/Bills', [
+            'billsData' => $billsData,
+            'filters' => [
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+                'status' => $status,
+                'supplier_id' => $supplierId,
+            ],
+        ]);
+    }
 
     public function wastage(Request $request)
     {
@@ -366,11 +395,23 @@ class ReportsController extends Controller
             $stockIncrease = $item->received_quantity * $packageQuantity;
             $totalValue = $item->received_quantity * $item->unit_price;
 
+            // Determine supplier name
+            $supplierName = 'Unknown';
+            if ($po->supplier) {
+                $supplierName = $po->supplier->supplier_name;
+            } else {
+                // Manual receive - extract supplier name from notes
+                // Format: "Manual Receive - Supplier: [name] | Contact: ..."
+                if ($po->notes && preg_match('/Supplier:\s*([^|]+)/', $po->notes, $matches)) {
+                    $supplierName = trim($matches[1]) . ' (Manual)';
+                }
+            }
+
             return [
                 'date_received' => $po->actual_delivery_date,
                 'ingredient_id' => $ingredient->ingredient_id,
                 'ingredient_name' => $ingredient->ingredient_name,
-                'supplier_name' => $po->supplier->supplier_name ?? 'Unknown',
+                'supplier_name' => $supplierName,
                 'quantity_received' => $item->received_quantity,
                 'unit' => 'packages',
                 'stock_increase' => $stockIncrease,
@@ -445,6 +486,76 @@ class ReportsController extends Controller
             'orders' => $orders,
             'summary' => $summary,
             'orders_by_status' => $ordersByStatus,
+        ];
+    }
+
+    private function getBillsData($restaurantId, $dateFrom, $dateTo, $status, $supplierId)
+    {
+        $query = SupplierBill::where('restaurant_id', $restaurantId)
+            ->whereBetween('bill_date', [$dateFrom, $dateTo])
+            ->with(['supplier', 'purchaseOrder', 'payments']);
+
+        if ($status !== 'all') {
+            $query->where('status', $status);
+        }
+
+        if ($supplierId !== 'all') {
+            $query->where('supplier_id', $supplierId);
+        }
+
+        $bills = $query->orderBy('bill_date', 'desc')->get();
+
+        // Get suppliers for filter
+        $suppliers = DB::table('supplier_bills')
+            ->select('suppliers.supplier_id', 'suppliers.supplier_name')
+            ->join('suppliers', 'supplier_bills.supplier_id', '=', 'suppliers.supplier_id')
+            ->where('supplier_bills.restaurant_id', $restaurantId)
+            ->whereNotNull('supplier_bills.supplier_id')
+            ->distinct()
+            ->get();
+
+        $summary = [
+            'total_bills' => $bills->count(),
+            'total_amount' => $bills->sum('total_amount'),
+            'total_paid' => $bills->sum('paid_amount'),
+            'total_outstanding' => $bills->sum('outstanding_amount'),
+            'overdue_count' => $bills->where('is_overdue', true)->count(),
+            'overdue_amount' => $bills->where('is_overdue', true)->sum('outstanding_amount'),
+        ];
+
+        $billsByStatus = $bills->groupBy('status')->map->count();
+
+        // Group by supplier
+        $bySupplier = $bills->groupBy(function($bill) {
+            return $bill->supplier ? $bill->supplier->supplier_name : 'Unregistered Suppliers';
+        })->map(function($items) {
+            return [
+                'count' => $items->count(),
+                'total_amount' => $items->sum('total_amount'),
+                'paid_amount' => $items->sum('paid_amount'),
+                'outstanding_amount' => $items->sum('outstanding_amount'),
+            ];
+        });
+
+        // Monthly trend
+        $monthlyTrend = $bills->groupBy(function($bill) {
+            return Carbon::parse($bill->bill_date)->format('Y-m');
+        })->map(function($items, $month) {
+            return [
+                'month' => $month,
+                'total_amount' => $items->sum('total_amount'),
+                'paid_amount' => $items->sum('paid_amount'),
+                'count' => $items->count(),
+            ];
+        })->values();
+
+        return [
+            'bills' => $bills,
+            'summary' => $summary,
+            'bills_by_status' => $billsByStatus,
+            'by_supplier' => $bySupplier,
+            'monthly_trend' => $monthlyTrend,
+            'suppliers' => $suppliers,
         ];
     }
 
@@ -567,6 +678,26 @@ class ReportsController extends Controller
         }
     }
 
+    private function exportBillsReport($data, $format, $dateFrom, $dateTo)
+    {
+        $filename = "bills_report_{$dateFrom}_to_{$dateTo}";
+
+        switch ($format) {
+            case 'pdf':
+                return $this->generatePDF('reports.bills_pdf', [
+                    'data' => $data,
+                    'dateFrom' => $dateFrom,
+                    'dateTo' => $dateTo,
+                    'title' => 'Supplier Bills Report'
+                ], $filename);
+
+            case 'csv':
+                return $this->generateCSV($this->prepareBillsCSVData($data), $filename);
+
+            default:
+                return response()->json(['error' => 'Invalid format'], 400);
+        }
+    }
 
     private function exportWastageReport($data, $format, $dateFrom, $dateTo)
     {
@@ -646,6 +777,9 @@ class ReportsController extends Controller
     {
         $output = fopen('php://temp', 'w+');
 
+        // Add UTF-8 BOM for Excel to properly read special characters
+        fputs($output, "\xEF\xBB\xBF");
+
         if (!empty($data)) {
             // Write headers
             fputcsv($output, array_keys($data[0]));
@@ -663,7 +797,7 @@ class ReportsController extends Controller
         $contentType = $extension === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv';
 
         return response($csvContent, 200, [
-            'Content-Type' => $contentType,
+            'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => "attachment; filename={$filename}.{$extension}",
             'Cache-Control' => 'no-cache, no-store, must-revalidate',
             'Pragma' => 'no-cache',
@@ -734,9 +868,20 @@ class ReportsController extends Controller
 
             $receivedItemsText = !empty($receivedItems) ? implode(', ', $receivedItems) : 'Not yet received';
 
+            // Determine supplier name
+            $supplierName = 'N/A';
+            if ($order->supplier) {
+                $supplierName = $order->supplier->supplier_name;
+            } else {
+                // Manual receive - extract supplier name from notes
+                if ($order->notes && preg_match('/Supplier:\s*([^|]+)/', $order->notes, $matches)) {
+                    $supplierName = trim($matches[1]) . ' (Manual)';
+                }
+            }
+
             $csvData[] = [
                 'Order Number' => $order->order_number,
-                'Supplier' => $order->supplier->supplier_name ?? 'N/A',
+                'Supplier' => $supplierName,
                 'Date' => $order->created_at->format('Y-m-d'),
                 'Status' => ucfirst($order->status),
                 'Total Amount' => '₱' . number_format($order->total_amount, 2),
@@ -748,6 +893,46 @@ class ReportsController extends Controller
         return $csvData;
     }
 
+    private function prepareBillsCSVData($data)
+    {
+        $csvData = [];
+
+        foreach ($data['bills'] as $bill) {
+            // Determine supplier name
+            $supplierName = 'N/A';
+            if ($bill->supplier) {
+                $supplierName = $bill->supplier->supplier_name;
+            } else {
+                // Manual receive - extract supplier name from notes
+                if ($bill->notes && preg_match('/manual receive\s*-\s*([^|]+)/i', $bill->notes, $matches)) {
+                    $supplierName = trim($matches[1]) . ' (Unregistered)';
+                }
+            }
+
+            // Get payment info
+            $paymentCount = $bill->payments->count();
+            $lastPaymentDate = $paymentCount > 0
+                ? Carbon::parse($bill->payments->sortByDesc('payment_date')->first()->payment_date)->format('M d, Y')
+                : 'None';
+
+            $csvData[] = [
+                'Bill Number' => $bill->bill_number,
+                'Supplier' => $supplierName,
+                'PO Number' => $bill->purchaseOrder ? $bill->purchaseOrder->po_number : 'N/A',
+                'Bill Date' => Carbon::parse($bill->bill_date)->format('M d, Y'),
+                'Due Date' => Carbon::parse($bill->due_date)->format('M d, Y'),
+                'Status' => ucfirst(str_replace('_', ' ', $bill->status)),
+                'Total' => 'PHP ' . number_format($bill->total_amount, 2),
+                'Paid' => 'PHP ' . number_format($bill->paid_amount, 2),
+                'Outstanding' => 'PHP ' . number_format($bill->outstanding_amount, 2),
+                'Payments' => $paymentCount,
+                'Last Payment' => $lastPaymentDate,
+                'Overdue' => $bill->is_overdue ? 'Yes' : 'No',
+            ];
+        }
+
+        return $csvData;
+    }
 
     private function prepareWastageCSVData($data)
     {
@@ -1001,9 +1186,20 @@ class ReportsController extends Controller
                     return $item->ingredient->ingredient_name . ' (' . number_format($item->received_quantity, 2) . ' ' . $item->unit_of_measure . ')';
                 })->join(', ');
 
+                // Determine supplier name
+                $supplierName = 'N/A';
+                if ($po->supplier) {
+                    $supplierName = $po->supplier->supplier_name;
+                } else {
+                    // Manual receive - extract supplier name from notes
+                    if ($po->notes && preg_match('/Supplier:\s*([^|]+)/', $po->notes, $matches)) {
+                        $supplierName = trim($matches[1]) . ' (Manual)';
+                    }
+                }
+
                 return [
                     'po_no' => $po->order_number,
-                    'supplier' => $po->supplier ? $po->supplier->supplier_name : 'N/A',
+                    'supplier' => $supplierName,
                     'items' => $po->items->pluck('ingredient.ingredient_name')->join(', '),
                     'received_items' => $receivedItems ?: 'Not yet received',
                     'total_cost' => $po->total_amount,

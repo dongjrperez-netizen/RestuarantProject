@@ -99,7 +99,7 @@ const resendVerification = () => {
                         autocomplete="email"
                         v-model="form.email"
                         placeholder="Enter your email address"
-                        class="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base"
+                        class="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500"
                     />
                     <InputError :message="form.errors.email" />
 
@@ -139,7 +139,7 @@ const resendVerification = () => {
                         autocomplete="current-password"
                         v-model="form.password"
                         placeholder="Enter your password"
-                        class="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base"
+                        class="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base !bg-white !text-gray-900 !border-gray-300 dark:!bg-white dark:!text-gray-900 dark:!border-gray-300 placeholder:!text-gray-500"
                     />
                     <InputError :message="form.errors.password" />
                 </div>

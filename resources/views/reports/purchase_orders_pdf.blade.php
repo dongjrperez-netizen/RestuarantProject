@@ -217,9 +217,18 @@
             </thead>
             <tbody>
                 @foreach($data['orders'] as $order)
+                @php
+                    // Determine supplier name
+                    $supplierName = 'N/A';
+                    if ($order->supplier) {
+                        $supplierName = $order->supplier->supplier_name;
+                    } elseif ($order->notes && preg_match('/Supplier:\s*([^|]+)/', $order->notes, $matches)) {
+                        $supplierName = trim($matches[1]) . ' (Manual)';
+                    }
+                @endphp
                 <tr>
                     <td>{{ $order->order_number }}</td>
-                    <td>{{ $order->supplier->supplier_name ?? 'N/A' }}</td>
+                    <td>{{ $supplierName }}</td>
                     <td>{{ $order->created_at->format('M d, Y') }}</td>
                     <td>
                         <span class="badge badge-{{ $order->status }}">{{ ucfirst($order->status) }}</span>
@@ -264,9 +273,18 @@
             </thead>
             <tbody>
                 @foreach($data['orders']->where('status', 'pending') as $order)
+                @php
+                    // Determine supplier name
+                    $pendingSupplierName = 'N/A';
+                    if ($order->supplier) {
+                        $pendingSupplierName = $order->supplier->supplier_name;
+                    } elseif ($order->notes && preg_match('/Supplier:\s*([^|]+)/', $order->notes, $matches)) {
+                        $pendingSupplierName = trim($matches[1]) . ' (Manual)';
+                    }
+                @endphp
                 <tr>
                     <td>{{ $order->order_number }}</td>
-                    <td>{{ $order->supplier->supplier_name ?? 'N/A' }}</td>
+                    <td>{{ $pendingSupplierName }}</td>
                     <td>{{ $order->created_at->format('M d, Y') }}</td>
                     <td class="text-right">₱{{ number_format($order->total_amount, 2) }}</td>
                     <td class="text-center">{{ $order->created_at->diffInDays(now()) }} days</td>

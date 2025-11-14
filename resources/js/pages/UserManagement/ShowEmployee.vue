@@ -114,12 +114,12 @@ const calculateAge = (birthDate: string) => {
             <div class="flex justify-between items-start mb-6">
                 <div>
                     <div class="flex items-center gap-3 mb-2">
-                        <h1 class="text-2xl font-bold text-gray-900">{{ employee.full_name }}</h1>
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ employee.full_name }}</h1>
                         <Badge :variant="getStatusBadgeVariant(employee.status)">
                             {{ employee.status }}
                         </Badge>
                     </div>
-                    <p class="text-gray-600">{{ employee.role.role_name }}</p>
+                    <p class="text-gray-600 dark:text-gray-300">{{ employee.role.role_name }}</p>
                 </div>
                 <div class="flex gap-2">
                     <Link :href="route('employees.edit', employee.employee_id)">
@@ -147,37 +147,37 @@ const calculateAge = (birthDate: string) => {
                     <CardContent>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-1">Full Name</h4>
-                                <p class="text-gray-600">{{ employee.full_name }}</p>
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Full Name</h4>
+                                <p class="text-gray-600 dark:text-gray-300">{{ employee.full_name }}</p>
                             </div>
 
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-1">Email</h4>
-                                <p class="text-gray-600">{{ employee.email }}</p>
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Email</h4>
+                                <p class="text-gray-600 dark:text-gray-300">{{ employee.email }}</p>
                             </div>
 
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-1">Date of Birth</h4>
-                                <p class="text-gray-600">
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Date of Birth</h4>
+                                <p class="text-gray-600 dark:text-gray-300">
                                     {{ formatDate(employee.date_of_birth) }}
-                                    <span class="text-sm text-gray-500 ml-2">
+                                    <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">
                                         ({{ calculateAge(employee.date_of_birth) }} years old)
                                     </span>
                                 </p>
                             </div>
 
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-1">Gender</h4>
-                                <p class="text-gray-600 capitalize">{{ employee.gender }}</p>
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Gender</h4>
+                                <p class="text-gray-600 dark:text-gray-300 capitalize">{{ employee.gender }}</p>
                             </div>
 
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-1">Role</h4>
-                                <p class="text-gray-600">{{ employee.role.role_name }}</p>
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Role</h4>
+                                <p class="text-gray-600 dark:text-gray-300">{{ employee.role.role_name }}</p>
                             </div>
 
                             <div>
-                                <h4 class="font-semibold text-gray-900 mb-1">Status</h4>
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Status</h4>
                                 <Badge :variant="getStatusBadgeVariant(employee.status)">
                                     {{ employee.status }}
                                 </Badge>
@@ -194,23 +194,23 @@ const calculateAge = (birthDate: string) => {
                     </CardHeader>
                     <CardContent class="space-y-4">
                         <div>
-                            <h4 class="font-semibold text-gray-900 mb-1">Employee ID</h4>
-                            <p class="text-gray-600">#{{ employee.employee_id }}</p>
+                            <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Employee ID</h4>
+                            <p class="text-gray-600 dark:text-gray-300">#{{ employee.employee_id }}</p>
                         </div>
 
                         <div>
-                            <h4 class="font-semibold text-gray-900 mb-1">Date Joined</h4>
-                            <p class="text-gray-600">{{ formatDateTime(employee.created_at) }}</p>
+                            <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Date Joined</h4>
+                            <p class="text-gray-600 dark:text-gray-300">{{ formatDateTime(employee.created_at) }}</p>
                         </div>
 
                         <div>
-                            <h4 class="font-semibold text-gray-900 mb-1">Last Updated</h4>
-                            <p class="text-gray-600">{{ formatDateTime(employee.updated_at) }}</p>
+                            <h4 class="font-semibold text-gray-900 dark:text-white mb-1">Last Updated</h4>
+                            <p class="text-gray-600 dark:text-gray-300">{{ formatDateTime(employee.updated_at) }}</p>
                         </div>
 
                         <!-- Quick Actions -->
                         <div class="pt-4 space-y-2">
-                            <h4 class="font-semibold text-gray-900 mb-3">Quick Actions</h4>
+                            <h4 class="font-semibold text-gray-900 dark:text-white mb-3">Quick Actions</h4>
                             
                             <Link :href="route('employees.edit', employee.employee_id)" class="block">
                                 <Button variant="outline" class="w-full justify-start">

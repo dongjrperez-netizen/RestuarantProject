@@ -41,8 +41,9 @@ interface PurchaseOrder {
   expected_delivery_date?: string;
   supplier: {
     supplier_name: string;
-  };
+  } | null;
   items: PurchaseOrderItem[];
+  notes?: string;
 }
 
 interface ReceiveItem {
@@ -219,7 +220,7 @@ const submit = () => {
             </div>
             <div>
               <label class="text-sm font-medium text-muted-foreground">Supplier</label>
-              <div>{{ purchaseOrder.supplier.supplier_name }}</div>
+              <div>{{ purchaseOrder.supplier?.supplier_name || 'Manual Receive' }}</div>
             </div>
             <div>
               <label class="text-sm font-medium text-muted-foreground">Order Date</label>

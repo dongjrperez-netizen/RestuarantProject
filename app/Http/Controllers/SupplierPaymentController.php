@@ -13,6 +13,28 @@ use Illuminate\Support\Str;
 
 class SupplierPaymentController extends Controller
 {
+    /**
+     * Extract supplier name from notes for manual receives
+     */
+    private function extractSupplierNameFromNotes(?string $notes): string
+    {
+        if (!$notes) {
+            return 'Unknown Supplier';
+        }
+
+        // Pattern: "Auto-generated from manual receive - {supplier_name}"
+        if (preg_match('/manual receive\s*-\s*([^|]+)/i', $notes, $matches)) {
+            return trim($matches[1]);
+        }
+
+        // Fallback pattern: "Supplier: {name}"
+        if (preg_match('/Supplier:\s*([^|]+)/', $notes, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return 'Unknown Supplier';
+    }
+
     public function index()
     {
         $restaurantId = auth()->user()->restaurantData->id;
@@ -395,7 +417,7 @@ class SupplierPaymentController extends Controller
                             'payment_method_types' => ['gcash'],
                             'success_url' => route('bills.gcash.success') . '?bill_id=' . $bill->bill_id . '&session_id=' . time(),
                             'cancel_url' => route('bills.gcash.failed') . '?bill_id=' . $bill->bill_id,
-                            'description' => 'Payment for ' . $bill->supplier->supplier_name,
+                            'description' => 'Payment for ' . ($bill->supplier ? $bill->supplier->supplier_name : $this->extractSupplierNameFromNotes($bill->notes)),
                             'metadata' => [
                                 'bill_id' => $bill->bill_id,
                                 'payment_amount' => $validated['payment_amount'],
