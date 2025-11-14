@@ -35,9 +35,14 @@ class User extends Authenticatable implements MustVerifyEmailContract
         'role_id' => 1, // Default value
     ];
 
+    /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array
+     */
+    protected $appends = ['name', 'age'];
 
 
-    
     // Define the relationship with Restaurant_Data
     public function restaurantData()
     {
@@ -90,7 +95,34 @@ class User extends Authenticatable implements MustVerifyEmailContract
     {
         return [
             'email_verified_at' => 'datetime',
+            'date_of_birth' => 'date',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Get the user's full name.
+     *
+     * @return string
+     */
+    public function getNameAttribute(): string
+    {
+        $fullName = trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
+        // Remove extra spaces between names
+        return preg_replace('/\s+/', ' ', $fullName);
+    }
+
+    /**
+     * Get the user's age based on date of birth.
+     *
+     * @return int|null
+     */
+    public function getAgeAttribute(): ?int
+    {
+        if (!$this->date_of_birth) {
+            return null;
+        }
+
+        return \Carbon\Carbon::parse($this->date_of_birth)->age;
     }
 }

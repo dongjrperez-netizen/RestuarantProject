@@ -21,7 +21,7 @@ const backgroundImageUrl = '/RestoBG.jpg';
         <div class="fixed inset-0 -z-20" :style="{ backgroundImage: `url(${backgroundImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }"></div>
         <!-- Dark Overlay -->
         <div class="fixed inset-0 bg-black/60 -z-10"></div>
-        
+
         <!-- Header with back button and logo -->
         <header class="relative z-10 px-6 py-6">
             <div class="max-w-4xl mx-auto flex items-center justify-between">
@@ -29,7 +29,7 @@ const backgroundImageUrl = '/RestoBG.jpg';
                     <ArrowLeft class="w-5 h-5 mr-2" />
                     <span class="text-sm font-medium">Back to Home</span>
                 </Link>
-                
+
                 <Link :href="route('home')" class="text-3xl font-bold text-orange-500" style="font-family: 'Kaushan Script', cursive;">
                     ServeWise
                 </Link>

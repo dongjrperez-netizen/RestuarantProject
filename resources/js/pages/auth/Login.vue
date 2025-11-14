@@ -68,7 +68,7 @@ const resendVerification = () => {
 </script>
 
 <template>
-    <AuthBase title="Welcome Back" description="Restaurant owners and employees sign in to ServeWise">
+    <AuthBase title="Welcome Back">
 
         <Head title="Sign In - ServeWise" />
 
@@ -99,7 +99,7 @@ const resendVerification = () => {
                         autocomplete="email"
                         v-model="form.email"
                         placeholder="Enter your email address"
-                        class="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors text-sm sm:text-base"
+                        class="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base"
                     />
                     <InputError :message="form.errors.email" />
 
@@ -139,7 +139,7 @@ const resendVerification = () => {
                         autocomplete="current-password"
                         v-model="form.password"
                         placeholder="Enter your password"
-                        class="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors text-sm sm:text-base"
+                        class="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base"
                     />
                     <InputError :message="form.errors.password" />
                 </div>
@@ -167,15 +167,7 @@ const resendVerification = () => {
                 {{ form.processing ? 'Signing in...' : 'Sign In to ServeWise' }}
             </Button>
 
-            <!-- Divider -->
-            <div class="relative flex items-center justify-center py-4">
-                <div class="absolute inset-0 flex items-center">
-                    <div class="w-full border-t border-gray-200"></div>
-                </div>
-                <div class="relative bg-white px-3 sm:px-4 text-xs sm:text-sm text-gray-500">
-                    New to ServeWise?
-                </div>
-            </div>
+            
 
             <!-- Sign up link -->
             <div class="text-center">
@@ -188,20 +180,11 @@ const resendVerification = () => {
                 </TextLink>
             </div>
 
-            <!-- Unified login info -->
-            <div class="text-center px-2">
-                <p class="text-xs sm:text-sm text-gray-600">
-                    This login page supports both restaurant owners and employees.
-                    <br class="hidden sm:block">
-                    <span class="sm:hidden"> </span>Simply enter your email and password to access your account.
-                </p>
-            </div>
-
             <!-- Additional help -->
-            <div class="text-center text-xs text-gray-500 pt-4">
+            <!-- <div class="text-center text-xs text-gray-500 pt-4">
                 Having trouble signing in?
                 <a href="#" class="text-orange-500 hover:text-orange-600">Contact support</a>
-            </div>
+            </div> -->
         </form>
     </AuthBase>
 </template>

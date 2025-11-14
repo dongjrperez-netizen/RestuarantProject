@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 import DeleteUser from '@/components/DeleteUser.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -29,8 +31,48 @@ const page = usePage();
 const user = page.props.auth.user as User;
 
 const form = useForm({
-    name: user.name,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    middle_name: user.middle_name || '',
+    date_of_birth: user.date_of_birth,
+    gender: user.gender,
     email: user.email,
+});
+
+// Calculate age dynamically based on form's date of birth
+const age = computed(() => {
+    if (!form.date_of_birth) return null;
+
+    try {
+        const today = new Date();
+        let birthDate;
+
+        // Handle different date formats
+        if (typeof form.date_of_birth === 'string') {
+            birthDate = new Date(form.date_of_birth);
+        } else if (form.date_of_birth instanceof Date) {
+            birthDate = form.date_of_birth;
+        } else {
+            return null;
+        }
+
+        // Check if date is valid
+        if (isNaN(birthDate.getTime())) {
+            return null;
+        }
+
+        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            calculatedAge--;
+        }
+
+        return calculatedAge >= 0 ? calculatedAge : null;
+    } catch (error) {
+        console.error('Error calculating age:', error, form.date_of_birth);
+        return null;
+    }
 });
 
 const submit = () => {
@@ -46,15 +88,118 @@ const submit = () => {
 
         <SettingsLayout>
             <div class="flex flex-col space-y-6">
-                <HeadingSmall title="Profile information" description="Update your name and email address" />
+                <HeadingSmall title="Profile information" description="Update your personal information and email address" />
 
                 <form @submit.prevent="submit" class="space-y-6">
-                    <div class="grid gap-2">
-                        <Label for="name">Name</Label>
-                        <Input id="name" class="mt-1 block w-full" v-model="form.name" required autocomplete="name" placeholder="Full name" />
-                        <InputError class="mt-2" :message="form.errors.name" />
+                    <!-- Name fields -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid gap-2">
+                            <Label for="first_name">First Name</Label>
+                            <Input
+                                id="first_name"
+                                class="mt-1 block w-full"
+                                v-model="form.first_name"
+                                required
+                                autocomplete="given-name"
+                                placeholder="First name"
+                            />
+                            <InputError class="mt-2" :message="form.errors.first_name" />
+                        </div>
+
+                        <div class="grid gap-2">
+                            <Label for="last_name">Last Name</Label>
+                            <Input
+                                id="last_name"
+                                class="mt-1 block w-full"
+                                v-model="form.last_name"
+                                required
+                                autocomplete="family-name"
+                                placeholder="Last name"
+                            />
+                            <InputError class="mt-2" :message="form.errors.last_name" />
+                        </div>
                     </div>
 
+                    <div class="grid gap-2">
+                        <Label for="middle_name">Middle Name <span class="text-muted-foreground text-sm">(Optional)</span></Label>
+                        <Input
+                            id="middle_name"
+                            class="mt-1 block w-full"
+                            v-model="form.middle_name"
+                            autocomplete="additional-name"
+                            placeholder="Middle name"
+                        />
+                        <InputError class="mt-2" :message="form.errors.middle_name" />
+                    </div>
+
+                    <!-- Date of Birth and Age -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid gap-2">
+                            <Label for="date_of_birth">Date of Birth</Label>
+                            <DatePicker
+                                id="date_of_birth"
+                                v-model="form.date_of_birth"
+                                :required="true"
+                                autocomplete="bday"
+                                placeholder="Select your birth date"
+                            />
+                            <InputError class="mt-2" :message="form.errors.date_of_birth" />
+                        </div>
+
+                        <div class="grid gap-2">
+                            <Label for="age">Age</Label>
+                            <Input
+                                id="age"
+                                class="mt-1 block w-full bg-muted"
+                                :value="age !== null ? age + ' years old' : 'N/A'"
+                                disabled
+                                readonly
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Gender -->
+                    <div class="grid gap-2">
+                        <Label>Gender</Label>
+                        <div class="flex flex-wrap gap-6 pt-2">
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="gender"
+                                    value="Male"
+                                    v-model="form.gender"
+                                    required
+                                    class="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500 focus:ring-2"
+                                />
+                                <span class="text-sm">Male</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="gender"
+                                    value="Female"
+                                    v-model="form.gender"
+                                    required
+                                    class="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500 focus:ring-2"
+                                />
+                                <span class="text-sm">Female</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="gender"
+                                    value="Other"
+                                    v-model="form.gender"
+                                    required
+                                    class="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500 focus:ring-2"
+                                />
+                                <span class="text-sm">Other</span>
+                            </label>
+                        </div>
+                        <InputError class="mt-2" :message="form.errors.gender" />
+                    </div>
+
+                    <!-- Email -->
                     <div class="grid gap-2">
                         <Label for="email">Email address</Label>
                         <Input
