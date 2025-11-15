@@ -807,6 +807,8 @@ class WaiterController extends Controller
     {
         $employee = Auth::guard('waiter')->user();
 
+        $restaurantId = (int) $employee->user_id;
+
         if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
             return response()->json(['error' => 'Access denied. Waiters only.'], 403);
         }
@@ -826,7 +828,7 @@ class WaiterController extends Controller
         try {
             // Get the dish with ingredients
            $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
-            ->where('restaurant_id', $employee->user_id)
+            ->where('restaurant_id', $restaurantId)
             ->find($validated['dish_id']); // Change findOrFail to find
 
         if (!$dish) {
