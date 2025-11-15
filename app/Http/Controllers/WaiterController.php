@@ -867,7 +867,7 @@ class WaiterController extends Controller
             if (!empty($validated['cart_items'])) {
                 foreach ($validated['cart_items'] as $cartItem) {
                     $cartDish = Dish::with(['dishIngredients.ingredient', 'variants'])
-                        ->where('restaurant_id', $employee->user_id)
+                        ->where('restaurant_id', $restaurantId)
                         ->find($cartItem['dish_id']);
 
                     if (!$cartDish) continue;
