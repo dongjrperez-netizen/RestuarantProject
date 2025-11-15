@@ -813,6 +813,16 @@ public function storeOrder(Request $request)
             return response()->json(['error' => 'Access denied. Waiters only.'], 403);
         }
 
+        // Resolve the restaurant this waiter belongs to via Restaurant_Data
+        $restaurantData = \App\Models\Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (!$restaurantData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Restaurant data not found for this waiter.',
+            ], 404);
+        }
+        $restaurantId = $restaurantData->id;
+
         $validated = $request->validate([
             'dish_id' => 'required|exists:dishes,dish_id',
             'variant_id' => 'nullable|exists:dish_variants,variant_id',
@@ -826,9 +836,9 @@ public function storeOrder(Request $request)
         ]);
 
         try {
-            // Get the dish with ingredients
+            // Get the dish with ingredients, scoped to the waiter's restaurant
             $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
-                ->where('restaurant_id', $employee->user_id)
+                ->where('restaurant_id', $restaurantId)
                 ->findOrFail($validated['dish_id']);
 
             // Get variant multiplier
