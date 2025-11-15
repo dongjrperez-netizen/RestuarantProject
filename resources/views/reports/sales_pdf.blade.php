@@ -132,7 +132,7 @@
     <div class="summary-grid">
         <div class="summary-row">
             <div class="summary-label">Total Sales</div>
-            <div class="summary-value">₱{{ number_format($data['summary']['total_sales'], 2) }}</div>
+            <div class="summary-value">PHP {{ number_format($data['summary']['total_sales'], 2) }}</div>
         </div>
         <div class="summary-row">
             <div class="summary-label">Total Orders</div>
@@ -140,7 +140,7 @@
         </div>
         <div class="summary-row">
             <div class="summary-label">Average Order Value</div>
-            <div class="summary-value">₱{{ number_format($data['summary']['avg_order_value'], 2) }}</div>
+            <div class="summary-value">PHP {{ number_format($data['summary']['avg_order_value'], 2) }}</div>
         </div>
         <div class="summary-row">
             <div class="summary-label">Items Sold</div>
@@ -163,9 +163,9 @@
             @foreach($data['chart_data'] as $item)
             <tr>
                 <td>{{ $item->period }}</td>
-                <td class="text-right">₱{{ number_format($item->total_sales, 2) }}</td>
+                <td class="text-right">PHP {{ number_format($item->total_sales, 2) }}</td>
                 <td class="text-right">{{ number_format($item->order_count) }}</td>
-                <td class="text-right">₱{{ number_format($item->avg_order_value, 2) }}</td>
+                <td class="text-right">PHP {{ number_format($item->avg_order_value, 2) }}</td>
             </tr>
             @endforeach
         </tbody>
@@ -190,7 +190,7 @@
                 </td>
                 <td>{{ $item->dish->dish_name ?? 'N/A' }}</td>
                 <td class="text-right">{{ number_format($item->total_quantity) }}</td>
-                <td class="text-right">₱{{ number_format($item->total_revenue, 2) }}</td>
+                <td class="text-right">PHP{{ number_format($item->total_revenue, 2) }}</td>
             </tr>
             @endforeach
         </tbody>

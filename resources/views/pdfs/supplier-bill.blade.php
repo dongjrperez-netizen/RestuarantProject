@@ -237,27 +237,59 @@
 
         <div class="bill-info-right">
             <div class="section-title">Supplier Information</div>
-            <div class="info-row">
-                <span class="info-label">Supplier:</span>
-                <strong>{{ $bill->supplier->supplier_name }}</strong>
-            </div>
-            @if($bill->supplier->contact_number)
-            <div class="info-row">
-                <span class="info-label">Contact:</span>
-                {{ $bill->supplier->contact_number }}
-            </div>
-            @endif
-            @if($bill->supplier->email)
-            <div class="info-row">
-                <span class="info-label">Email:</span>
-                {{ $bill->supplier->email }}
-            </div>
-            @endif
-            @if($bill->supplier->payment_terms)
-            <div class="info-row">
-                <span class="info-label">Payment Terms:</span>
-                {{ $bill->supplier->payment_terms }}
-            </div>
+            @if($bill->supplier)
+                {{-- Registered Supplier --}}
+                <div class="info-row">
+                    <span class="info-label">Supplier:</span>
+                    <strong>{{ $bill->supplier->supplier_name }}</strong>
+                </div>
+                @if($bill->supplier->contact_number)
+                <div class="info-row">
+                    <span class="info-label">Contact:</span>
+                    {{ $bill->supplier->contact_number }}
+                </div>
+                @endif
+                @if($bill->supplier->email)
+                <div class="info-row">
+                    <span class="info-label">Email:</span>
+                    {{ $bill->supplier->email }}
+                </div>
+                @endif
+                @if($bill->supplier->payment_terms)
+                <div class="info-row">
+                    <span class="info-label">Payment Terms:</span>
+                    {{ $bill->supplier->payment_terms }}
+                </div>
+                @endif
+            @else
+                {{-- Manual Receive - Extract from notes --}}
+                @php
+                    $notes = $bill->purchaseOrder->notes ?? $bill->notes ?? '';
+                    preg_match('/Supplier:\s*([^|]+)/', $notes, $supplierMatch);
+                    preg_match('/Contact:\s*([^|]+)/', $notes, $contactMatch);
+                    preg_match('/Ref:\s*([^|]+)/', $notes, $refMatch);
+
+                    $supplierName = isset($supplierMatch[1]) ? trim($supplierMatch[1]) : 'Manual Receive - Unknown Supplier';
+                    $contactInfo = isset($contactMatch[1]) ? trim($contactMatch[1]) : null;
+                    $referenceNumber = isset($refMatch[1]) ? trim($refMatch[1]) : null;
+                @endphp
+                <div class="info-row">
+                    <span class="info-label">Supplier:</span>
+                    <strong>{{ $supplierName }}</strong>
+                    <span class="status pending" style="margin-left: 5px;">Unregistered</span>
+                </div>
+                @if($contactInfo)
+                <div class="info-row">
+                    <span class="info-label">Contact:</span>
+                    {{ $contactInfo }}
+                </div>
+                @endif
+                @if($referenceNumber)
+                <div class="info-row">
+                    <span class="info-label">Reference:</span>
+                    {{ $referenceNumber }}
+                </div>
+                @endif
             @endif
         </div>
     </div>
@@ -285,8 +317,8 @@
                 <td>{{ $item->ingredient->ingredient_name ?? 'N/A' }}</td>
                 <td class="text-center">{{ $item->ordered_quantity }} {{ $item->unit_of_measure }}</td>
                 <td class="text-center">{{ $item->received_quantity }} {{ $item->unit_of_measure }}</td>
-                <td class="text-right">₱{{ number_format($item->unit_price, 2) }}</td>
-                <td class="text-right">₱{{ number_format($item->total_price, 2) }}</td>
+                <td class="text-right">PHP {{ number_format($item->unit_price, 2) }}</td>
+                <td class="text-right">PHP {{ number_format($item->total_price, 2) }}</td>
             </tr>
             @endforeach
         </tbody>
@@ -297,32 +329,32 @@
         <div class="amount-summary">
             <div class="amount-row">
                 <span>Subtotal:</span>
-                <span>₱{{ number_format($bill->subtotal, 2) }}</span>
+                <span>PHP {{ number_format($bill->subtotal, 2) }}</span>
             </div>
             @if($bill->discount_amount > 0)
             <div class="amount-row" style="color: #28a745;">
                 <span>Discount:</span>
-                <span>-₱{{ number_format($bill->discount_amount, 2) }}</span>
+                <span>-PHP{{ number_format($bill->discount_amount, 2) }}</span>
             </div>
             @endif
             <div class="amount-row">
                 <span>Tax:</span>
-                <span>₱{{ number_format($bill->tax_amount, 2) }}</span>
+                <span>PHP {{ number_format($bill->tax_amount, 2) }}</span>
             </div>
             <div class="amount-row total">
                 <span>Total Amount:</span>
-                <span>₱{{ number_format($bill->total_amount, 2) }}</span>
+                <span>PHP {{ number_format($bill->total_amount, 2) }}</span>
             </div>
             @if($bill->paid_amount > 0)
             <div class="amount-row paid">
                 <span>Paid Amount:</span>
-                <span>₱{{ number_format($bill->paid_amount, 2) }}</span>
+                <span>PHP {{ number_format($bill->paid_amount, 2) }}</span>
             </div>
             @endif
             @if($bill->outstanding_amount > 0)
             <div class="amount-row outstanding">
                 <span>Outstanding:</span>
-                <span>₱{{ number_format($bill->outstanding_amount, 2) }}</span>
+                <span>PHP{{ number_format($bill->outstanding_amount, 2) }}</span>
             </div>
             @endif
         </div>
@@ -347,7 +379,7 @@
                 <tr>
                     <td>{{ $payment->payment_reference }}</td>
                     <td>{{ $payment->payment_date ? date('M j, Y', strtotime($payment->payment_date)) : 'N/A' }}</td>
-                    <td class="text-right">₱{{ number_format($payment->payment_amount, 2) }}</td>
+                    <td class="text-right">PHP {{ number_format($payment->payment_amount, 2) }}</td>
                     <td>{{ ucwords(str_replace('_', ' ', $payment->payment_method)) }}</td>
                     <td>
                         <span class="status {{ $payment->status === 'completed' ? 'paid' : 'pending' }}">

@@ -173,7 +173,7 @@
         </div>
         <div class="summary-row">
             <div class="summary-label">Total Inventory Value</div>
-            <div class="summary-value">₱{{ number_format($data['summary']['total_value'], 2) }}</div>
+            <div class="summary-value">PHP {{ number_format($data['summary']['total_value'], 2) }}</div>
         </div>
         <div class="summary-row">
             <div class="summary-label">Customer Exclusions</div>
@@ -201,7 +201,7 @@
                     <td>{{ $item->ingredient_name }}</td>
                     <td class="text-right text-red">{{ number_format($item->current_stock) }} {{ $item->base_unit }}</td>
                     <td class="text-right">{{ number_format($item->reorder_level) }} {{ $item->base_unit }}</td>
-                    <td class="text-right">₱{{ number_format($item->total_value, 2) }}</td>
+                    <td class="text-right">PHP {{ number_format($item->total_value, 2) }}</td>
                 </tr>
                 @endforeach
             </tbody>
@@ -231,8 +231,8 @@
                     {{ number_format($item->current_stock) }} {{ $item->base_unit }}
                 </td>
                 <td class="text-right">{{ number_format($item->reorder_level) }} {{ $item->base_unit }}</td>
-                <td class="text-right">₱{{ number_format($item->cost_per_unit, 2) }}</td>
-                <td class="text-right">₱{{ number_format($item->total_value, 2) }}</td>
+                <td class="text-right">PHP {{ number_format($item->cost_per_unit, 2) }}</td>
+                <td class="text-right">PHP {{ number_format($item->total_value, 2) }}</td>
                 <td class="text-center">
                     @if($item->exclusion_count > 0)
                         <span class="badge badge-warning">{{ $item->exclusion_count }}x</span>
