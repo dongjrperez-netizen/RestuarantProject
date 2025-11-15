@@ -440,192 +440,224 @@ class WaiterController extends Controller
         ]);
     }
 
-    public function storeOrder(Request $request)
-    {
-        $employee = Auth::guard('waiter')->user();
+   // Assuming the required models are imported at the top (DB, CustomerOrder, OrderSequence, etc.)
 
-        if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
-            abort(403, 'Access denied. Waiters only.');
-        }
+public function storeOrder(Request $request)
+{
+    $employee = Auth::guard('waiter')->user();
 
-        // Get the restaurant ID through the Restaurant_Data relationship
-        $restaurantData = \App\Models\Restaurant_Data::where('user_id', $employee->user_id)->first();
-        if (!$restaurantData) {
-            abort(404, 'Restaurant data not found for this employee.');
-        }
-        $restaurantId = $restaurantData->id;
+    if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
+        abort(403, 'Access denied. Waiters only.');
+    }
 
-        $validated = $request->validate([
-            'table_id' => 'required|exists:tables,id',
-            'customer_name' => 'nullable|string|max:255',
-            'notes' => 'nullable|string',
-            'order_items' => 'required|array|min:1',
-            'order_items.*.dish_id' => 'required|exists:dishes,dish_id',
-            'order_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
-            'order_items.*.quantity' => 'required|integer|min:1',
-            'order_items.*.special_instructions' => 'nullable|string',
-            'order_items.*.excluded_ingredients' => 'nullable|array',
-            'order_items.*.excluded_ingredients.*' => 'exists:ingredients,ingredient_id',
-        ]);
+    // Get the restaurant ID through the Restaurant_Data relationship
+    $restaurantData = \App\Models\Restaurant_Data::where('user_id', $employee->user_id)->first();
+    if (!$restaurantData) {
+        abort(404, 'Restaurant data not found for this employee.');
+    }
+    // We keep this variable ($restaurantId) as it's correctly used later for CustomerRequest creation.
+    $restaurantId = $restaurantData->id;
 
-        // Verify table belongs to the same restaurant
-        $table = Table::where('id', $validated['table_id'])
-            ->where('user_id', $employee->user_id)
-            ->firstOrFail();
+    $validated = $request->validate([
+        'table_id' => 'required|exists:tables,id',
+        'customer_name' => 'nullable|string|max:255',
+        'notes' => 'nullable|string',
+        'order_items' => 'required|array|min:1',
+        'order_items.*.dish_id' => 'required|exists:dishes,dish_id',
+        'order_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
+        'order_items.*.quantity' => 'required|integer|min:1',
+        'order_items.*.special_instructions' => 'nullable|string',
+        'order_items.*.excluded_ingredients' => 'nullable|array',
+        'order_items.*.excluded_ingredients.*' => 'exists:ingredients,ingredient_id',
+    ]);
 
-        // Check for existing active order on this table (regardless of table status)
-        $existingOrder = CustomerOrder::where('table_id', $validated['table_id'])
-            ->whereIn('status', ['pending', 'in_progress', 'ready'])
-            ->latest()
-            ->first();
+    // Verify table belongs to the same restaurant
+    $table = Table::where('id', $validated['table_id'])
+        ->where('user_id', $employee->user_id)
+        ->firstOrFail();
 
-        DB::transaction(function () use ($validated, $employee, $table, $existingOrder, $restaurantId) {
+    // Check for existing active order on this table (regardless of table status)
+    $existingOrder = \App\Models\CustomerOrder::where('table_id', $validated['table_id'])
+        ->whereIn('status', ['pending', 'in_progress', 'ready'])
+        ->latest()
+        ->first();
 
-            if ($existingOrder) {
-                // Add items to existing order
-                $order = $existingOrder;
+    \DB::transaction(function () use ($validated, $employee, $table, $existingOrder, $restaurantId) {
+        $order = null;
 
-                // Check if order doesn't have reservation but table has active reservation
-                if (!$order->reservation_id) {
-                    $activeReservation = TableReservation::where('table_id', $validated['table_id'])
-                        ->whereIn('status', ['pending', 'confirmed', 'seated'])
-                        ->where('reservation_date', '>=', now()->startOfDay())
-                        ->orderBy('reservation_date', 'asc')
-                        ->first();
+        if ($existingOrder) {
+            // Add items to existing order
+            $order = $existingOrder;
 
-                    if ($activeReservation) {
-                        $order->reservation_id = $activeReservation->id;
-                        $order->reservation_fee = $activeReservation->reservation_fee ?? 0;
-                        \Log::info('Adding reservation to existing order', [
-                            'order_id' => $order->order_id,
-                            'reservation_id' => $activeReservation->id,
-                            'reservation_fee' => $activeReservation->reservation_fee,
-                        ]);
-                    }
-                }
-
-                // Update customer name and notes if provided
-                if (!empty($validated['customer_name']) && empty($order->customer_name)) {
-                    $order->customer_name = $validated['customer_name'];
-                }
-                if (!empty($validated['notes'])) {
-                    $order->notes = trim($order->notes . ' ' . $validated['notes']);
-                }
-                $order->save();
-            } else {
-                // Check for active reservation on this table (for today or future dates)
-                $activeReservation = TableReservation::where('table_id', $validated['table_id'])
+            // Check if order doesn't have reservation but table has active reservation
+            if (!$order->reservation_id) {
+                $activeReservation = \App\Models\TableReservation::where('table_id', $validated['table_id'])
                     ->whereIn('status', ['pending', 'confirmed', 'seated'])
                     ->where('reservation_date', '>=', now()->startOfDay())
                     ->orderBy('reservation_date', 'asc')
                     ->first();
 
-                \Log::info('Waiter creating order - Reservation check', [
-                    'table_id' => $validated['table_id'],
-                    'active_reservation_found' => $activeReservation ? 'Yes' : 'No',
-                    'reservation_id' => $activeReservation?->id,
-                    'reservation_fee' => $activeReservation?->reservation_fee,
-                    'reservation_date' => $activeReservation?->reservation_date,
-                ]);
-
-                // Create new order
-                $orderData = [
-                    'table_id' => $validated['table_id'],
-                    'employee_id' => $employee->employee_id,
-                    'restaurant_id' => $employee->user_id,
-                    'customer_name' => $validated['customer_name'],
-                    'notes' => $validated['notes'],
-                    'status' => 'pending',
-                    'ordered_at' => now(),
-                ];
-
-                // Add reservation info if exists
                 if ($activeReservation) {
-                    $orderData['reservation_id'] = $activeReservation->id;
-                    $orderData['reservation_fee'] = $activeReservation->reservation_fee ?? 0;
-                    \Log::info('Adding reservation to order', $orderData);
-                }
-
-                $order = CustomerOrder::create($orderData);
-            }
-
-            // Add order items
-            foreach ($validated['order_items'] as $item) {
-                $dish = Dish::find($item['dish_id']);
-
-                // Determine unit price based on variant or base price
-                $unitPrice = $dish->price;
-                if (!empty($item['variant_id'])) {
-                    $variant = \App\Models\DishVariant::find($item['variant_id']);
-                    if ($variant) {
-                        $unitPrice = $variant->price_modifier;
-                    }
-                }
-
-                // Save customer requests for excluded ingredients FIRST (before creating order item)
-                // This ensures the exclusions are already in the database when inventory deduction happens
-                if (!empty($item['excluded_ingredients'])) {
-                    foreach ($item['excluded_ingredients'] as $ingredientId) {
-                        CustomerRequest::create([
-                            'order_id' => $order->order_id,
-                            'dish_id' => $item['dish_id'],
-                            'ingredient_id' => $ingredientId,
-                            'restaurant_id' => $restaurantId,
-                            'request_type' => 'exclude',
-                            'notes' => 'Customer requested to exclude this ingredient',
-                        ]);
-                    }
-                }
-
-                // Check if this dish already exists in the order with same variant
-                $existingItem = CustomerOrderItem::where('order_id', $order->order_id)
-                    ->where('dish_id', $item['dish_id'])
-                    ->where('variant_id', $item['variant_id'] ?? null)
-                    ->where('special_instructions', $item['special_instructions'] ?? null)
-                    ->first();
-
-                if ($existingItem) {
-                    // Update quantity of existing item and deduct inventory for additional quantity
-                    $additionalQuantity = $item['quantity'];
-                    $existingItem->quantity += $additionalQuantity;
-                    $existingItem->save();
-
-                    // Manually deduct inventory for the additional quantity
-                    $existingItem->load('variant'); // Ensure variant is loaded
-                    $existingItem->deductIngredientsForQuantity($additionalQuantity);
-                } else {
-                    // Create new order item (this triggers inventory deduction)
-                    CustomerOrderItem::create([
+                    $order->reservation_id = $activeReservation->id;
+                    $order->reservation_fee = $activeReservation->reservation_fee ?? 0;
+                    \Log::info('Adding reservation to existing order', [
                         'order_id' => $order->order_id,
-                        'dish_id' => $item['dish_id'],
-                        'variant_id' => $item['variant_id'] ?? null,
-                        'quantity' => $item['quantity'],
-                        'unit_price' => $unitPrice,
-                        'special_instructions' => $item['special_instructions'] ?? null,
-                        'status' => 'pending',
+                        'reservation_id' => $activeReservation->id,
+                        'reservation_fee' => $activeReservation->reservation_fee,
                     ]);
                 }
             }
 
-            // Update table status to occupied if it was available
-            if ($table->status === 'available') {
-                $table->update(['status' => 'occupied']);
+            // Update customer name and notes if provided
+            if (!empty($validated['customer_name']) && empty($order->customer_name)) {
+                $order->customer_name = $validated['customer_name'];
+            }
+            if (!empty($validated['notes'])) {
+                $order->notes = trim($order->notes . ' ' . $validated['notes']);
+            }
+            $order->save();
+        } else {
+            // --- FIX APPLIED HERE: CONCURRENT ORDER NUMBER GENERATION ---
+
+            // 1. Find and LOCK the daily sequence record for this restaurant
+            $sequenceModel = \App\Models\OrderSequence::where('restaurant_id', $restaurantId)
+                ->where('date', now()->format('Y-m-d'))
+                ->lockForUpdate() // Crucial: Locks this row until the transaction commits
+                ->first();
+
+            if (!$sequenceModel) {
+                // Create the first sequence for the day if it doesn't exist
+                $sequenceModel = \App\Models\OrderSequence::create([
+                    'restaurant_id' => $restaurantId,
+                    'date' => now()->format('Y-m-d'),
+                    'sequence' => 0,
+                ]);
             }
 
-            // Recalculate order totals
-            $order->calculateTotals();
-            
-            // Broadcast the order created/updated event
-            if (!$existingOrder) {
-                // Only broadcast for new orders
-                broadcast(new OrderCreated($order))->toOthers();
-            }
-        });
+            // 2. Safely increment the sequence number
+            $sequenceModel->increment('sequence');
+            $currentSequence = $sequenceModel->sequence;
 
-        return redirect()
-            ->route('waiter.dashboard')
-            ->with('success', $existingOrder ? 'Items added to existing order successfully!' : 'Order created successfully!');
-    }
+            // 3. Generate the unique order number
+            $orderNumber = 'ORD-' . now()->format('Ymd') . '-' . str_pad($currentSequence, 4, '0', STR_PAD_LEFT);
+            // --- END OF FIX ---
+
+            // Check for active reservation on this table
+            $activeReservation = \App\Models\TableReservation::where('table_id', $validated['table_id'])
+                ->whereIn('status', ['pending', 'confirmed', 'seated'])
+                ->where('reservation_date', '>=', now()->startOfDay())
+                ->orderBy('reservation_date', 'asc')
+                ->first();
+
+            \Log::info('Waiter creating order - Reservation check', [
+                'table_id' => $validated['table_id'],
+                'active_reservation_found' => $activeReservation ? 'Yes' : 'No',
+                'reservation_id' => $activeReservation?->id,
+                'reservation_fee' => $activeReservation?->reservation_fee,
+                'reservation_date' => $activeReservation?->reservation_date,
+            ]);
+
+            // Create new order
+            $orderData = [
+                'table_id' => $validated['table_id'],
+                'employee_id' => $employee->employee_id,
+                // NOTE: Use $employee->user_id here, as the CustomerOrder error log confirmed it uses the User ID, not Restaurant_Data ID.
+                'restaurant_id' => $employee->user_id,
+                'customer_name' => $validated['customer_name'],
+                'notes' => $validated['notes'],
+                'status' => 'pending',
+                'ordered_at' => now(),
+                // 4. Assign the generated unique order number
+                'order_number' => $orderNumber,
+            ];
+
+            // Add reservation info if exists
+            if ($activeReservation) {
+                $orderData['reservation_id'] = $activeReservation->id;
+                $orderData['reservation_fee'] = $activeReservation->reservation_fee ?? 0;
+                \Log::info('Adding reservation to order', $orderData);
+            }
+
+            $order = \App\Models\CustomerOrder::create($orderData);
+        }
+
+        // Add order items
+        foreach ($validated['order_items'] as $item) {
+            $dish = \App\Models\Dish::find($item['dish_id']);
+
+            // Determine unit price based on variant or base price
+            $unitPrice = $dish->price;
+            if (!empty($item['variant_id'])) {
+                $variant = \App\Models\DishVariant::find($item['variant_id']);
+                if ($variant) {
+                    $unitPrice = $variant->price_modifier;
+                }
+            }
+
+            // Save customer requests for excluded ingredients FIRST (before creating order item)
+            // This ensures the exclusions are already in the database when inventory deduction happens
+            if (!empty($item['excluded_ingredients'])) {
+                foreach ($item['excluded_ingredients'] as $ingredientId) {
+                    \App\Models\CustomerRequest::create([
+                        'order_id' => $order->order_id,
+                        'dish_id' => $item['dish_id'],
+                        'ingredient_id' => $ingredientId,
+                        'restaurant_id' => $restaurantId,
+                        'request_type' => 'exclude',
+                        'notes' => 'Customer requested to exclude this ingredient',
+                    ]);
+                }
+            }
+
+            // Check if this dish already exists in the order with same variant
+            $existingItem = \App\Models\CustomerOrderItem::where('order_id', $order->order_id)
+                ->where('dish_id', $item['dish_id'])
+                ->where('variant_id', $item['variant_id'] ?? null)
+                ->where('special_instructions', $item['special_instructions'] ?? null)
+                ->first();
+
+            if ($existingItem) {
+                // Update quantity of existing item and deduct inventory for additional quantity
+                $additionalQuantity = $item['quantity'];
+                $existingItem->quantity += $additionalQuantity;
+                $existingItem->save();
+
+                // Manually deduct inventory for the additional quantity
+                $existingItem->load('variant'); // Ensure variant is loaded
+                $existingItem->deductIngredientsForQuantity($additionalQuantity);
+            } else {
+                // Create new order item (this triggers inventory deduction)
+                \App\Models\CustomerOrderItem::create([
+                    'order_id' => $order->order_id,
+                    'dish_id' => $item['dish_id'],
+                    'variant_id' => $item['variant_id'] ?? null,
+                    'quantity' => $item['quantity'],
+                    'unit_price' => $unitPrice,
+                    'special_instructions' => $item['special_instructions'] ?? null,
+                    'status' => 'pending',
+                ]);
+            }
+        }
+
+        // Update table status to occupied if it was available
+        if ($table->status === 'available') {
+            $table->update(['status' => 'occupied']);
+        }
+
+        // Recalculate order totals
+        $order->calculateTotals();
+        
+        // Broadcast the order created/updated event
+        if (!$existingOrder) {
+            // Only broadcast for new orders
+            broadcast(new \App\Events\OrderCreated($order))->toOthers();
+        }
+    });
+
+    return redirect()
+        ->route('waiter.dashboard')
+        ->with('success', $existingOrder ? 'Items added to existing order successfully!' : 'Order created successfully!');
+}
 
     public function getTableOrders($tableId)
     {
@@ -803,152 +835,186 @@ class WaiterController extends Controller
     /**
      * Check dish ingredient availability considering current cart items
      */
-    public function checkDishAvailability(Request $request)
-    {
-        $employee = Auth::guard('waiter')->user();
+   public function checkDishAvailability(Request $request)
+{
+    $employee = Auth::guard('waiter')->user();
 
-        if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
-            return response()->json(['error' => 'Access denied. Waiters only.'], 403);
+    if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
+        return response()->json(['error' => 'Access denied. Waiters only.'], 403);
+    }
+
+    // 🛑 CRITICAL FIX: Look up the correct Restaurant Data Primary Key (PK)
+    $restaurantData = \App\Models\Restaurant_Data::where('user_id', $employee->user_id)->first();
+    
+    if (!$restaurantData) {
+        // This is a necessary check if the employee's user_id is not linked to Restaurant_Data
+        return response()->json(['error' => 'Restaurant data not found for this user.'], 404);
+    }
+    
+    // Set $restaurantId to the correct PK of the restaurant_data table
+    $restaurantId = (int) $restaurantData->id; 
+    
+    // Note: The previous line ' $restaurantId = (int) $employee->user_id; ' was deleted.
+
+    $validated = $request->validate([
+        'dish_id' => 'required|exists:dishes,dish_id',
+        'variant_id' => 'nullable|exists:dish_variants,variant_id',
+        'requested_quantity' => 'required|integer|min:1',
+        'cart_items' => 'nullable|array',
+        'cart_items.*.dish_id' => 'required|exists:dishes,dish_id',
+        'cart_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
+        'cart_items.*.quantity' => 'required|integer|min:1',
+        'cart_items.*.excluded_ingredients' => 'nullable|array',
+        'cart_items.*.excluded_ingredients.*' => 'exists:ingredients,ingredient_id',
+    ]);
+
+    try {
+        // Get the dish with ingredients (Uses the corrected $restaurantId)
+        $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
+        ->where('restaurant_id', $restaurantId)
+        ->find($validated['dish_id']);
+
+    if (!$dish) {
+        // If we can't find it, it's either non-existent or belongs to another restaurant.
+        $exists = Dish::where('dish_id', $validated['dish_id'])->exists();
+
+        if ($exists) {
+        // The dish exists, but not for this restaurant.
+            return response()->json([
+            'success' => false,
+            'error' => 'Unauthorized Access',
+            'message' => 'The requested dish does not belong to your restaurant.',
+            ], 403);
+        } else {
+            // The dish doesn't exist at all.
+            return response()->json([
+            'success' => false,
+            'error' => 'Not Found',
+            'message' => 'Dish not found.',
+            ], 404);
+            }
         }
 
-        $validated = $request->validate([
-            'dish_id' => 'required|exists:dishes,dish_id',
-            'variant_id' => 'nullable|exists:dish_variants,variant_id',
-            'requested_quantity' => 'required|integer|min:1',
-            'cart_items' => 'nullable|array',
-            'cart_items.*.dish_id' => 'required|exists:dishes,dish_id',
-            'cart_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
-            'cart_items.*.quantity' => 'required|integer|min:1',
-            'cart_items.*.excluded_ingredients' => 'nullable|array',
-            'cart_items.*.excluded_ingredients.*' => 'exists:ingredients,ingredient_id',
+        // Get variant multiplier
+        $variantMultiplier = 1.0;
+        if (!empty($validated['variant_id'])) {
+            $variant = $dish->variants->where('variant_id', $validated['variant_id'])->first();
+            if ($variant) {
+                $variantMultiplier = $variant->quantity_multiplier ?? 1.0;
+            }
+        }
+
+        // Calculate total ingredient requirements from cart
+        $cartIngredientRequirements = [];
+        if (!empty($validated['cart_items'])) {
+            foreach ($validated['cart_items'] as $cartItem) {
+                $cartDish = Dish::with(['dishIngredients.ingredient', 'variants'])
+                    ->where('restaurant_id', $restaurantId) // <--- FIX APPLIED (Uses the corrected $restaurantId)
+                    ->find($cartItem['dish_id']);
+
+                if (!$cartDish) continue;
+
+                // Get variant multiplier for cart item
+                $cartVariantMultiplier = 1.0;
+                if (!empty($cartItem['variant_id'])) {
+                    $cartVariant = $cartDish->variants->where('variant_id', $cartItem['variant_id'])->first();
+                    if ($cartVariant) {
+                        $cartVariantMultiplier = $cartVariant->quantity_multiplier ?? 1.0;
+                    }
+                }
+
+                // Get excluded ingredients for this cart item
+                $excludedIngredients = $cartItem['excluded_ingredients'] ?? [];
+
+                // Add ingredient requirements for this cart item
+                foreach ($cartDish->dishIngredients as $dishIngredient) {
+                    // Skip if ingredient is excluded in this cart item
+                    if (in_array($dishIngredient->ingredient_id, $excludedIngredients)) {
+                        continue;
+                    }
+
+                    $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
+                    $totalRequired = $quantityInBaseUnit * $cartVariantMultiplier * $cartItem['quantity'];
+
+                    if (!isset($cartIngredientRequirements[$dishIngredient->ingredient_id])) {
+                        $cartIngredientRequirements[$dishIngredient->ingredient_id] = 0;
+                    }
+                    $cartIngredientRequirements[$dishIngredient->ingredient_id] += $totalRequired;
+                }
+            }
+        }
+
+        // Check availability for the requested dish
+        $ingredientDetails = [];
+        $isAvailable = true;
+        $maxQuantity = PHP_INT_MAX;
+        $limitingIngredient = null;
+
+        foreach ($dish->dishIngredients as $dishIngredient) {
+            $ingredient = $dishIngredient->ingredient;
+            $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
+            $requiredPerDish = $quantityInBaseUnit * $variantMultiplier;
+
+            // Calculate total required (cart + requested)
+            $cartUsage = $cartIngredientRequirements[$ingredient->ingredient_id] ?? 0;
+            $requestedUsage = $requiredPerDish * $validated['requested_quantity'];
+            $totalRequired = $cartUsage + $requestedUsage;
+
+            // Check current stock
+            $currentStock = $ingredient->current_stock;
+            $availableStock = $currentStock - $cartUsage;
+
+            // Calculate max quantity possible for this ingredient
+            $maxForThisIngredient = $availableStock > 0
+                ? floor($availableStock / $requiredPerDish)
+                : 0;
+
+            if ($maxForThisIngredient < $maxQuantity) {
+                $maxQuantity = $maxForThisIngredient;
+                $limitingIngredient = $ingredient->ingredient_name;
+            }
+
+            $ingredientDetails[] = [
+                'ingredient_id' => $ingredient->ingredient_id,
+                'ingredient_name' => $ingredient->ingredient_name,
+                'current_stock' => $currentStock,
+                'base_unit' => $ingredient->base_unit,
+                'required_per_dish' => round($requiredPerDish, 4),
+                'cart_usage' => round($cartUsage, 4),
+                'requested_usage' => round($requestedUsage, 4),
+                'total_required' => round($totalRequired, 4),
+                'available_after_cart' => round($availableStock, 4),
+                'is_sufficient' => $totalRequired <= $currentStock,
+                'max_quantity' => (int)$maxForThisIngredient,
+            ];
+
+            if ($totalRequired > $currentStock) {
+                $isAvailable = false;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'available' => $isAvailable,
+            'max_quantity' => max(0, (int)$maxQuantity),
+            'limiting_ingredient' => $limitingIngredient,
+            'dish_name' => $dish->dish_name,
+            'requested_quantity' => $validated['requested_quantity'],
+            'ingredients' => $ingredientDetails,
         ]);
 
-        try {
-            // Get the dish with ingredients
-            $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
-                ->where('restaurant_id', $employee->user_id)
-                ->findOrFail($validated['dish_id']);
+    } catch (\Exception $e) {
+        \Log::error('Error checking dish availability:', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'dish_id' => $validated['dish_id'] ?? null,
+        ]);
 
-            // Get variant multiplier
-            $variantMultiplier = 1.0;
-            if (!empty($validated['variant_id'])) {
-                $variant = $dish->variants->where('variant_id', $validated['variant_id'])->first();
-                if ($variant) {
-                    $variantMultiplier = $variant->quantity_multiplier ?? 1.0;
-                }
-            }
-
-            // Calculate total ingredient requirements from cart
-            $cartIngredientRequirements = [];
-            if (!empty($validated['cart_items'])) {
-                foreach ($validated['cart_items'] as $cartItem) {
-                    $cartDish = Dish::with(['dishIngredients.ingredient', 'variants'])
-                        ->where('restaurant_id', $employee->user_id)
-                        ->find($cartItem['dish_id']);
-
-                    if (!$cartDish) continue;
-
-                    // Get variant multiplier for cart item
-                    $cartVariantMultiplier = 1.0;
-                    if (!empty($cartItem['variant_id'])) {
-                        $cartVariant = $cartDish->variants->where('variant_id', $cartItem['variant_id'])->first();
-                        if ($cartVariant) {
-                            $cartVariantMultiplier = $cartVariant->quantity_multiplier ?? 1.0;
-                        }
-                    }
-
-                    // Get excluded ingredients for this cart item
-                    $excludedIngredients = $cartItem['excluded_ingredients'] ?? [];
-
-                    // Add ingredient requirements for this cart item
-                    foreach ($cartDish->dishIngredients as $dishIngredient) {
-                        // Skip if ingredient is excluded in this cart item
-                        if (in_array($dishIngredient->ingredient_id, $excludedIngredients)) {
-                            continue;
-                        }
-
-                        $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
-                        $totalRequired = $quantityInBaseUnit * $cartVariantMultiplier * $cartItem['quantity'];
-
-                        if (!isset($cartIngredientRequirements[$dishIngredient->ingredient_id])) {
-                            $cartIngredientRequirements[$dishIngredient->ingredient_id] = 0;
-                        }
-                        $cartIngredientRequirements[$dishIngredient->ingredient_id] += $totalRequired;
-                    }
-                }
-            }
-
-            // Check availability for the requested dish
-            $ingredientDetails = [];
-            $isAvailable = true;
-            $maxQuantity = PHP_INT_MAX;
-            $limitingIngredient = null;
-
-            foreach ($dish->dishIngredients as $dishIngredient) {
-                $ingredient = $dishIngredient->ingredient;
-                $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
-                $requiredPerDish = $quantityInBaseUnit * $variantMultiplier;
-
-                // Calculate total required (cart + requested)
-                $cartUsage = $cartIngredientRequirements[$ingredient->ingredient_id] ?? 0;
-                $requestedUsage = $requiredPerDish * $validated['requested_quantity'];
-                $totalRequired = $cartUsage + $requestedUsage;
-
-                // Check current stock
-                $currentStock = $ingredient->current_stock;
-                $availableStock = $currentStock - $cartUsage;
-
-                // Calculate max quantity possible for this ingredient
-                $maxForThisIngredient = $availableStock > 0
-                    ? floor($availableStock / $requiredPerDish)
-                    : 0;
-
-                if ($maxForThisIngredient < $maxQuantity) {
-                    $maxQuantity = $maxForThisIngredient;
-                    $limitingIngredient = $ingredient->ingredient_name;
-                }
-
-                $ingredientDetails[] = [
-                    'ingredient_id' => $ingredient->ingredient_id,
-                    'ingredient_name' => $ingredient->ingredient_name,
-                    'current_stock' => $currentStock,
-                    'base_unit' => $ingredient->base_unit,
-                    'required_per_dish' => round($requiredPerDish, 4),
-                    'cart_usage' => round($cartUsage, 4),
-                    'requested_usage' => round($requestedUsage, 4),
-                    'total_required' => round($totalRequired, 4),
-                    'available_after_cart' => round($availableStock, 4),
-                    'is_sufficient' => $totalRequired <= $currentStock,
-                    'max_quantity' => (int)$maxForThisIngredient,
-                ];
-
-                if ($totalRequired > $currentStock) {
-                    $isAvailable = false;
-                }
-            }
-
-            return response()->json([
-                'success' => true,
-                'available' => $isAvailable,
-                'max_quantity' => max(0, (int)$maxQuantity),
-                'limiting_ingredient' => $limitingIngredient,
-                'dish_name' => $dish->dish_name,
-                'requested_quantity' => $validated['requested_quantity'],
-                'ingredients' => $ingredientDetails,
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('Error checking dish availability:', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'dish_id' => $validated['dish_id'] ?? null,
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'error' => 'Failed to check dish availability',
-                'message' => $e->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'success' => false,
+            'error' => 'Failed to check dish availability',
+            'message' => $e->getMessage()
+        ], 500);
     }
+}
 }
