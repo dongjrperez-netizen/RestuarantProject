@@ -825,9 +825,31 @@ class WaiterController extends Controller
 
         try {
             // Get the dish with ingredients
-            $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
-                ->where('restaurant_id', $employee->user_id)
-                ->findOrFail($validated['dish_id']);
+           $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
+            ->where('restaurant_id', $employee->user_id)
+            ->find($validated['dish_id']); // Change findOrFail to find
+
+        if (!$dish) {
+            // If we can't find it, it's either non-existent or belongs to another restaurant.
+            // To distinguish, you could check if the dish exists at all.
+            $exists = Dish::where('dish_id', $validated['dish_id'])->exists();
+
+        if ($exists) {
+        // The dish exists, but not for this restaurant.
+            return response()->json([
+            'success' => false,
+            'error' => 'Unauthorized Access',
+            'message' => 'The requested dish does not belong to your restaurant.',
+            ], 403);
+        } else {
+            // The dish doesn't exist at all.
+            return response()->json([
+            'success' => false,
+            'error' => 'Not Found',
+            'message' => 'Dish not found.',
+            ], 404);
+            }
+        }
 
             // Get variant multiplier
             $variantMultiplier = 1.0;
