@@ -803,15 +803,9 @@ class WaiterController extends Controller
     /**
      * Check dish ingredient availability considering current cart items
      */
-    // You must ensure this model is imported at the top of your WaiterController.php file
-// use App\Models\Restaurant_Data;
-// use App\Models\Dish; // (already imported)
-
-public function checkDishAvailability(Request $request)
+    public function checkDishAvailability(Request $request)
     {
         $employee = Auth::guard('waiter')->user();
-
-        $restaurantId = (int) $employee->user_id;
 
         if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
             return response()->json(['error' => 'Access denied. Waiters only.'], 403);
@@ -831,31 +825,9 @@ public function checkDishAvailability(Request $request)
 
         try {
             // Get the dish with ingredients
-           $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
-            ->where('restaurant_id', $restaurantId)
-            ->find($validated['dish_id']); // Change findOrFail to find
-
-        if (!$dish) {
-            // If we can't find it, it's either non-existent or belongs to another restaurant.
-            // To distinguish, you could check if the dish exists at all.
-            $exists = Dish::where('dish_id', $validated['dish_id'])->exists();
-
-        if ($exists) {
-        // The dish exists, but not for this restaurant.
-            return response()->json([
-            'success' => false,
-            'error' => 'Unauthorized Access',
-            'message' => 'The requested dish does not belong to your restaurant.',
-            ], 403);
-        } else {
-            // The dish doesn't exist at all.
-            return response()->json([
-            'success' => false,
-            'error' => 'Not Found',
-            'message' => 'Dish not found.',
-            ], 404);
-            }
-        }
+            $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
+                ->where('restaurant_id', $employee->user_id)
+                ->findOrFail($validated['dish_id']);
 
             // Get variant multiplier
             $variantMultiplier = 1.0;
@@ -871,7 +843,7 @@ public function checkDishAvailability(Request $request)
             if (!empty($validated['cart_items'])) {
                 foreach ($validated['cart_items'] as $cartItem) {
                     $cartDish = Dish::with(['dishIngredients.ingredient', 'variants'])
-                        ->where('restaurant_id', $restaurantId)
+                        ->where('restaurant_id', $employee->user_id)
                         ->find($cartItem['dish_id']);
 
                     if (!$cartDish) continue;
