@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DamageSpoilageLog;
 use App\Models\Ingredients;
+use App\Models\Restaurant_Data;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -20,10 +21,15 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantOwnerId = $employee->user_id;
+        // Resolve the actual restaurant_data.id for this employee's restaurant owner
+        $restaurant = Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (! $restaurant) {
+            abort(403, 'No restaurant data found for this employee.');
+        }
+        $restaurantId = $restaurant->id;
 
         $query = DamageSpoilageLog::with(['ingredient', 'user'])
-            ->forRestaurant($restaurantOwnerId)
+            ->forRestaurant($restaurantId)
             ->orderBy('incident_date', 'desc')
             ->orderBy('created_at', 'desc');
 
@@ -91,7 +97,12 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantId = $employee->user_id;
+        // Resolve the actual restaurant_data.id for this employee's restaurant owner
+        $restaurant = Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (! $restaurant) {
+            return redirect()->back()->with('error', 'No restaurant data found for this employee.');
+        }
+        $restaurantId = $restaurant->id;
 
         $validated = $request->validate([
             'ingredient_id' => [
@@ -165,7 +176,12 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantId = $employee->user_id;
+        // Resolve the actual restaurant_data.id for this employee's restaurant owner
+        $restaurant = Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (! $restaurant) {
+            abort(403, 'No restaurant data found for this employee.');
+        }
+        $restaurantId = $restaurant->id;
 
         $log = DamageSpoilageLog::with(['ingredient', 'user', 'restaurant'])
             ->forRestaurant($restaurantId)
@@ -184,9 +200,14 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantOwnerId = $employee->user_id;
+        // Resolve the actual restaurant_data.id for this employee's restaurant owner
+        $restaurant = Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (! $restaurant) {
+            abort(403, 'No restaurant data found for this employee.');
+        }
+        $restaurantId = $restaurant->id;
 
-        $log = DamageSpoilageLog::forRestaurant($restaurantOwnerId)->findOrFail($id);
+        $log = DamageSpoilageLog::forRestaurant($restaurantId)->findOrFail($id);
 
         $ingredients = Ingredients::whereHas('restaurant', function ($query) use ($employee) {
                 $query->where('user_id', $employee->user_id);
@@ -209,7 +230,12 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantId = $employee->user_id;
+        // Resolve the actual restaurant_data.id for this employee's restaurant owner
+        $restaurant = Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (! $restaurant) {
+            abort(403, 'No restaurant data found for this employee.');
+        }
+        $restaurantId = $restaurant->id;
 
         $log = DamageSpoilageLog::forRestaurant($restaurantId)->findOrFail($id);
 
@@ -259,7 +285,12 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantId = $employee->user_id;
+        // Resolve the actual restaurant_data.id for this employee's restaurant owner
+        $restaurant = Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (! $restaurant) {
+            abort(403, 'No restaurant data found for this employee.');
+        }
+        $restaurantId = $restaurant->id;
 
         $log = DamageSpoilageLog::forRestaurant($restaurantId)->findOrFail($id);
         $log->delete();
@@ -276,7 +307,12 @@ class DamageSpoilageController extends Controller
             return response()->json(['error' => 'Access denied. Kitchen staff only.'], 403);
         }
 
-        $restaurantId = $employee->user_id;
+        // Resolve the actual restaurant_data.id for this employee's restaurant owner
+        $restaurant = Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (! $restaurant) {
+            return response()->json(['error' => 'No restaurant data found for this employee.'], 404);
+        }
+        $restaurantId = $restaurant->id;
 
         $period = $request->get('period', 30); // Default to last 30 days
 
