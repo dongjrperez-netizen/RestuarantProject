@@ -6,6 +6,7 @@ use App\Models\DamageSpoilageLog;
 use App\Models\Ingredients;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -96,9 +97,11 @@ class DamageSpoilageController extends Controller
             'ingredient_id' => [
                 'required',
                 'exists:ingredients,ingredient_id',
-                function ($attribute, $value, $fail) use ($restaurantId) {
+                function ($attribute, $value, $fail) use ($employee) {
                     $ingredient = Ingredients::where('ingredient_id', $value)
-                        ->where('restaurant_id', $restaurantId)
+                        ->whereHas('restaurant', function ($query) use ($employee) {
+                            $query->where('user_id', $employee->user_id);
+                        })
                         ->first();
                     if (!$ingredient) {
                         $fail('The selected ingredient does not belong to your restaurant.');
@@ -114,19 +117,41 @@ class DamageSpoilageController extends Controller
             'estimated_cost' => ['nullable', 'numeric', 'min:0'],
         ]);
 
+        // Load ingredient once for cost calculation and stock deduction
+        $ingredient = Ingredients::find($validated['ingredient_id']);
+
         // Auto-calculate estimated cost if not provided
-        if (empty($validated['estimated_cost'])) {
-            $ingredient = Ingredients::find($validated['ingredient_id']);
-            if ($ingredient && $ingredient->cost_per_unit > 0) {
-                $validated['estimated_cost'] = $validated['quantity'] * $ingredient->cost_per_unit;
-            }
+        if (empty($validated['estimated_cost']) && $ingredient && $ingredient->cost_per_unit > 0) {
+            $validated['estimated_cost'] = $validated['quantity'] * $ingredient->cost_per_unit;
         }
 
-        DamageSpoilageLog::create([
+        $log = DamageSpoilageLog::create([
             'restaurant_id' => $restaurantId,
             'user_id' => $employee->employee_id,
             ...$validated,
         ]);
+
+        // Deduct the damaged/spoiled quantity from ingredient stock
+        if ($ingredient) {
+            try {
+                $ingredient->decreaseStock($validated['quantity'], $validated['unit']);
+
+                Log::info('Stock deducted for damage/spoilage report', [
+                    'damage_spoilage_log_id' => $log->id,
+                    'ingredient_id' => $ingredient->ingredient_id,
+                    'ingredient_name' => $ingredient->ingredient_name,
+                    'quantity' => $validated['quantity'],
+                    'unit' => $validated['unit'],
+                    'restaurant_id' => $restaurantId,
+                ]);
+            } catch (\Exception $e) {
+                Log::warning('Failed to deduct stock for damage/spoilage report', [
+                    'damage_spoilage_log_id' => $log->id,
+                    'ingredient_id' => $ingredient->ingredient_id ?? null,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return redirect()->back()
             ->with('success', 'Damage/spoilage log recorded successfully.');
@@ -192,9 +217,11 @@ class DamageSpoilageController extends Controller
             'ingredient_id' => [
                 'required',
                 'exists:ingredients,ingredient_id',
-                function ($attribute, $value, $fail) use ($restaurantId) {
+                function ($attribute, $value, $fail) use ($employee) {
                     $ingredient = Ingredients::where('ingredient_id', $value)
-                        ->where('restaurant_id', $restaurantId)
+                        ->whereHas('restaurant', function ($query) use ($employee) {
+                            $query->where('user_id', $employee->user_id);
+                        })
                         ->first();
                     if (!$ingredient) {
                         $fail('The selected ingredient does not belong to your restaurant.');

@@ -430,6 +430,9 @@ class PurchaseOrderController extends Controller
 
     public function store(Request $request)
     {
+        // Basic validation only; do not enforce a supplier-side "maximum" here.
+        // This avoids hidden failures if there is any mismatch between frontend limits
+        // and the ingredient_suppliers.minimum_order_quantity value in the database.
         $validated = $request->validate([
             'supplier_id' => 'required|exists:suppliers,supplier_id',
             'notes' => 'nullable|string',
@@ -440,21 +443,6 @@ class PurchaseOrderController extends Controller
                 'required',
                 'numeric',
                 'min:0.01',
-                function ($attribute, $value, $fail) use ($request) {
-                    $itemIndex = explode('.', $attribute)[1];
-                    $ingredientId = $request->input("items.{$itemIndex}.ingredient_id");
-                    $supplierId = $request->input('supplier_id');
-
-                    $ingredientSupplier = IngredientSupplier::where('ingredient_id', $ingredientId)
-                        ->where('supplier_id', $supplierId)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if ($ingredientSupplier && $value > $ingredientSupplier->minimum_order_quantity) {
-                        $ingredientName = Ingredients::find($ingredientId)->ingredient_name ?? 'this ingredient';
-                        $fail("The ordered quantity for {$ingredientName} cannot exceed the supplier's maximum order quantity of {$ingredientSupplier->minimum_order_quantity} {$ingredientSupplier->package_unit}.");
-                    }
-                },
             ],
             'items.*.unit_price' => 'required|numeric|min:0.01',
             'items.*.unit_of_measure' => 'required|string|max:50',

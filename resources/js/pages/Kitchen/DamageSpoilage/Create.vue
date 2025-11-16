@@ -8,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { type BreadcrumbItem } from '@/types';
-import { computed } from 'vue';
 import { AlertTriangle, Package, ArrowLeft, Save } from 'lucide-vue-next';
 
 interface Ingredient {
@@ -16,6 +15,22 @@ interface Ingredient {
   ingredient_name: string;
   base_unit: string;
 }
+
+const unitOptions = [
+  // Weight units
+  'g', 'gram', 'grams',
+  'kg', 'kilogram', 'kilograms',
+  'lb', 'pound', 'pounds',
+  'oz', 'ounce', 'ounces',
+  // Volume units
+  'ml', 'milliliter', 'milliliters',
+  'l', 'liter', 'liters',
+  'cup', 'cups',
+  'tbsp', 'tablespoon', 'tablespoons',
+  'tsp', 'teaspoon', 'teaspoons',
+  // Count units
+  'pcs', 'piece', 'pieces', 'item', 'items', 'unit', 'units',
+];
 
 interface Props {
   ingredients: Ingredient[];
@@ -41,19 +56,9 @@ const form = useForm({
   estimated_cost: '',
 });
 
-// Get unit from selected ingredient
-const selectedIngredient = computed(() => {
-  if (!form.ingredient_id) return null;
-  return props.ingredients.find(i => i.ingredient_id.toString() === form.ingredient_id);
-});
-
-// Auto-set unit when ingredient is selected
+// Handle ingredient change (unit is entered manually by user)
 const onIngredientChange = (ingredientId: string) => {
   form.ingredient_id = ingredientId;
-  const ingredient = props.ingredients.find(i => i.ingredient_id.toString() === ingredientId);
-  if (ingredient) {
-    form.unit = ingredient.base_unit;
-  }
 };
 
 const submit = () => {
@@ -172,13 +177,22 @@ const commonReasons = {
                     :class="{ 'border-red-500': form.errors.quantity }"
                     class="flex-1"
                   />
-                  <Input
-                    v-model="form.unit"
-                    placeholder="Unit"
-                    :class="{ 'border-red-500': form.errors.unit }"
-                    class="w-24"
-                    readonly
-                  />
+                  <Select v-model="form.unit">
+                    <SelectTrigger
+                      :class="[{ 'border-red-500': form.errors.unit }, 'w-28']"
+                    >
+                      <SelectValue placeholder="Unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="unit in unitOptions"
+                        :key="unit"
+                        :value="unit"
+                      >
+                        {{ unit }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <p v-if="form.errors.quantity" class="text-sm text-red-500">
                   {{ form.errors.quantity }}
