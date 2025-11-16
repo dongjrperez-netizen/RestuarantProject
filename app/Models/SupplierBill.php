@@ -68,10 +68,17 @@ class SupplierBill extends Model
     {
         parent::boot();
 
-        static::creating(function ($model) {
-            if (empty($model->bill_number)) {
-                $model->bill_number = 'BILL-'.date('Y').'-'.str_pad(static::count() + 1, 6, '0', STR_PAD_LEFT);
+        // Generate a unique bill number after the bill has an auto-incremented ID
+        static::created(function ($model) {
+            // If a bill_number was explicitly set, respect it
+            if (!empty($model->bill_number)) {
+                return;
             }
+
+            $model->bill_number = 'BILL-' . date('Y') . '-' . str_pad($model->bill_id, 6, '0', STR_PAD_LEFT);
+
+            // Save quietly to avoid firing events again
+            $model->saveQuietly();
         });
     }
 
