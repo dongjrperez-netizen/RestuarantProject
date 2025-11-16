@@ -149,7 +149,13 @@ const submit = () => {
   );
 
   form.items = validItems;
-  form.post('/purchase-orders');
+  
+  form.post('/purchase-orders', {
+    onError: (errors) => {
+      // Surface any backend validation errors in the console so we can debug hosting issues
+      console.error('Purchase order validation/server errors', errors);
+    },
+  });
 };
 </script>
 
@@ -165,6 +171,16 @@ const submit = () => {
       </div>
 
       <form @submit.prevent="submit" class="space-y-6">
+        <!-- Global error alert -->
+        <div
+          v-if="Object.keys(form.errors).length"
+          class="p-3 mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded"
+        >
+          <div v-for="(message, field) in form.errors" :key="field">
+            {{ message }}
+          </div>
+        </div>
+
         <!-- Basic Information -->
         <Card>
           <CardHeader>
@@ -264,8 +280,7 @@ const submit = () => {
                       <Select 
                         v-model="orderItems[index].ingredient_id"
                         @update:model-value="(value) => value && onIngredientSelect(index, Number(value))"
-
-                        >
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select ingredient" />
                         </SelectTrigger>
@@ -280,6 +295,12 @@ const submit = () => {
                           </SelectItem>
                         </SelectContent>
                       </Select>
+                      <div
+                        v-if="form.errors[`items.${index}.ingredient_id`]"
+                        class="mt-1 text-xs text-red-600"
+                      >
+                        {{ form.errors[`items.${index}.ingredient_id`] }}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div class="space-y-1">
@@ -293,6 +314,13 @@ const submit = () => {
                           class="w-24"
                           :class="{ 'border-red-500': getSelectedOffering(index) && getSelectedOffering(index)?.minimum_order_quantity !== undefined && item.ordered_quantity > getSelectedOffering(index)!.minimum_order_quantity }"
                         />
+                        <!-- Backend validation error for this row -->
+                        <div
+                          v-if="form.errors[`items.${index}.ordered_quantity`]"
+                          class="text-xs text-red-600"
+                        >
+                          {{ form.errors[`items.${index}.ordered_quantity`] }}
+                        </div>
                         <div v-if="getSelectedOffering(index)" class="text-xs text-muted-foreground">
                           Max: {{ getSelectedOffering(index)?.minimum_order_quantity }} {{ getSelectedOffering(index)?.package_unit }}
                         </div>
