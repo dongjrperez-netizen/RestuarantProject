@@ -1011,8 +1011,9 @@ class CashierController extends Controller
             $validated = $request->validate([
                 'manager_access_code' => 'required|string|min:6|max:6',
                 'void_reason' => 'nullable|string|max:500',
-                'item_ids' => 'required|array|min:1',
-                'item_ids.*' => 'integer|distinct',
+                'items' => 'required|array|min:1',
+                'items.*.item_id' => 'required|integer|distinct',
+                'items.*.quantity' => 'nullable|integer|min:1',
             ]);
 
             // Find the order with its items
@@ -1078,9 +1079,13 @@ class CashierController extends Controller
                 ], 401);
             }
 
+            // Build a map of requested items with quantities
+            $requestedItems = collect($validated['items'])
+                ->keyBy('item_id');
+
             // Get the targeted order items
             $items = $order->orderItems
-                ->whereIn('item_id', $validated['item_ids'])
+                ->whereIn('item_id', $requestedItems->keys())
                 ->values();
 
             if ($items->isEmpty()) {
@@ -1091,8 +1096,21 @@ class CashierController extends Controller
             }
 
             // Only allow voiding items that have not been served and are still pending/preparing
-            $voidableItems = $items->filter(function ($item) {
-                return in_array($item->status, ['pending', 'preparing']) && (int) $item->served_quantity === 0;
+            $voidableItems = $items->filter(function ($item) use ($requestedItems) {
+                if (!in_array($item->status, ['pending', 'preparing'])) {
+                    return false;
+                }
+
+                if ((int) $item->served_quantity !== 0) {
+                    return false;
+                }
+
+                $requested = $requestedItems->get($item->item_id);
+                $requestedQty = isset($requested['quantity']) ? (int) $requested['quantity'] : (int) $item->quantity;
+
+                $maxVoidable = (int) $item->quantity;
+
+                return $requestedQty > 0 && $requestedQty <= $maxVoidable;
             });
 
             if ($voidableItems->isEmpty()) {
@@ -1104,11 +1122,23 @@ class CashierController extends Controller
 
             $previousStatus = $order->status;
 
-            DB::transaction(function () use ($order, $voidableItems, $cashier, $validated, $previousStatus) {
-                // Restore inventory and remove items
+            DB::transaction(function () use ($order, $voidableItems, $cashier, $validated, $previousStatus, $requestedItems) {
+                // Restore inventory and update/remove items
                 foreach ($voidableItems as $item) {
-                    $item->restoreIngredientsToInventory();
-                    $item->delete();
+                    $requested = $requestedItems->get($item->item_id);
+                    $requestedQty = isset($requested['quantity']) ? (int) $requested['quantity'] : (int) $item->quantity;
+
+                    // If requested quantity covers entire item quantity, restore all and delete
+                    if ($requestedQty >= $item->quantity) {
+                        $item->restoreIngredientsToInventory();
+                        $item->delete();
+                        continue;
+                    }
+
+                    // Partial void: restore only part of the quantity and keep the item
+                    $item->restoreIngredientsForQuantity($requestedQty, false);
+                    $item->quantity = $item->quantity - $requestedQty;
+                    $item->save();
                 }
 
                 // Refresh order totals via relationships
@@ -1147,7 +1177,7 @@ class CashierController extends Controller
                 'order_id' => $order->order_id,
                 'order_number' => $order->order_number,
                 'voided_by_cashier' => $cashier->employee_id,
-                'item_ids' => $validated['item_ids'],
+                'items' => $validated['items'],
                 'void_reason' => $validated['void_reason'],
                 'order_status_after' => $order->status,
             ]);

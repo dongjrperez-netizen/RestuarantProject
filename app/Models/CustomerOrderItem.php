@@ -265,6 +265,21 @@ class CustomerOrderItem extends Model
      */
     public function restoreIngredientsToInventory()
     {
+        // Restore for the full quantity and reset inventory_deducted
+        $this->restoreIngredientsForQuantity($this->quantity, true);
+    }
+
+    /**
+     * Restore ingredients to inventory for a specific quantity.
+     *
+     * Used when only part of an order item is voided.
+     */
+    public function restoreIngredientsForQuantity(int $quantity, bool $resetInventoryFlag = false)
+    {
+        if ($quantity <= 0) {
+            return;
+        }
+
         // Only restore if inventory was actually deducted
         if (!$this->inventory_deducted) {
             \Log::info("No inventory to restore for order item {$this->item_id} - inventory was never deducted");
@@ -291,7 +306,7 @@ class CustomerOrderItem extends Model
             ->pluck('ingredient_id')
             ->toArray();
 
-        // Restore each ingredient based on the order quantity
+        // Restore each ingredient based on the provided quantity
         foreach ($dishIngredients as $dishIngredient) {
             $ingredient = $dishIngredient->ingredient;
             if (!$ingredient) {
@@ -317,7 +332,7 @@ class CustomerOrderItem extends Model
             }
 
             // Calculate quantity in the dish's unit (same calculation as deduction)
-            $quantityInDishUnit = $dishIngredient->quantity_needed * $variantMultiplier * $this->quantity;
+            $quantityInDishUnit = $dishIngredient->quantity_needed * $variantMultiplier * $quantity;
 
             try {
                 // Convert to base unit if needed
@@ -342,7 +357,7 @@ class CustomerOrderItem extends Model
                     'quantity_in_dish_unit' => $quantityInDishUnit,
                     'quantity_in_base_unit' => $quantityInBaseUnit,
                     'ingredient_base_unit' => $ingredient->base_unit,
-                    'order_quantity' => $this->quantity,
+                    'void_quantity' => $quantity,
                 ]);
             } catch (\Exception $e) {
                 // Log the error but don't fail the restoration
@@ -352,17 +367,19 @@ class CustomerOrderItem extends Model
                     'quantity_in_dish_unit' => $quantityInDishUnit,
                     'ingredient_base_unit' => $ingredient->base_unit,
                     'current_stock' => $ingredient->current_stock,
-                    'order_quantity' => $this->quantity,
+                    'void_quantity' => $quantity,
                 ]);
             }
         }
 
-        // Mark as inventory restored (reset the deducted flag)
-        $this->update([
-            'inventory_deducted' => false,
-            'inventory_deducted_at' => null,
-        ]);
+        if ($resetInventoryFlag) {
+            // Mark as inventory restored (reset the deducted flag)
+            $this->update([
+                'inventory_deducted' => false,
+                'inventory_deducted_at' => null,
+            ]);
 
-        \Log::info("Inventory restoration completed for order item {$this->item_id}");
+            \Log::info("Inventory restoration completed for order item {$this->item_id}");
+        }
     }
 }

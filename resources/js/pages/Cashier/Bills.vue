@@ -74,8 +74,8 @@ const voidTargetOrder = ref<any | null>(null);
 const managerAccessCode = ref('');
 const voidReason = ref('');
 const voidProcessing = ref(false);
-// Map of item_id -> boolean (selected for void)
-const voidItemSelections = ref<Record<number, boolean>>({});
+// Map of item_id -> number (quantity to void)
+const voidItemSelections = ref<Record<number, number>>({});
 
 // Payment handling
 // Define a type for the order object
@@ -161,12 +161,15 @@ const openVoidModal = (order: any) => {
     voidReason.value = '';
     voidProcessing.value = false;
 
-    // Initialize item selections: default all items selected
-    const selections: Record<number, boolean> = {};
+    // Initialize item selections: default to full voidable quantity per item
+    const selections: Record<number, number> = {};
     const items = order?.order_items || [];
     (items as any[]).forEach((item: any) => {
         if (item?.item_id != null) {
-            selections[item.item_id] = true;
+            const served = Number(item.served_quantity || 0);
+            const qty = Number(item.quantity || 0);
+            const maxVoidable = Math.max(qty - served, 0);
+            selections[item.item_id] = maxVoidable;
         }
     });
     voidItemSelections.value = selections;
@@ -183,13 +186,13 @@ const closeVoidModal = () => {
 const submitVoidOrder = async () => {
     if (!voidTargetOrder.value || !managerAccessCode.value) return;
 
-    // Collect selected item IDs
-    const selectedItemIds = Object.entries(voidItemSelections.value)
-        .filter(([, selected]) => selected)
-        .map(([id]) => Number(id));
+    // Collect items with quantity > 0
+    const selectedItems = Object.entries(voidItemSelections.value)
+        .map(([id, qty]) => ({ item_id: Number(id), quantity: Number(qty) }))
+        .filter((item) => item.quantity > 0);
 
-    if (selectedItemIds.length === 0) {
-        alert('Please select at least one dish to void.');
+    if (!selectedItems.length) {
+        alert('Please enter a quantity to void for at least one dish.');
         return;
     }
 
@@ -209,7 +212,7 @@ const submitVoidOrder = async () => {
             body: JSON.stringify({
                 manager_access_code: managerAccessCode.value,
                 void_reason: voidReason.value || null,
-                item_ids: selectedItemIds,
+                items: selectedItems,
             }),
         });
 
@@ -514,17 +517,10 @@ onUnmounted(() => {
                             <label
                                 v-for="item in voidTargetOrder.order_items"
                                 :key="item.item_id"
-                                class="flex items-center justify-between px-3 py-2 text-sm gap-3 cursor-pointer hover:bg-muted"
+                                class="flex items-center justify-between px-3 py-2 text-sm gap-3 hover:bg-muted"
                             >
-                                <div class="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        class="h-4 w-4"
-                                        :value="item.item_id"
-                                        v-model="voidItemSelections[item.item_id]"
-                                        :disabled="item.served_quantity > 0 || !['pending','preparing'].includes((item.status || '').toLowerCase())"
-                                    />
-                                    <div>
+                                <div class="flex flex-col gap-1 flex-1">
+                                    <div class="flex items-center gap-2">
                                         <p class="font-medium">
                                             {{ item.dish?.dish_name || 'Dish' }}
                                             <span
@@ -542,6 +538,20 @@ onUnmounted(() => {
                                                 · Served: {{ item.served_quantity }}/{{ item.quantity }}
                                             </span>
                                         </p>
+                                    </div>
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <span class="text-muted-foreground">Void qty:</span>
+                                        <input
+                                            type="number"
+                                            class="w-16 border rounded px-1 py-0.5 text-right text-xs"
+                                            v-model.number="voidItemSelections[item.item_id]"
+                                            :min="0"
+                                            :max="Math.max((item.quantity || 0) - (item.served_quantity || 0), 0)"
+                                            :disabled="item.served_quantity > 0 || !['pending','preparing'].includes((item.status || '').toLowerCase())"
+                                        />
+                                        <span class="text-muted-foreground">
+                                            / {{ Math.max((item.quantity || 0) - (item.served_quantity || 0), 0) }}
+                                        </span>
                                     </div>
                                 </div>
                                 <span class="text-xs font-medium">
