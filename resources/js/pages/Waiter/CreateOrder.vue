@@ -126,6 +126,7 @@ const orderForm = useForm({
   table_id: props.table.id,
   customer_name: props.existingOrder?.customer_name || '',
   notes: '',
+  existing_order_id: props.existingOrder?.order_id || null,
   order_items: [] as any[],
 });
 

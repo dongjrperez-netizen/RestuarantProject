@@ -502,6 +502,13 @@ class AuthenticationService
             ];
         }
 
+        // Determine employee role (if applicable) for later guard behavior
+        $employeeRoleName = null;
+        if ($userInfo['type'] === 'employee' && $userInfo['model'] instanceof Employee) {
+            $userInfo['model']->loadMissing('role');
+            $employeeRoleName = strtolower($userInfo['model']->role->role_name ?? '');
+        }
+
         // Perform type-specific validations
         if ($userInfo['type'] === 'user') {
             // Check if email is verified (restaurant owners must verify email)
@@ -568,6 +575,29 @@ class AuthenticationService
             'password' => $password
         ];
 
+        // Special case: manager/supervisor employees should also be logged in as the owner on the web guard
+        if ($userInfo['type'] === 'employee' && in_array($employeeRoleName, ['manager', 'supervisor'], true)) {
+            /** @var Employee $employeeModel */
+            $employeeModel = $userInfo['model'];
+
+            // We already verified the password above, so we can log in directly
+            Auth::guard($userInfo['guard'])->login($employeeModel, $remember);
+
+            // Also log in the underlying restaurant owner on the web guard so all owner routes work
+            $owner = $employeeModel->restaurant;
+            if ($owner) {
+                Auth::guard('web')->login($owner, $remember);
+            }
+
+            return [
+                'success' => true,
+                'user_type' => 'employee',
+                'guard' => $userInfo['guard'],
+                'model' => $employeeModel
+            ];
+        }
+
+        // Default behavior for all other user types
         if (Auth::guard($userInfo['guard'])->attempt($credentials, $remember)) {
             $model = Auth::guard($userInfo['guard'])->user();
 

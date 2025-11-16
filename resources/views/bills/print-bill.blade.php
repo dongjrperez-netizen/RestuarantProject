@@ -256,7 +256,16 @@
                 $discountReason = 'Discount';
             }
 
-            $finalTotal = $order->total_amount - $discountAmount;
+            // Base total without add-ons (order total minus discount)
+            $baseWithoutDiscount = $order->total_amount - $discountAmount;
+
+            // If we have a payment record with a final_amount, trust it for the final total
+            $finalTotal = $baseWithoutDiscount;
+            $addonAmount = 0;
+            if (isset($payment) && $payment && $payment->final_amount !== null) {
+                $finalTotal = $payment->final_amount;
+                $addonAmount = max(0, $payment->final_amount - $baseWithoutDiscount);
+            }
         @endphp
 
         <div class="totals-row">
@@ -277,6 +286,12 @@
         <div class="totals-row" style="color: #000;">
             <span>Discount ({{ $discountReason }})</span>
             <span>-₱{{ number_format($discountAmount, 2) }}</span>
+        </div>
+        @endif
+        @if(isset($addonAmount) && $addonAmount > 0)
+        <div class="totals-row" style="color: #000;">
+            <span>Add-ons</span>
+            <span>₱{{ number_format($addonAmount, 2) }}</span>
         </div>
         @endif
 

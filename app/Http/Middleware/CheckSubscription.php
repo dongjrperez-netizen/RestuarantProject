@@ -17,10 +17,26 @@ class CheckSubscription
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $user = auth()->user();
+        // Determine the restaurant owner for subscription checks.
+        // Supports direct owner logins (web guard) and manager employees (employee guard).
+        $owner = null;
 
-        if ($user) {
-            $activeSubscription = Usersubscription::where('user_id', $user->id)
+        if (auth('web')->check()) {
+            $owner = auth('web')->user();
+        } elseif (auth('employee')->check()) {
+            /** @var \App\Models\Employee $employee */
+            $employee = auth('employee')->user();
+            $employee->loadMissing('role', 'restaurant');
+            $roleName = strtolower($employee->role->role_name ?? '');
+
+            // Only manager/supervisor employees are treated as owner-equivalent
+            if (in_array($roleName, ['manager', 'supervisor'], true)) {
+                $owner = $employee->restaurant;
+            }
+        }
+
+        if ($owner) {
+            $activeSubscription = Usersubscription::where('user_id', $owner->id)
                 ->where('subscription_status', 'active')
                 ->first();
 

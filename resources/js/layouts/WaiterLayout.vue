@@ -379,6 +379,36 @@ onUnmounted(() => {
             </Link>
 
             <Link
+              :href="route('waiter.take-order')"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors touch-manipulation"
+              :class="{ 'bg-gray-100': $page.component === 'Waiter/TakeOrder' }"
+              @click="sidebarOpen = false"
+            >
+              <Users class="h-4 w-4 flex-shrink-0" />
+              <span class="text-sm">Dine In</span>
+            </Link>
+
+            <Link
+              :href="route('waiter.take-out')"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors touch-manipulation"
+              @click="sidebarOpen = false"
+            >
+              <Users class="h-4 w-4 flex-shrink-0" />
+              <span class="text-sm">Take Out</span>
+            </Link>
+
+            <Link
+              :href="route('waiter.take-out-orders')"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors touch-manipulation"
+              :class="{ 'bg-gray-100': $page.component === 'Waiter/TakeOutOrders' }"
+              @click="sidebarOpen = false"
+            >
+              <Users class="h-4 w-4 flex-shrink-0" />
+              <span class="text-sm">Take Out Orders</span>
+            </Link>
+
+            
+            <Link
               :href="route('waiter.current-menu')"
               class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors touch-manipulation"
               :class="{ 'bg-gray-100': $page.component === 'Waiter/CurrentMenu' }"
@@ -386,16 +416,6 @@ onUnmounted(() => {
             >
               <ChefHat class="h-4 w-4 flex-shrink-0" />
               <span class="text-sm">Current Menu</span>
-            </Link>
-
-            <Link
-              :href="route('waiter.take-order')"
-              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors touch-manipulation"
-              :class="{ 'bg-gray-100': $page.component === 'Waiter/TakeOrder' }"
-              @click="sidebarOpen = false"
-            >
-              <Users class="h-4 w-4 flex-shrink-0" />
-              <span class="text-sm">Take Order</span>
             </Link>
           </nav>
 
@@ -439,14 +459,6 @@ onUnmounted(() => {
               <span class="text-sm">Tables</span>
             </Link>
 
-            <Link
-              :href="route('waiter.current-menu')"
-              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-              :class="{ 'bg-gray-100': $page.component === 'Waiter/CurrentMenu' }"
-            >
-              <ChefHat class="h-4 w-4 flex-shrink-0" />
-              <span class="text-sm">Current Menu</span>
-            </Link>
 
             <Link
               :href="route('waiter.take-order')"
@@ -454,7 +466,33 @@ onUnmounted(() => {
               :class="{ 'bg-gray-100': $page.component === 'Waiter/TakeOrder' }"
             >
               <Users class="h-4 w-4 flex-shrink-0" />
-              <span class="text-sm">Take Order</span>
+              <span class="text-sm">Dine In</span>
+            </Link>
+
+            <Link
+              :href="route('waiter.take-out')"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <Users class="h-4 w-4 flex-shrink-0" />
+              <span class="text-sm">Take Out</span>
+            </Link>
+
+            <Link
+              :href="route('waiter.take-out-orders')"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              :class="{ 'bg-gray-100': $page.component === 'Waiter/TakeOutOrders' }"
+            >
+              <Users class="h-4 w-4 flex-shrink-0" />
+              <span class="text-sm">Take Out Orders</span>
+            </Link>
+
+              <Link
+              :href="route('waiter.current-menu')"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              :class="{ 'bg-gray-100': $page.component === 'Waiter/CurrentMenu' }"
+            >
+              <ChefHat class="h-4 w-4 flex-shrink-0" />
+              <span class="text-sm">Current Menu</span>
             </Link>
           </nav>
 

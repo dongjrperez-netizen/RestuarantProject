@@ -2,6 +2,7 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ interface Employee {
   status: 'active' | 'inactive';
   role: Role;
   role_id: number;
+  manager_access_code?: string | null;
 }
 
 interface Props {
@@ -57,7 +59,16 @@ const form = useForm({
   gender: props.employee.gender,
   role_id: props.employee.role_id.toString(),
   status: props.employee.status,
+  manager_access_code: props.employee.manager_access_code ?? '',
 });
+
+const selectedRole = computed(() =>
+  props.roles.find((role) => role.id.toString() === form.role_id),
+);
+
+const isManagerRole = computed(() =>
+  selectedRole.value?.role_name.toLowerCase() === 'manager',
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -268,6 +279,27 @@ const submit = () => {
                                     <div v-if="form.errors.password_confirmation" class="text-red-500 text-sm mt-1">
                                         {{ form.errors.password_confirmation }}
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Manager Access Code (optional, for Manager role) -->
+                            <div v-if="isManagerRole" class="space-y-1">
+                                <Label for="manager_access_code">Manager Access Code (optional)</Label>
+                                <Input
+                                    id="manager_access_code"
+                                    v-model="form.manager_access_code"
+                                    type="password"
+                                    inputmode="numeric"
+                                    maxlength="6"
+                                    minlength="6"
+                                    placeholder="Enter 6-digit manager code"
+                                    :class="{ 'border-red-500': form.errors.manager_access_code }"
+                                />
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    This code is used to authorize voiding orders at the cashier. Leave blank to keep the existing code.
+                                </p>
+                                <div v-if="form.errors.manager_access_code" class="text-red-500 text-sm mt-1">
+                                    {{ form.errors.manager_access_code }}
                                 </div>
                             </div>
                         </div>

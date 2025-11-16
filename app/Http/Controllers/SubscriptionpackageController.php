@@ -181,12 +181,14 @@ class SubscriptionpackageController extends Controller
             DB::beginTransaction();
 
             $startDate = now();
-            $endDate = now()->addSeconds(15);
+            // Set free trial duration to 3 minutes so users can explore the system
+            $endDate = now()->addMinutes(3);
 
             $userSubscription = Usersubscription::create([
                 'subscription_startDate' => $startDate,
                 'subscription_endDate' => $endDate,
-                'remaining_days' => 20, // 10 seconds instead of plan duration
+                // remaining_days is derived from subscription_endDate by the model; store 0 explicitly
+                'remaining_days' => 30,
                 'subscription_status' => 'active',
                 'plan_id' => $plan->plan_id,
                 'user_id' => $user->id,

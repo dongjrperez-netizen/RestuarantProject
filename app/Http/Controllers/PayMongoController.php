@@ -20,6 +20,8 @@ class PayMongoController extends Controller
             'customer_name' => 'required|string',
             'customer_email' => 'required|email',
             'method' => 'required|string|in:gcash,grab_pay,card',
+            'addon_amount' => 'nullable|numeric|min:0',
+            'addon_description' => 'nullable|string|max:255',
         ]);
 
         // Get the order to verify amount
@@ -33,10 +35,16 @@ class PayMongoController extends Controller
         // Verify the amount matches the order total (allowing for discounts)
         $expectedAmount = $order->total_amount;
         $discountAmount = 0;
+        $addonAmount = $request->addon_amount ?? 0;
 
         if ($pendingPayment && $pendingPayment->discount_amount) {
             $discountAmount = $pendingPayment->discount_amount;
             $expectedAmount -= $discountAmount;
+        }
+
+        // Add-ons increase the expected amount if present
+        if ($addonAmount > 0) {
+            $expectedAmount += $addonAmount;
         }
 
         if (abs($request->amount - $expectedAmount) > 0.01) {
@@ -57,6 +65,7 @@ class PayMongoController extends Controller
                     'expected_amount' => $expectedAmount,
                     'order_total' => $order->total_amount,
                     'discount_amount' => $discountAmount,
+                    'addon_amount' => $addonAmount,
                 ]
             ], 400);
         }
@@ -106,6 +115,8 @@ class PayMongoController extends Controller
                 // Update existing pending payment record
                 $pendingPayment->update([
                     'payment_method' => $request->method,
+                    'final_amount' => $expectedAmount,
+                    'amount_paid' => $expectedAmount,
                     'checkout_session_id' => $checkoutData['data']['id'],
                     'updated_at' => now(),
                 ]);
@@ -122,6 +133,10 @@ class PayMongoController extends Controller
                     'final_amount' => $expectedAmount,
                     'amount_paid' => $expectedAmount,
                     'status' => 'pending',
+                    'payment_details' => [
+                        'addon_amount' => $addonAmount,
+                        'addon_description' => $request->addon_description,
+                    ],
                     'checkout_session_id' => $checkoutData['data']['id'],
                     'cashier_id' => $employee ? $employee->employee_id : null,
                 ]);

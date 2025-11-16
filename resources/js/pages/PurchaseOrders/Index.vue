@@ -32,9 +32,12 @@ interface PurchaseOrder {
   items: PurchaseOrderItem[];
 }
 
+// Badge variants used in this page
+type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'success' | 'warning' | undefined;
+
 interface Filters {
   search: string;
-  status: string;
+  status: string; // "default", "all", or comma-separated statuses
 }
 
 interface Props {
@@ -64,20 +67,39 @@ const handleSearch = () => {
   });
 };
 
-const getStatusBadge = (status: string) => {
-  type BadgeVariant = "default" | "destructive" | "outline" | "secondary" | "success" | "warning" | undefined;
+const getStatusBadge = (order: PurchaseOrder): { variant: BadgeVariant; label: string } => {
+  const status = order.status;
+  const receivedBy = order.received_by;
+
+  // Derived statuses for supplier vs owner actions
+  if (status === 'partially_delivered') {
+    if (!receivedBy) {
+      return { variant: 'warning' as BadgeVariant, label: 'Supplier Partial  Awaiting Receive' };
+    }
+    return { variant: 'default' as BadgeVariant, label: 'Partially Received (Owner)' };
+  }
+
+  if (status === 'delivered') {
+    if (!receivedBy) {
+      return { variant: 'warning' as BadgeVariant, label: 'Supplier Delivered  Awaiting Receive' };
+    }
+    return { variant: 'success' as BadgeVariant, label: 'Completed (Owner)' };
+  }
 
   const statusConfig: Record<string, { variant: BadgeVariant; label: string }> = {
-    'draft': { variant: 'secondary', label: 'Draft' },
-    'pending': { variant: 'default', label: 'Pending' },
-    'sent': { variant: 'default', label: 'Sent' },
-    'confirmed': { variant: 'default', label: 'Confirmed' },
-    'partially_delivered': { variant: 'default', label: 'Partially Delivered' },
-    'delivered': { variant: 'default', label: 'Delivered' },
-    'cancelled': { variant: 'destructive', label: 'Cancelled' }
+    draft: { variant: 'secondary', label: 'Draft' },
+    pending: { variant: 'default', label: 'Pending' },
+    sent: { variant: 'default', label: 'Sent' },
+    confirmed: { variant: 'default', label: 'Confirmed' },
+    cancelled: { variant: 'destructive', label: 'Cancelled' },
   };
 
-  return statusConfig[status] || { variant: 'secondary' as BadgeVariant, label: status };
+  return (
+    statusConfig[status] ?? {
+      variant: 'secondary' as BadgeVariant,
+      label: status,
+    }
+  );
 };
 
 const formatDate = (dateString: string) => {
@@ -178,7 +200,7 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="sent,draft,confirmed,pending">Default (Sent, Draft, Confirmed, Pending)</SelectItem>
+                  <SelectItem value="default">Default (Pending, Draft, Sent, Confirmed, Awaiting Receive)</SelectItem>
                   <SelectItem value="draft">Draft</SelectItem>
                   <SelectItem value="sent">Sent</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
@@ -233,8 +255,8 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                   {{ formatCurrency(order.total_amount) }}
                 </TableCell>
                 <TableCell>
-                  <Badge :variant="getStatusBadge(order.status).variant">
-                    {{ getStatusBadge(order.status).label }}
+                  <Badge :variant="getStatusBadge(order).variant">
+                    {{ getStatusBadge(order).label }}
                   </Badge>
                 </TableCell>
                 <TableCell class="text-right">

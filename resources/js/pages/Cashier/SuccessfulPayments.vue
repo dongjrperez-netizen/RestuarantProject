@@ -157,15 +157,19 @@ const mockStats = {
                                     Items: {{ (order.order_items || order.orderItems || []).map((item: any) => `${item.quantity}x ${item.dish?.dish_name || 'Unknown'}`).join(', ') || 'No items' }}
                                 </div>
                             </div>
-                            <div class="text-right">
-                                <div class="flex flex-col items-end">
-                                    <div v-if="order.discount_amount" class="text-sm line-through text-muted-foreground">
-                                        ₱{{ Number(order.total_amount || 0).toFixed(2) }}
-                                    </div>
-                                    <div class="text-2xl font-bold">
-                                        ₱{{ Number((order.total_amount || 0) - (order.discount_amount || 0)).toFixed(2) }}
-                                    </div>
-                                    <div v-if="order.discount_amount" class="text-xs text-red-600">
+                                <div class="text-right">
+                                    <div class="flex flex-col items-end">
+                                        <div
+                                            v-if="(order.discount_amount && Number(order.discount_amount) > 0) ||
+                                                   (order.final_amount && Number(order.final_amount) !== Number(order.total_amount))"
+                                            class="text-sm line-through text-muted-foreground"
+                                        >
+                                            ₱{{ Number(order.total_amount || 0).toFixed(2) }}
+                                        </div>
+                                        <div class="text-2xl font-bold">
+                                            ₱{{ Number(order.final_amount ?? ((order.total_amount || 0) - (order.discount_amount || 0))).toFixed(2) }}
+                                        </div>
+                                        <div v-if="order.discount_amount" class="text-xs text-red-600">
                                         ({{ order.discount_reason || 'Discount' }} -₱{{ Number(order.discount_amount).toFixed(2) }})
                                     </div>
                                 </div>

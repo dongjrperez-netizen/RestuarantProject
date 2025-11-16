@@ -36,7 +36,8 @@ class PurchaseOrderController extends Controller
 
         // Get filter parameters with defaults
         $search = $request->input('search', '');
-        $statusFilter = $request->input('status', 'sent,draft,confirmed');
+        // "default" means: draft/pending/sent/confirmed + any supplier-delivered orders awaiting owner receive
+        $statusFilter = $request->input('status', 'default');
 
         // Build query
         $query = PurchaseOrder::with(['supplier', 'items.ingredient'])
@@ -59,8 +60,20 @@ class PurchaseOrderController extends Controller
 
         // Apply status filter
         if ($statusFilter && $statusFilter !== 'all') {
-            $statuses = explode(',', $statusFilter);
-            $query->whereIn('status', $statuses);
+            if ($statusFilter === 'default') {
+                // Default: show early workflow states (draft/pending/sent/confirmed)
+                // plus any supplier-delivered orders awaiting owner receive
+                $query->where(function ($q) {
+                    $q->whereIn('status', ['draft', 'pending', 'sent', 'confirmed'])
+                        ->orWhere(function ($q2) {
+                            $q2->whereIn('status', ['partially_delivered', 'delivered'])
+                                ->whereNull('received_by');
+                        });
+                });
+            } else {
+                $statuses = explode(',', $statusFilter);
+                $query->whereIn('status', $statuses);
+            }
         }
 
         $purchaseOrders = $query->orderBy('created_at', 'desc')->get();
@@ -210,6 +223,17 @@ class PurchaseOrderController extends Controller
             ];
 
             \Log::info('Creating purchase order:', $purchaseOrderData);
+            // If a manager/supervisor employee is performing manual receive, capture them as creator
+            if (\Auth::guard('employee')->check()) {
+                /** @var \App\Models\Employee $employee */
+                $employee = \Auth::guard('employee')->user();
+                $employee->loadMissing('role');
+                $roleName = strtolower($employee->role->role_name ?? '');
+                if (in_array($roleName, ['manager', 'supervisor'], true)) {
+                    $purchaseOrderData['created_by_employee_id'] = $employee->employee_id;
+                }
+            }
+ 
             $purchaseOrder = PurchaseOrder::create($purchaseOrderData);
             \Log::info('Purchase order created:', ['po_id' => $purchaseOrder->purchase_order_id]);
 
@@ -358,10 +382,11 @@ class PurchaseOrderController extends Controller
     public function show($id)
     {
         $purchaseOrder = PurchaseOrder::with([
-            'supplier',
+'supplier',
             'items.ingredient',
             'bill.payments',
             'createdBy',
+            'createdByEmployee',
             'approvedBy',
         ])->findOrFail($id);
 
@@ -438,16 +463,28 @@ class PurchaseOrderController extends Controller
 
         try {
             DB::beginTransaction();
-
+ 
             $subtotal = collect($validated['items'])->sum(function ($item) {
                 return $item['ordered_quantity'] * $item['unit_price'];
             });
-
+ 
             $user = auth()->user();
             if (! $user->restaurantData) {
                 return redirect()->back()->with('error', 'No restaurant data found.');
             }
-
+ 
+            // If a manager/supervisor employee is creating this PO, capture their employee_id
+            $createdByEmployeeId = null;
+            if (\Auth::guard('employee')->check()) {
+                /** @var \App\Models\Employee $employee */
+                $employee = \Auth::guard('employee')->user();
+                $employee->loadMissing('role');
+                $roleName = strtolower($employee->role->role_name ?? '');
+                if (in_array($roleName, ['manager', 'supervisor'], true)) {
+                    $createdByEmployeeId = $employee->employee_id;
+                }
+            }
+ 
             $purchaseOrder = PurchaseOrder::create([
                 'restaurant_id' => $user->restaurantData->id,
                 'supplier_id' => $validated['supplier_id'],
@@ -461,7 +498,8 @@ class PurchaseOrderController extends Controller
                 'total_amount' => $subtotal,
                 'notes' => $validated['notes'],
                 'delivery_instructions' => $validated['delivery_instructions'],
-                'created_by_user_id' => auth()->id(),
+                'created_by_user_id' => $user->id,
+                'created_by_employee_id' => $createdByEmployeeId,
             ]);
 
             foreach ($validated['items'] as $item) {
@@ -753,6 +791,8 @@ class PurchaseOrderController extends Controller
 
                 $item->update([
                     'received_quantity' => $newReceivedQuantity,
+                    // Decrease supplier_delivered_quantity by what the owner is actually receiving now
+// supplier_delivered_quantity is cumulative total delivered by supplier; do not modify it here
                     'quality_rating' => $itemData['quality_rating'] ?? null,
                     'condition_notes' => $itemData['condition_notes'] ?? null,
                     'has_discrepancy' => $itemData['has_discrepancy'] ?? false,

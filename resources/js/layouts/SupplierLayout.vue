@@ -86,7 +86,7 @@ const closeMobileMenu = () => {
               :class="{ 'text-primary font-medium': $page.url.startsWith('/supplier/payments') }"
             >
               <History class="h-4 w-4" />
-              <span>History</span>
+              <span>Payment History</span>
             </Link>
           </nav>
 

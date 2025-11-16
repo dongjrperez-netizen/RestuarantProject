@@ -210,6 +210,7 @@
                     <th>Order #</th>
                     <th>Supplier</th>
                     <th>Date</th>
+                    <th style="font-size: 10px;">Created / Approved</th>
                     <th>Status</th>
                     <th class="text-right">Amount</th>
                     <th>Expected Delivery</th>
@@ -230,6 +231,17 @@
                     <td>{{ $order->order_number }}</td>
                     <td>{{ $supplierName }}</td>
                     <td>{{ $order->created_at->format('M d, Y') }}</td>
+                    <td style="font-size: 10px; line-height: 1.2;">
+                        <div>
+                            <strong>Created:</strong>
+                            {{ optional($order->createdByEmployee)->full_name ?? optional($order->createdBy)->name ?? 'N/A' }}
+                        </div>
+                        @if($order->approvedBy)
+                        <div>
+                            <strong>Approved:</strong> {{ $order->approvedBy->name }}
+                        </div>
+                        @endif
+                    </td>
                     <td>
                         <span class="badge badge-{{ $order->status }}">{{ ucfirst($order->status) }}</span>
                     </td>

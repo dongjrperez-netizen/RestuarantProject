@@ -51,6 +51,11 @@ interface Table {
   y_position?: number;
 }
 
+const isTakeOutTable = (table: Table) => {
+  const name = table.table_name?.toLowerCase() || '';
+  return table.table_number === 'TO' || name === 'take out' || name === 'takeout';
+};
+
 interface Employee {
   employee_id: number;
   firstname: string;
@@ -282,21 +287,81 @@ const toggleItemServed = async (orderId: number, itemId: number, markAsServed: b
   }
 };
 
+// Mark all items in an order as served
+const markOrderFullyServed = async (orderId: number) => {
+  let response: Response | undefined;
+
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (!csrfToken) {
+      alert('Security token not found. Please refresh the page.');
+      return;
+    }
+
+    response = await fetch(`/waiter/orders/${orderId}/serve-all`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Server error response (serve-all):', errorText);
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // Update local state: mark all items in this order as served
+    tableOrders.value = tableOrders.value.map(order => {
+      if (order.order_id === orderId) {
+        return {
+          ...order,
+          status: 'served',
+          order_items: (order.order_items || []).map((item: any) => ({
+            ...item,
+            served_quantity: item.quantity,
+            status: 'served',
+          })),
+        };
+      }
+      return order;
+    });
+  } catch (error) {
+    console.error('Error marking order as fully served:', error);
+    if (response) {
+      if (response.status === 419) {
+        alert('Your session may have expired. Please refresh the page and try again.');
+      } else if (response.status === 403) {
+        alert('Access denied. Please make sure you are logged in as a waiter.');
+      } else {
+        alert(`Failed to mark order as served (Error ${response.status})`);
+      }
+    } else {
+      alert('Failed to mark order as served - network error');
+    }
+  }
+};
+
 // Computed properties to group tables by status
 const availableTables = computed(() =>
-  props.tables.filter(table => table.status === 'available')
+  props.tables.filter(table => table.status === 'available' && !isTakeOutTable(table))
 );
 
 const occupiedTables = computed(() =>
-  props.tables.filter(table => table.status === 'occupied')
+  props.tables.filter(table => table.status === 'occupied' && !isTakeOutTable(table))
 );
 
 const reservedTables = computed(() =>
-  props.tables.filter(table => table.status === 'reserved')
+  props.tables.filter(table => table.status === 'reserved' && !isTakeOutTable(table))
 );
 
 const maintenanceTables = computed(() =>
-  props.tables.filter(table => table.status === 'maintenance')
+  props.tables.filter(table => table.status === 'maintenance' && !isTakeOutTable(table))
 );
 
 // Auto-refresh interval for tables
@@ -739,10 +804,22 @@ onUnmounted(() => {
                             :class="order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                                    order.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
                                    order.status === 'ready' ? 'bg-green-100 text-green-800' :
+                                   order.status === 'served' ? 'bg-green-200 text-green-900' :
                                    'bg-gray-100 text-gray-800'">
                         {{ order.status }}
                       </span>
                     </p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <Button
+                      v-if="order.order_items && order.order_items.length > 0"
+                      size="xs"
+                      variant="outline"
+                      class="text-[11px] px-2 py-1 h-auto bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                      @click="markOrderFullyServed(order.order_id)"
+                    >
+                      Mark All Served
+                    </Button>
                   </div>
                 </div>
 

@@ -2,6 +2,7 @@
 import AppLayoutAdministrator from '@/layouts/AppLayoutAdministrator.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 
 import {
   Table,
@@ -18,7 +19,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     href: '/request',
   },
 ];
-
 
 const props = defineProps({
   pendingApplications: Array as () => Array<{
@@ -37,6 +37,26 @@ const props = defineProps({
     }>;
   }>
 });
+
+const search = ref('');
+
+const filteredApplications = computed(() => {
+  const term = search.value.trim().toLowerCase();
+
+  if (!term) {
+    return props.pendingApplications ?? [];
+  }
+
+  return (props.pendingApplications ?? []).filter((application) => {
+    const email = application.contact_email?.toLowerCase() ?? '';
+    const restaurantName = application.restaurant_name?.toLowerCase() ?? '';
+
+    return (
+      email.includes(term) ||
+      restaurantName.includes(term)
+    );
+  });
+});
 </script>
 
 <template>
@@ -47,6 +67,15 @@ const props = defineProps({
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Pending Account Requests</h1>
         <p class="text-gray-600 mt-1">Review and approve or reject new restaurant account applications</p>
+      </div>
+
+      <div class="flex justify-end mb-4">
+        <input
+          v-model="search"
+          type="text"
+          placeholder="Search by email or restaurant name"
+          class="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+        />
       </div>
 
       <div class="overflow-x-auto bg-white shadow rounded-lg">
@@ -64,7 +93,7 @@ const props = defineProps({
 
           <TableBody>
             <TableRow
-              v-for="application in pendingApplications"
+              v-for="application in filteredApplications"
               :key="application.restaurant_id"
               class="hover:bg-gray-50"
             >
@@ -121,7 +150,7 @@ const props = defineProps({
                 </span>
               </TableCell>
             </TableRow>
-            <TableRow v-if="!pendingApplications || pendingApplications.length === 0">
+            <TableRow v-if="!filteredApplications || filteredApplications.length === 0">
               <TableCell colspan="6" class="text-center py-4 text-gray-500">
                 No pending applications found.
               </TableCell>

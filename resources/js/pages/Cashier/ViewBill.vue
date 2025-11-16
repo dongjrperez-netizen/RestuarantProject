@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Receipt, Printer, CreditCard, Calendar, User, MapPin, Phone, Percent, X, Trash2, Banknote, Smartphone, Wallet } from 'lucide-vue-next';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@components/ui/dialog';
+import { ArrowLeft, Receipt, Printer, CreditCard, Calendar, User, MapPin, Phone, Percent, X, Trash2, Banknote, Smartphone, Wallet, PlusCircle, Ban } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 // Props
@@ -25,8 +25,21 @@ const discountPercentage = ref('');
 const discountReason = ref('Senior Citizen');
 const discountNotes = ref('');
 
+// Quick add-ons
+const addonPrice = ref('');
+const addonDescription = ref('');
+const addonModalOpen = ref(false);
+const appliedAddon = ref<null | { amount: number; description: string }>(null);
+
 // Store temporary discount (not persisted to DB)
 const tempDiscount = ref<null | { percentage: number; amount: number; reason: string; notes: string }>(null);
+
+// Void single item state
+const isVoidItemModalOpen = ref(false);
+const voidTargetItem = ref<any | null>(null);
+const voidManagerAccessCode = ref('');
+const voidItemReason = ref('');
+const voidItemProcessing = ref(false);
 
 // Result modal for discount operations
 const showResultModal = ref(false);
@@ -240,6 +253,137 @@ const getFinalTotal = (order: any) => {
     return order.total_amount;
 };
 
+// Item-level void helpers
+const canVoidItem = (order: any, item: any) => {
+    if (!order || !item) return false;
+    const orderStatus = String(order.status || '').toLowerCase();
+    const itemStatus = String(item.status || '').toLowerCase();
+
+    // Match backend rules: order must be pending/in_progress and item pending/preparing with no served qty
+    const allowedOrderStatuses = ['pending', 'in_progress'];
+    const allowedItemStatuses = ['pending', 'preparing'];
+
+    if (!allowedOrderStatuses.includes(orderStatus)) return false;
+    if (!allowedItemStatuses.includes(itemStatus)) return false;
+    if ((item.served_quantity ?? 0) > 0) return false;
+
+    return true;
+};
+
+const openVoidItemModal = (item: any) => {
+    voidTargetItem.value = item;
+    voidManagerAccessCode.value = '';
+    voidItemReason.value = '';
+    voidItemProcessing.value = false;
+    isVoidItemModalOpen.value = true;
+};
+
+const submitVoidItem = async () => {
+    if (!props.order || !voidTargetItem.value || !voidManagerAccessCode.value) return;
+
+    try {
+        voidItemProcessing.value = true;
+
+        const csrfToken = document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute('content') || '';
+
+        const response = await fetch(`/cashier/bills/${props.order.order_id}/items/void`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                manager_access_code: voidManagerAccessCode.value,
+                void_reason: voidItemReason.value || null,
+                item_ids: [voidTargetItem.value.item_id],
+            }),
+        });
+
+        if (response.status === 419) {
+            showResult('Session Expired', 'Your session has expired. Please click OK to refresh the page.', 'error');
+            return;
+        }
+
+        const raw = await response.text();
+
+        if (response.ok) {
+            // On success, reload only the order data so UI reflects updated items/amount
+            isVoidItemModalOpen.value = false;
+            voidTargetItem.value = null;
+
+            try {
+                // Try to parse and maybe use updated order if needed
+                const data = raw ? JSON.parse(raw) : null;
+                if (data && data.order) {
+                    // Best-effort local update
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (props as any).order = data.order;
+                } else {
+                    router.reload({ only: ['order'] });
+                }
+            } catch {
+                router.reload({ only: ['order'] });
+            }
+        } else {
+            let message = 'Failed to void item.';
+            try {
+                const data = raw ? JSON.parse(raw) : null;
+                message = data?.message || data?.error || message;
+            } catch {
+                if (raw.includes('<!DOCTYPE') || raw.includes('<html')) {
+                    message = 'An error occurred (HTML error response). Please refresh the page and try again.';
+                } else if (raw.trim()) {
+                    message = raw.trim();
+                }
+            }
+            showResult('Failed to Void Item', message, 'error');
+        }
+    } catch (error) {
+        console.error('Error voiding item:', error);
+        showResult('Failed to Void Item', 'An unexpected error occurred while voiding the item. Please try again.', 'error');
+    } finally {
+        voidItemProcessing.value = false;
+    }
+};
+
+// Add-on functions (UI only)
+const openAddonModal = () => {
+    if (appliedAddon.value) {
+        addonPrice.value = appliedAddon.value.amount.toFixed(2);
+        addonDescription.value = appliedAddon.value.description;
+    } else {
+        addonPrice.value = '';
+        addonDescription.value = '';
+    }
+    addonModalOpen.value = true;
+};
+
+const applyAddon = () => {
+    const amount = parseFloat(addonPrice.value || '0');
+    if (isNaN(amount) || amount <= 0) {
+        alert('Please enter a valid add-on price');
+        return;
+    }
+
+    appliedAddon.value = {
+        amount,
+        description: addonDescription.value || 'Add-on'
+    };
+
+    addonModalOpen.value = false;
+};
+
+const removeAddon = () => {
+    appliedAddon.value = null;
+    addonPrice.value = '';
+    addonDescription.value = '';
+};
+
 // Generate print bill URL with discount data
 const getPrintBillUrl = () => {
     if (!props.order?.order_id) return '#';
@@ -389,6 +533,8 @@ const processGCashPayment = async () => {
         customer_name: props.order.customer_name || 'Walk-in Customer',
         customer_email: props.order.customer_email || 'customer@restaurant.com',
         method: 'gcash',
+        addon_amount: appliedAddon.value?.amount || null,
+        addon_description: appliedAddon.value?.description || null,
     };
 
     try {
@@ -462,6 +608,8 @@ const processPayPalPayment = async () => {
         customer_email: props.order.customer_email || 'customer@restaurant.com',
         discount_amount: props.order.discount_amount || null,
         discount_reason: props.order.discount_reason || null,
+        addon_amount: appliedAddon.value?.amount || null,
+        addon_description: appliedAddon.value?.description || null,
     };
 
     try {
@@ -534,6 +682,8 @@ const processCashPayment = async () => {
             amount_paid: parseFloat(amountReceived.value),
             discount_amount: props.order.discount_amount || null,
             discount_reason: props.order.discount_reason || null,
+            addon_amount: appliedAddon.value?.amount || null,
+            addon_description: appliedAddon.value?.description || null,
             notes: paymentNotes.value || null
         };
 
@@ -606,24 +756,23 @@ const processCashPayment = async () => {
     }
 };
 
-// Get current total (including discount)
+// Get current total (including discount and add-ons)
 const getCurrentTotal = () => {
     if (!props.order) return 0;
 
+    const baseTotal = parseFloat(props.order.total_amount);
+    const discount = props.order.discount_amount ? parseFloat(props.order.discount_amount) : 0;
+    const addon = appliedAddon.value ? appliedAddon.value.amount : 0;
+    const result = baseTotal - discount + addon;
+
     console.log('getCurrentTotal debug:', {
         total_amount: props.order.total_amount,
-        discount_amount: props.order.discount_amount
+        discount_amount: props.order.discount_amount,
+        addon_amount: addon,
+        result,
     });
 
-    // Use stored discount amount if available
-    if (props.order.discount_amount) {
-        const result = parseFloat(props.order.total_amount) - parseFloat(props.order.discount_amount);
-        console.log('Using stored discount:', result);
-        return result;
-    }
-
-    console.log('No discount, returning total_amount:', props.order.total_amount);
-    return parseFloat(props.order.total_amount);
+    return result;
 };
 </script>
 
@@ -700,21 +849,54 @@ const getCurrentTotal = () => {
                             <div>
                                 <h3 class="font-medium mb-3">Order Items</h3>
                                 <div class="space-y-3">
-                                    <div v-for="item in order?.order_items" :key="item.item_id"
-                                         class="flex justify-between items-center">
+                                    <div
+                                        v-for="item in order?.order_items"
+                                        :key="item.item_id"
+                                        class="flex justify-between items-center gap-3"
+                                    >
                                         <div class="flex-1">
-                                            <p class="font-medium">
-                                                {{ item.dish?.dish_name }}
-                                                <span v-if="item.variant" class="text-sm text-blue-600 font-semibold">
-                                                    ({{ item.variant.size_name }})
+                                            <p class="font-medium flex items-center gap-2">
+                                                <span>
+                                                    {{ item.dish?.dish_name }}
+                                                    <span
+                                                        v-if="item.variant"
+                                                        class="text-sm text-blue-600 font-semibold"
+                                                    >
+                                                        ({{ item.variant.size_name }})
+                                                    </span>
                                                 </span>
+                                                <Badge
+                                                    v-if="item.status"
+                                                    variant="outline"
+                                                    class="text-[10px] uppercase"
+                                                >
+                                                    {{ item.status }}
+                                                </Badge>
                                             </p>
                                             <p class="text-sm text-muted-foreground">
                                                 {{ formatCurrency(item.unit_price) }} × {{ item.quantity }}
                                             </p>
+                                            <p
+                                                v-if="item.served_quantity && item.served_quantity > 0"
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                Served: {{ item.served_quantity }} / {{ item.quantity }}
+                                            </p>
                                         </div>
                                         <div class="text-right">
-                                            <p class="font-medium">{{ formatCurrency(item.quantity * item.unit_price) }}</p>
+                                            <p class="font-medium mb-1">
+                                                {{ formatCurrency(item.quantity * item.unit_price) }}
+                                            </p>
+                                            <Button
+                                                v-if="canVoidItem(order, item)"
+                                                variant="outline"
+                                                size="sm"
+                                                class="text-red-600 hover:text-red-700 border-red-200 hover:border-red-400"
+                                                @click="openVoidItemModal(item)"
+                                            >
+                                                <Ban class="w-3 h-3 mr-1" />
+                                                Void
+                                            </Button>
                                         </div>
                                     </div>
                                 </div>
@@ -744,14 +926,23 @@ const getCurrentTotal = () => {
                                     <span>Discount:</span>
                                     <span>-{{ formatCurrency(order.discount_amount) }}</span>
                                 </div>
+                                <div v-if="appliedAddon" class="flex justify-between text-sm text-blue-600">
+                                    <span>
+                                        Add-ons
+                                        <span v-if="appliedAddon.description" class="text-xs text-muted-foreground">
+                                            ({{ appliedAddon.description }})
+                                        </span>
+                                    </span>
+                                    <span>{{ formatCurrency(appliedAddon.amount) }}</span>
+                                </div>
                                 <Separator />
                                 <div class="flex justify-between font-bold text-lg">
                                     <span>Total Amount:</span>
-                                    <span :class="(tempDiscount || (order?.discount_amount && order.discount_amount > 0)) ? 'line-through text-muted-foreground' : ''">
+                                    <span :class="(tempDiscount || (order?.discount_amount && order.discount_amount > 0) || appliedAddon) ? 'line-through text-muted-foreground' : ''">
                                         {{ formatCurrency(order?.total_amount || 0) }}
                                     </span>
                                 </div>
-                                <div v-if="tempDiscount || (order?.discount_amount && order.discount_amount > 0)" class="flex justify-between font-bold text-lg text-green-600">
+                                <div v-if="tempDiscount || (order?.discount_amount && order.discount_amount > 0) || appliedAddon" class="flex justify-between font-bold text-lg text-green-600">
                                     <span>Final Amount:</span>
                                     <span>{{ formatCurrency(getCurrentTotal()) }}</span>
                                 </div>
@@ -795,11 +986,12 @@ const getCurrentTotal = () => {
                         </CardHeader>
                         <CardContent class="space-y-4">
                             <div class="text-center">
-                                <div v-if="tempDiscount || (order?.discount_amount && order.discount_amount > 0)">
+                                <div v-if="tempDiscount || (order?.discount_amount && order.discount_amount > 0) || appliedAddon">
                                     <p class="text-lg line-through text-muted-foreground">{{ formatCurrency(order?.total_amount || 0) }}</p>
                                     <p class="text-2xl font-bold text-green-600">{{ formatCurrency(getCurrentTotal()) }}</p>
                                     <p class="text-sm text-muted-foreground">Final Amount</p>
-                                    <p class="text-xs text-red-600">Discount Applied</p>
+                                    <p v-if="tempDiscount || (order?.discount_amount && order.discount_amount > 0)" class="text-xs text-red-600">Discount Applied</p>
+                                    <p v-if="appliedAddon" class="text-xs text-blue-600">Add-ons Included</p>
                                 </div>
                                 <div v-else>
                                     <p class="text-2xl font-bold">{{ formatCurrency(order?.total_amount || 0) }}</p>
@@ -861,6 +1053,28 @@ const getCurrentTotal = () => {
                                 >
                                     <Trash2 class="w-4 h-4 mr-2" />
                                     Remove Discount
+                                </Button>
+
+                                <!-- Add-ons Button -->
+                                <Button
+                                    v-if="order?.status !== 'paid'"
+                                    variant="outline"
+                                    class="w-full"
+                                    @click="openAddonModal"
+                                >
+                                    <PlusCircle class="w-4 h-4 mr-2" />
+                                    {{ appliedAddon ? 'Edit Add-ons' : 'Add Add-ons' }}
+                                </Button>
+
+                                <!-- Remove Add-ons Button -->
+                                <Button
+                                    v-if="appliedAddon"
+                                    variant="outline"
+                                    class="w-full text-red-600 hover:text-red-700"
+                                    @click="removeAddon"
+                                >
+                                    <Trash2 class="w-4 h-4 mr-2" />
+                                    Remove Add-ons
                                 </Button>
 
                                 <Button v-if="order?.status !== 'paid'" class="w-full" @click="openPaymentModal">
@@ -960,6 +1174,67 @@ const getCurrentTotal = () => {
             </div>
         </div>
 
+        <!-- Add-ons Modal -->
+        <Dialog v-model:open="addonModalOpen">
+            <DialogContent class="max-w-md">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2">
+                        <PlusCircle class="w-5 h-5" />
+                        Add-ons
+                    </DialogTitle>
+                    <DialogDescription v-if="order">
+                        Add extra items (e.g. soup) to {{ order.order_number }}.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div class="space-y-4 py-2">
+                    <div v-if="order" class="bg-muted p-3 rounded">
+                        <p class="font-medium">{{ order.order_number }}</p>
+                        <p class="text-sm text-muted-foreground">{{ order.table?.table_name }} - {{ order.customer_name || 'Walk-in' }}</p>
+                        <p class="text-sm">Current Amount Due: {{ formatCurrency(getCurrentTotal()) }}</p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="addon-price-modal">Add-on Price</Label>
+                        <Input
+                            id="addon-price-modal"
+                            v-model="addonPrice"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                        />
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="addon-desc-modal">Description</Label>
+                        <Input
+                            id="addon-desc-modal"
+                            v-model="addonDescription"
+                            placeholder="e.g. Soup"
+                        />
+                    </div>
+
+                    <div class="flex gap-3 pt-2">
+                        <Button
+                            variant="outline"
+                            class="flex-1"
+                            @click="addonModalOpen = false"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            class="flex-1"
+                            @click="applyAddon"
+                            :disabled="!addonPrice || parseFloat(addonPrice) <= 0"
+                        >
+                            Save Add-ons
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+
         <!-- Payment Method Selection Modal -->
         <Dialog v-model:open="isPaymentModalOpen">
             <DialogContent class="max-w-md">
@@ -983,6 +1258,15 @@ const getCurrentTotal = () => {
                         <div v-if="order?.discount_amount && order.discount_amount > 0" class="flex justify-between text-sm text-red-600">
                             <span>Discount:</span>
                             <span>-{{ formatCurrency(order.discount_amount) }}</span>
+                        </div>
+                        <div v-if="appliedAddon" class="flex justify-between text-sm text-blue-600">
+                            <span>
+                                Add-ons
+                                <span v-if="appliedAddon.description" class="text-xs text-muted-foreground">
+                                    ({{ appliedAddon.description }})
+                                </span>
+                            </span>
+                            <span>{{ formatCurrency(appliedAddon.amount) }}</span>
                         </div>
                         <Separator />
                         <div class="flex justify-between font-bold text-lg">
@@ -1065,6 +1349,15 @@ const getCurrentTotal = () => {
                         <div v-if="order?.discount_amount && order.discount_amount > 0" class="flex justify-between text-sm text-red-600">
                             <span>Discount:</span>
                             <span>-{{ formatCurrency(order.discount_amount) }}</span>
+                        </div>
+                        <div v-if="appliedAddon" class="flex justify-between text-sm text-blue-600">
+                            <span>
+                                Add-ons
+                                <span v-if="appliedAddon.description" class="text-xs text-muted-foreground">
+                                    ({{ appliedAddon.description }})
+                                </span>
+                            </span>
+                            <span>{{ formatCurrency(appliedAddon.amount) }}</span>
                         </div>
                         <Separator />
                         <div class="flex justify-between font-bold">
@@ -1160,6 +1453,101 @@ const getCurrentTotal = () => {
                         >
                             <span v-if="processing">Processing...</span>
                             <span v-else>Complete Payment</span>
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        <!-- Void Single Item Modal -->
+        <Dialog v-model:open="isVoidItemModalOpen">
+            <DialogContent class="max-w-md">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2">
+                        <Ban class="w-5 h-5 text-red-600" />
+                        <span>Void Dish</span>
+                    </DialogTitle>
+                    <DialogDescription v-if="voidTargetItem && order">
+                        You are about to void
+                        <span class="font-semibold">{{ voidTargetItem.dish?.dish_name }}</span>
+                        from order
+                        <span class="font-semibold">{{ order.order_number }}</span>.
+                        This action restores the ingredients for this dish back to inventory
+                        (if already deducted) and requires a valid manager access code.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div v-if="voidTargetItem && order" class="space-y-4 py-2">
+                    <div class="bg-muted p-3 rounded-md text-sm space-y-1">
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Dish:</span>
+                            <span class="font-medium">
+                                {{ voidTargetItem.dish?.dish_name }}
+                                <span
+                                    v-if="voidTargetItem.variant"
+                                    class="text-xs text-blue-600 font-semibold"
+                                >
+                                    ({{ voidTargetItem.variant.size_name }})
+                                </span>
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Quantity:</span>
+                            <span class="font-medium">{{ voidTargetItem.quantity }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Status:</span>
+                            <span class="font-medium">{{ voidTargetItem.status }}</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="manager-access-code-item" class="text-sm font-medium">
+                            Manager Access Code
+                        </Label>
+                        <Input
+                            id="manager-access-code-item"
+                            v-model="voidManagerAccessCode"
+                            type="password"
+                            inputmode="numeric"
+                            maxlength="6"
+                            minlength="6"
+                            placeholder="Enter 6-digit manager code"
+                        />
+                        <p class="text-[11px] text-muted-foreground">
+                            The manager or restaurant owner must provide this code to authorize the
+                            void.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="void-item-reason" class="text-sm font-medium">
+                            Reason for Voiding (optional)
+                        </Label>
+                        <Textarea
+                            id="void-item-reason"
+                            v-model="voidItemReason"
+                            class="w-full text-sm border rounded-md p-2 min-h-[70px] resize-y"
+                            placeholder="Describe why this dish is being voided..."
+                        />
+                    </div>
+
+                    <div class="flex gap-3 pt-2">
+                        <Button
+                            variant="outline"
+                            class="flex-1"
+                            @click="() => { isVoidItemModalOpen = false; voidTargetItem = null; }"
+                            :disabled="voidItemProcessing"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            class="flex-1 bg-red-600 hover:bg-red-700"
+                            @click="submitVoidItem"
+                            :disabled="!voidManagerAccessCode || voidManagerAccessCode.length !== 6 || voidItemProcessing"
+                        >
+                            <span v-if="voidItemProcessing">Voiding...</span>
+                            <span v-else>Confirm Void</span>
                         </Button>
                     </div>
                 </div>

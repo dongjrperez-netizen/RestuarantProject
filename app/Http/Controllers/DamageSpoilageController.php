@@ -19,10 +19,10 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantId = $employee->user_id;
+        $restaurantOwnerId = $employee->user_id;
 
         $query = DamageSpoilageLog::with(['ingredient', 'user'])
-            ->forRestaurant($restaurantId)
+            ->forRestaurant($restaurantOwnerId)
             ->orderBy('incident_date', 'desc')
             ->orderBy('created_at', 'desc');
 
@@ -46,7 +46,9 @@ class DamageSpoilageController extends Controller
         $logs = $query->paginate(15)->withQueryString();
 
         // Get ingredients for filter dropdown
-        $ingredients = Ingredients::where('restaurant_id', $restaurantId)
+        $ingredients = Ingredients::whereHas('restaurant', function ($query) use ($employee) {
+                $query->where('user_id', $employee->user_id);
+            })
             ->orderBy('ingredient_name')
             ->get(['ingredient_id', 'ingredient_name']);
 
@@ -66,9 +68,11 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantId = $employee->user_id;
+        $restaurantOwnerId = $employee->user_id;
 
-        $ingredients = Ingredients::where('restaurant_id', $restaurantId)
+        $ingredients = Ingredients::whereHas('restaurant', function ($query) use ($employee) {
+                $query->where('user_id', $employee->user_id);
+            })
             ->orderBy('ingredient_name')
             ->get(['ingredient_id', 'ingredient_name', 'base_unit']);
 
@@ -155,11 +159,13 @@ class DamageSpoilageController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantId = $employee->user_id;
+        $restaurantOwnerId = $employee->user_id;
 
-        $log = DamageSpoilageLog::forRestaurant($restaurantId)->findOrFail($id);
+        $log = DamageSpoilageLog::forRestaurant($restaurantOwnerId)->findOrFail($id);
 
-        $ingredients = Ingredients::where('restaurant_id', $restaurantId)
+        $ingredients = Ingredients::whereHas('restaurant', function ($query) use ($employee) {
+                $query->where('user_id', $employee->user_id);
+            })
             ->orderBy('ingredient_name')
             ->get(['ingredient_id', 'ingredient_name', 'base_unit']);
 

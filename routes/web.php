@@ -196,10 +196,13 @@ Route::middleware(['auth:waiter', 'role:waiter'])->prefix('waiter')->name('waite
     Route::get('/current-menu', [App\Http\Controllers\WaiterController::class, 'currentMenu'])->name('current-menu');
     Route::patch('/tables/{table}/status', [App\Http\Controllers\WaiterController::class, 'updateTableStatus'])->name('tables.update-status');
     Route::get('/take-order', [App\Http\Controllers\WaiterController::class, 'takeOrder'])->name('take-order');
+    Route::get('/take-out', [App\Http\Controllers\WaiterController::class, 'takeOut'])->name('take-out');
+    Route::get('/take-out-orders', [App\Http\Controllers\WaiterController::class, 'takeOutOrders'])->name('take-out-orders');
     Route::get('/orders/create/{tableId}', [App\Http\Controllers\WaiterController::class, 'createOrder'])->name('orders.create');
     Route::post('/orders', [App\Http\Controllers\WaiterController::class, 'storeOrder'])->name('orders.store');
     Route::get('/tables/{table}/orders', [App\Http\Controllers\WaiterController::class, 'getTableOrders'])->name('tables.orders');
     Route::post('/orders/{orderId}/items/{itemId}/served', [App\Http\Controllers\WaiterController::class, 'updateItemServedStatus'])->name('orders.items.served');
+    Route::post('/orders/{orderId}/serve-all', [App\Http\Controllers\WaiterController::class, 'markOrderFullyServed'])->name('orders.serve-all');
     Route::post('/dishes/check-availability', [App\Http\Controllers\WaiterController::class, 'checkDishAvailability'])->name('dishes.check-availability');
 
     // Debug route to check recent orders
@@ -263,6 +266,7 @@ Route::middleware(['auth:cashier', 'role:cashier'])->prefix('cashier')->name('ca
     Route::post('/bills/{orderId}/discount', [CashierController::class, 'applyDiscount'])->name('bills.discount');
     Route::delete('/bills/{orderId}/discount', [CashierController::class, 'removeDiscount'])->name('bills.discount.remove');
     Route::post('/bills/{orderId}/void', [CashierController::class, 'voidOrder'])->name('bills.void');
+    Route::post('/bills/{orderId}/items/void', [CashierController::class, 'voidOrderItems'])->name('bills.items.void');
     // PayPal routes must come before generic {orderId} routes
     Route::post('/payment/paypal', [CashierController::class, 'payWithPaypal'])->name('payment.paypal');
     Route::get('/payment/paypal/success', [CashierController::class, 'paypalSuccess'])->name('payment.paypal.success');

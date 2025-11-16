@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Srmklive\PayPal\Services\PayPal as PayPalClient;
+use Illuminate\Support\Facades\DB;
 
 class CashierController extends Controller
 {
@@ -33,7 +34,6 @@ class CashierController extends Controller
             $payment = $order->payments()->where('status', 'completed')->latest()->first();
             if ($payment) {
                 $order->discount_amount = $payment->discount_amount;
-                $order->discount_reason = $payment->discount_reason;
                 $order->final_amount = $payment->final_amount;
                 $order->payment_method = $payment->payment_method;
                 $order->amount_paid = $payment->amount_paid;
@@ -50,14 +50,7 @@ class CashierController extends Controller
             ->whereDate('created_at', today())
             ->get();
 
-        // Calculate revenue from actual payments (after discounts)
-        $todayRevenue = \App\Models\CustomerPayment::whereHas('order', function ($query) use ($employee) {
-                $query->where('restaurant_id', $employee->user_id);
-            })
-            ->where('status', 'completed')
-            ->whereDate('paid_at', today())
-            ->sum('final_amount');
-
+        $todayRevenue = $todayOrders->where('status', 'paid')->sum('total_amount');
         $todayOrderCount = $todayOrders->where('status', 'paid')->count();
         $pendingOrdersCount = $todayOrders->whereIn('status', ['ready', 'completed'])->count();
 
@@ -71,7 +64,7 @@ class CashierController extends Controller
         ]);
     }
 
-    public function bills()
+    public function bills(Request $request)
     {
         // Get the authenticated employee
         $employee = Auth::guard('cashier')->user();
@@ -80,12 +73,47 @@ class CashierController extends Controller
             abort(403, 'Access denied. Cashiers only.');
         }
 
-        // Get unpaid orders from this restaurant (exclude paid and voided orders)
-        $orders = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments', 'reservation'])
-            ->where('restaurant_id', $employee->user_id)  // Filter by restaurant
-            ->whereIn('status', ['pending', 'ready', 'completed','in_progress'])  // Exclude voided orders
+        // Read filters from query string
+        $search = trim((string) $request->query('search', ''));
+        $status = strtolower((string) $request->query('status', 'all'));
+
+        // Base query for this restaurant
+        $query = CustomerOrder::with(['table', 'orderItems.dish', 'employee', 'payments', 'reservation'])
+            ->where('restaurant_id', $employee->user_id);  // Filter by restaurant
+
+        // Allowed statuses for Bills page
+        $baseStatuses = ['pending', 'ready', 'completed', 'in_progress'];
+
+        // Apply status filter / base filter
+        if ($status === 'all') {
+            // Default: show only unpaid / in-progress orders
+            $query->whereIn('status', $baseStatuses);
+        } elseif ($status === 'paid') {
+            // Explicit Paid filter
+            $query->where('status', 'paid');
+        } else {
+            // Specific non-paid status (pending, ready, completed, in_progress)
+            $query->where('status', $status)->whereIn('status', $baseStatuses);
+        }
+
+        // Apply search filter (order number, customer name, table name)
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('order_number', 'like', "%{$search}%")
+                    ->orWhere('customer_name', 'like', "%{$search}%")
+                    ->orWhereHas('table', function ($tableQuery) use ($search) {
+                        $tableQuery->where('table_name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $orders = $query
             ->orderBy('updated_at', 'desc')
-            ->paginate(15);
+            ->paginate(15)
+            ->appends([
+                'search' => $search,
+                'status' => $status,
+            ]);
 
         // Add payment data to each order for frontend compatibility
         $orders->getCollection()->transform(function ($order) {
@@ -104,6 +132,10 @@ class CashierController extends Controller
         return Inertia::render('Cashier/Bills', [
             'employee' => $employee->load('role'),
             'orders' => $orders,
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+            ],
         ]);
     }
 
@@ -241,6 +273,8 @@ class CashierController extends Controller
             'amount_paid' => 'required|numeric|min:0',
             'discount_amount' => 'nullable|numeric|min:0',
             'discount_reason' => 'nullable|string|max:255',
+            'addon_amount' => 'nullable|numeric|min:0',
+            'addon_description' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:500',
         ]);
 
@@ -250,8 +284,10 @@ class CashierController extends Controller
             ->where('order_id', $orderId)
             ->firstOrFail();
 
-        // Calculate final amount
-        $finalAmount = $order->total_amount - ($request->discount_amount ?? 0);
+        // Calculate final amount (order total - discount + add-ons)
+        $discountAmount = $request->discount_amount ?? 0;
+        $addonAmount = $request->addon_amount ?? 0;
+        $finalAmount = $order->total_amount - $discountAmount + $addonAmount;
         $changeAmount = $request->amount_paid - $finalAmount;
 
         // Create payment record
@@ -262,11 +298,15 @@ class CashierController extends Controller
             'order_id' => $orderId,
             'payment_method' => $request->payment_method,
             'original_amount' => $order->total_amount,
-            'discount_amount' => $request->discount_amount ?? 0,
+            'discount_amount' => $discountAmount,
             'final_amount' => $finalAmount,
             'amount_paid' => $request->amount_paid,
             'change_amount' => $changeAmount > 0 ? $changeAmount : null,
             'status' => 'completed',
+            'payment_details' => [
+                'addon_amount' => $addonAmount,
+                'addon_description' => $request->addon_description,
+            ],
             'notes' => $request->notes,
             'cashier_id' => $employee->employee_id,
             'paid_at' => now(),
@@ -458,6 +498,8 @@ class CashierController extends Controller
             'customer_email' => 'nullable|email|max:255',
             'discount_amount' => 'nullable|numeric|min:0',
             'discount_reason' => 'nullable|string|max:255',
+            'addon_amount' => 'nullable|numeric|min:0',
+            'addon_description' => 'nullable|string|max:255',
         ]);
 
         // Get the order
@@ -533,6 +575,8 @@ class CashierController extends Controller
                         'amount' => $request->amount,
                         'discount_amount' => $request->discount_amount,
                         'discount_reason' => $request->discount_reason,
+                        'addon_amount' => $request->addon_amount,
+                        'addon_description' => $request->addon_description,
                         'cashier_id' => $employee->employee_id,
                     ]
                 ]);
@@ -642,7 +686,7 @@ class CashierController extends Controller
                     'status' => 'completed',
                     'transaction_id' => $transactionId,
                     'checkout_session_id' => $paypalOrderId, // Store PayPal Order ID as checkout session
-                    'payment_details' => json_encode([
+'payment_details' => json_encode([
                         'paypal_order_id' => $paypalOrderId,
                         'transaction_id' => $transactionId,
                         'capture_status' => $captureDetails['status'] ?? 'unknown',
@@ -651,6 +695,8 @@ class CashierController extends Controller
                         'payer_name' => $payerInfo['name'] ?? null,
                         'create_time' => $captureDetails['create_time'] ?? null,
                         'update_time' => $captureDetails['update_time'] ?? null,
+                        'addon_amount' => $paymentData['addon_amount'] ?? 0,
+                        'addon_description' => $paymentData['addon_description'] ?? null,
                         'full_response' => $response, // Store complete PayPal response for reference
                     ]),
                     'notes' => 'PayPal Payment - Transaction ID: ' . $transactionId,
@@ -776,142 +822,142 @@ class CashierController extends Controller
                 'void_reason' => 'nullable|string|max:500',
             ]);
 
-        // Find the order
-        $order = CustomerOrder::where('restaurant_id', $cashier->user_id)
-            ->where('order_id', $orderId)
-            ->firstOrFail();
+            // Find the order
+            $order = CustomerOrder::where('restaurant_id', $cashier->user_id)
+                ->where('order_id', $orderId)
+                ->firstOrFail();
 
-        // Check if order is already voided
-        if ($order->status === 'voided') {
-            if ($request->header('X-Inertia')) {
-                return back()->withErrors(['error' => 'This order has already been voided.']);
+            // Check if order is already voided
+            if ($order->status === 'voided') {
+                if ($request->header('X-Inertia')) {
+                    return back()->withErrors(['error' => 'This order has already been voided.']);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This order has already been voided.',
+                ], 400);
             }
-            return response()->json([
-                'success' => false,
-                'message' => 'This order has already been voided.',
-            ], 400);
-        }
 
-        // Check if order is paid
-        if ($order->status === 'paid') {
-            if ($request->header('X-Inertia')) {
-                return back()->withErrors(['error' => 'Cannot void a paid order. Please process a refund instead.']);
+            // Check if order is paid
+            if ($order->status === 'paid') {
+                if ($request->header('X-Inertia')) {
+                    return back()->withErrors(['error' => 'Cannot void a paid order. Please process a refund instead.']);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot void a paid order. Please process a refund instead.',
+                ], 400);
             }
-            return response()->json([
-                'success' => false,
-                'message' => 'Cannot void a paid order. Please process a refund instead.',
-            ], 400);
-        }
 
-        // VOID POLICY: Only allow voiding orders before and during preparation
-        // Allow: 'pending' (not yet started), 'in_progress' (being prepared)
-        // Disallow: 'ready' (completed by kitchen), 'completed' (served to customer)
-        $allowedStatuses = ['pending', 'in_progress'];
+            // VOID POLICY: Only allow voiding orders before and during preparation
+            // Allow: 'pending' (not yet started), 'in_progress' (being prepared)
+            // Disallow: 'ready' (completed by kitchen), 'completed' (served to customer)
+            $allowedStatuses = ['pending', 'in_progress'];
 
-        if (!in_array($order->status, $allowedStatuses)) {
-            $statusMessage = match($order->status) {
-                'ready' => 'This order has been completed by the kitchen and is ready to serve. Voiding is no longer allowed.',
-                'completed' => 'This order has already been served to the customer. Voiding is no longer allowed.',
-                default => 'This order cannot be voided at its current status: ' . $order->status
-            };
+            if (!in_array($order->status, $allowedStatuses)) {
+                $statusMessage = match($order->status) {
+                    'ready' => 'This order has been completed by the kitchen and is ready to serve. Voiding is no longer allowed.',
+                    'completed' => 'This order has already been served to the customer. Voiding is no longer allowed.',
+                    default => 'This order cannot be voided at its current status: ' . $order->status
+                };
 
-            Log::warning('Void order denied - order past preparation stage', [
-                'order_id' => $orderId,
-                'order_number' => $order->order_number,
-                'current_status' => $order->status,
-                'attempted_by_cashier' => $cashier->employee_id,
-            ]);
+                Log::warning('Void order denied - order past preparation stage', [
+                    'order_id' => $orderId,
+                    'order_number' => $order->order_number,
+                    'current_status' => $order->status,
+                    'attempted_by_cashier' => $cashier->employee_id,
+                ]);
 
-            if ($request->header('X-Inertia')) {
-                return back()->withErrors(['error' => $statusMessage]);
+                if ($request->header('X-Inertia')) {
+                    return back()->withErrors(['error' => $statusMessage]);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => $statusMessage,
+                ], 400);
             }
-            return response()->json([
-                'success' => false,
-                'message' => $statusMessage,
-            ], 400);
-        }
 
-        // Validate manager access code
-        // Check both manager employees AND restaurant owner
-        $authorizer = null;
-        $authorizerType = null;
+            // Validate manager access code
+            // Check both manager employees AND restaurant owner
+            $authorizer = null;
+            $authorizerType = null;
 
-        // First, check if it's the restaurant owner's access code
-        $owner = \App\Models\User::where('id', $cashier->user_id)
-            ->where('manager_access_code', $validated['manager_access_code'])
-            ->first();
-
-        if ($owner) {
-            $authorizer = $owner;
-            $authorizerType = 'owner';
-        } else {
-            // If not owner, check for manager employee with matching access code
-            $manager = Employee::where('user_id', $cashier->user_id)
+            // First, check if it's the restaurant owner's access code
+            $owner = \App\Models\User::where('id', $cashier->user_id)
                 ->where('manager_access_code', $validated['manager_access_code'])
-                ->whereHas('role', function ($query) {
-                    $query->where('role_name', 'Manager');
-                })
-                ->where('status', 'active')
                 ->first();
 
-            if ($manager) {
-                $authorizer = $manager;
-                $authorizerType = 'manager';
+            if ($owner) {
+                $authorizer = $owner;
+                $authorizerType = 'owner';
+            } else {
+                // If not owner, check for manager employee with matching access code
+                $manager = Employee::where('user_id', $cashier->user_id)
+                    ->where('manager_access_code', $validated['manager_access_code'])
+                    ->whereHas('role', function ($query) {
+                        $query->where('role_name', 'Manager');
+                    })
+                    ->where('status', 'active')
+                    ->first();
+
+                if ($manager) {
+                    $authorizer = $manager;
+                    $authorizerType = 'manager';
+                }
             }
-        }
 
-        if (!$authorizer) {
-            if ($request->header('X-Inertia')) {
-                return back()->withErrors(['manager_access_code' => 'Invalid manager access code.']);
+            if (!$authorizer) {
+                if ($request->header('X-Inertia')) {
+                    return back()->withErrors(['manager_access_code' => 'Invalid manager access code.']);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid manager access code.',
+                ], 401);
             }
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid manager access code.',
-            ], 401);
-        }
 
-        // Void the order
-        $previousStatus = $order->status;
-        $order->update([
-            'status' => 'voided',
-            'voided_by' => $cashier->employee_id,
-            'voided_at' => now(),
-            'void_reason' => $validated['void_reason'],
-        ]);
+            // Void the order
+            $previousStatus = $order->status;
+            $order->update([
+                'status' => 'voided',
+                'voided_by' => $cashier->employee_id,
+                'voided_at' => now(),
+                'void_reason' => $validated['void_reason'],
+            ]);
 
-        // Restore ingredients to inventory for all order items
-        foreach ($order->orderItems as $orderItem) {
-            $orderItem->restoreIngredientsToInventory();
-        }
+            // Restore ingredients to inventory for all order items
+            foreach ($order->orderItems as $orderItem) {
+                $orderItem->restoreIngredientsToInventory();
+            }
 
-        // Refresh the order to get latest data and ensure relationships are loaded
-        $order->refresh();
-        $order->load(['table', 'orderItems.dish', 'orderItems.variant', 'employee']);
+            // Refresh the order to get latest data and ensure relationships are loaded
+            $order->refresh();
+            $order->load(['table', 'orderItems.dish', 'orderItems.variant', 'employee']);
 
-        Log::info('Broadcasting order void event', [
-            'order_id' => $order->order_id,
-            'order_number' => $order->order_number,
-            'restaurant_id' => $order->restaurant_id,
-            'previous_status' => $previousStatus,
-            'new_status' => $order->status,
-            'has_table' => $order->table ? 'yes' : 'no',
-            'table_name' => $order->table?->table_name,
-        ]);
+            Log::info('Broadcasting order void event', [
+                'order_id' => $order->order_id,
+                'order_number' => $order->order_number,
+                'restaurant_id' => $order->restaurant_id,
+                'previous_status' => $previousStatus,
+                'new_status' => $order->status,
+                'has_table' => $order->table ? 'yes' : 'no',
+                'table_name' => $order->table?->table_name,
+            ]);
 
-        // Broadcast the order status update
-        broadcast(new OrderStatusUpdated($order, $previousStatus))->toOthers();
+            // Broadcast the order status update
+            broadcast(new OrderStatusUpdated($order, $previousStatus))->toOthers();
 
-        Log::info('Order void broadcast completed');
+            Log::info('Order void broadcast completed');
 
-        Log::info('Order voided', [
-            'order_id' => $order->order_id,
-            'order_number' => $order->order_number,
-            'voided_by_cashier' => $cashier->employee_id,
-            'authorized_by' => $authorizerType === 'owner' ? 'Owner (ID: ' . $authorizer->id . ')' : 'Manager (ID: ' . $authorizer->employee_id . ')',
-            'authorizer_type' => $authorizerType,
-            'void_reason' => $validated['void_reason'],
-            'previous_status' => $previousStatus,
-        ]);
+            Log::info('Order voided', [
+                'order_id' => $order->order_id,
+                'order_number' => $order->order_number,
+                'voided_by_cashier' => $cashier->employee_id,
+                'authorized_by' => $authorizerType === 'owner' ? 'Owner (ID: ' . $authorizer->id . ')' : 'Manager (ID: ' . $authorizer->employee_id . ')',
+                'authorizer_type' => $authorizerType,
+                'void_reason' => $validated['void_reason'],
+                'previous_status' => $previousStatus,
+            ]);
 
             // Check if it's an Inertia request
             if ($request->header('X-Inertia')) {
@@ -940,6 +986,191 @@ class CashierController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while voiding the order: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Partially void specific dishes (order items) within an order.
+     * Restores ingredients only for the selected items.
+     */
+    public function voidOrderItems(Request $request, $orderId)
+    {
+        try {
+            // Get the authenticated cashier
+            $cashier = Auth::guard('cashier')->user();
+
+            if (!$cashier || strtolower($cashier->role->role_name) !== 'cashier') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Cashiers only.',
+                ], 403);
+            }
+
+            // Validate request
+            $validated = $request->validate([
+                'manager_access_code' => 'required|string|min:6|max:6',
+                'void_reason' => 'nullable|string|max:500',
+                'item_ids' => 'required|array|min:1',
+                'item_ids.*' => 'integer|distinct',
+            ]);
+
+            // Find the order with its items
+            $order = CustomerOrder::with(['orderItems.dish', 'orderItems.variant', 'table', 'employee'])
+                ->where('restaurant_id', $cashier->user_id)
+                ->where('order_id', $orderId)
+                ->firstOrFail();
+
+            // Reject if order already fully voided or paid
+            if ($order->status === 'voided') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This order has already been voided.',
+                ], 400);
+            }
+
+            if ($order->status === 'paid') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot void items for a paid order. Please process a refund instead.',
+                ], 400);
+            }
+
+            // Void policy: only allow partial void while order is in early stages
+            $allowedStatuses = ['pending', 'in_progress'];
+            if (!in_array($order->status, $allowedStatuses)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This order cannot be partially voided at its current status: ' . $order->status,
+                ], 400);
+            }
+
+            // Validate manager access code (same logic as full void)
+            $authorizer = null;
+            $authorizerType = null;
+
+            $owner = \App\Models\User::where('id', $cashier->user_id)
+                ->where('manager_access_code', $validated['manager_access_code'])
+                ->first();
+
+            if ($owner) {
+                $authorizer = $owner;
+                $authorizerType = 'owner';
+            } else {
+                $manager = Employee::where('user_id', $cashier->user_id)
+                    ->where('manager_access_code', $validated['manager_access_code'])
+                    ->whereHas('role', function ($query) {
+                        $query->where('role_name', 'Manager');
+                    })
+                    ->where('status', 'active')
+                    ->first();
+
+                if ($manager) {
+                    $authorizer = $manager;
+                    $authorizerType = 'manager';
+                }
+            }
+
+            if (!$authorizer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid manager access code.',
+                ], 401);
+            }
+
+            // Get the targeted order items
+            $items = $order->orderItems
+                ->whereIn('item_id', $validated['item_ids'])
+                ->values();
+
+            if ($items->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No matching order items found to void.',
+                ], 404);
+            }
+
+            // Only allow voiding items that have not been served and are still pending/preparing
+            $voidableItems = $items->filter(function ($item) {
+                return in_array($item->status, ['pending', 'preparing']) && (int) $item->served_quantity === 0;
+            });
+
+            if ($voidableItems->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Selected items cannot be voided (already served or completed).',
+                ], 400);
+            }
+
+            $previousStatus = $order->status;
+
+            DB::transaction(function () use ($order, $voidableItems, $cashier, $validated, $previousStatus) {
+                // Restore inventory and remove items
+                foreach ($voidableItems as $item) {
+                    $item->restoreIngredientsToInventory();
+                    $item->delete();
+                }
+
+                // Refresh order totals via relationships
+                $order->refresh();
+                $order->load(['orderItems.dish', 'orderItems.variant', 'table', 'employee']);
+
+                // If no items remain, mark order as fully voided
+                if ($order->orderItems->isEmpty()) {
+                    $order->update([
+                        'status' => 'voided',
+                        'voided_by' => $cashier->employee_id,
+                        'voided_at' => now(),
+                        'void_reason' => $validated['void_reason'],
+                    ]);
+                }
+            });
+
+            // Reload to get final state after transaction
+            $order->refresh();
+            $order->load(['orderItems.dish', 'orderItems.variant', 'table', 'employee']);
+
+            // If order became fully voided, broadcast status update
+            if ($order->status === 'voided') {
+                Log::info('Broadcasting order void event after item-level void', [
+                    'order_id' => $order->order_id,
+                    'order_number' => $order->order_number,
+                    'restaurant_id' => $order->restaurant_id,
+                    'previous_status' => $previousStatus,
+                    'new_status' => $order->status,
+                ]);
+
+                broadcast(new OrderStatusUpdated($order, $previousStatus))->toOthers();
+            }
+
+            Log::info('Order items voided', [
+                'order_id' => $order->order_id,
+                'order_number' => $order->order_number,
+                'voided_by_cashier' => $cashier->employee_id,
+                'item_ids' => $validated['item_ids'],
+                'void_reason' => $validated['void_reason'],
+                'order_status_after' => $order->status,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => $order->status === 'voided'
+                    ? 'All selected items were voided and the order is now fully voided.'
+                    : 'Selected items were voided successfully.',
+                'order' => $order,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Error voiding order items', [
+                'order_id' => $orderId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while voiding order items: ' . $e->getMessage(),
             ], 500);
         }
     }

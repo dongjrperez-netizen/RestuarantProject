@@ -38,7 +38,8 @@ class EmployeeController extends Controller
         }
 
         $employees = $query->paginate(15)->withQueryString();
-        $roles = Role::whereIn('role_name', ['Waiter', 'Cashier', 'Kitchen'])->get();
+        // Allow owners to create manager-level employees in addition to Waiter/Cashier/Kitchen
+        $roles = Role::whereIn('role_name', ['Manager', 'Supervisor', 'Waiter', 'Cashier', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/Employees', [
             'employees' => $employees,
@@ -51,8 +52,9 @@ class EmployeeController extends Controller
     {
         $limitService = new SubscriptionLimitService();
         $limitCheck = $limitService->canAddEmployee(Auth::user());
-
-        $roles = Role::whereIn('role_name', ['Waiter', 'Cashier', 'Kitchen'])->get();
+ 
+        // Allow creating manager-level employees
+        $roles = Role::whereIn('role_name', ['Manager', 'Supervisor', 'Waiter', 'Cashier', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/CreateEmployee', [
             'roles' => $roles,
@@ -81,12 +83,14 @@ class EmployeeController extends Controller
             'date_of_birth' => 'required|date|before:today',
             'gender' => 'required|in:male,female,other',
             'role_id' => 'required|exists:roles,id',
+            'manager_access_code' => ['nullable', 'digits:6'],
         ], [
             'firstname.required' => 'First name is required.',
             'firstname.regex' => 'First name can only contain letters, spaces, hyphens, and apostrophes.',
             'lastname.required' => 'Last name is required.',
             'lastname.regex' => 'Last name can only contain letters, spaces, hyphens, and apostrophes.',
             'middlename.regex' => 'Middle name can only contain letters, spaces, hyphens, and apostrophes.',
+            'manager_access_code.digits' => 'Manager access code must be exactly 6 digits.',
         ]);
 
         $validated['password'] = Hash::make($validated['password']);
@@ -113,9 +117,10 @@ class EmployeeController extends Controller
     public function edit(Employee $employee)
     {
         $this->authorizeEmployeeAccess($employee);
-
+ 
         $employee->load(['role']);
-        $roles = Role::whereIn('role_name', ['Waiter', 'Cashier', 'Kitchen'])->get();
+        // Allow editing manager-level employees
+        $roles = Role::whereIn('role_name', ['Manager', 'Supervisor', 'Waiter', 'Cashier', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/EditEmployee', [
             'employee' => $employee,
@@ -142,6 +147,9 @@ class EmployeeController extends Controller
             'gender' => 'required|in:male,female,other',
             'role_id' => 'required|exists:roles,id',
             'status' => 'required|in:active,inactive',
+            'manager_access_code' => ['nullable', 'digits:6'],
+        ], [
+            'manager_access_code.digits' => 'Manager access code must be exactly 6 digits.',
         ]);
 
         if ($request->filled('password')) {

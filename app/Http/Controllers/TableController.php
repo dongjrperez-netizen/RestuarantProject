@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Validation\Rule;
 
 class TableController extends Controller
 {
@@ -54,7 +55,14 @@ class TableController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'table_number' => 'required|string|max:10|unique:tables,table_number',
+            'table_number' => [
+                'required',
+                'string',
+                'max:10',
+                Rule::unique('tables', 'table_number')->where(function ($query) {
+                    return $query->where('user_id', Auth::id());
+                }),
+            ],
             'table_name' => 'required|string|max:255',
             'seats' => 'required|integer|min:1|max:20',
             'status' => 'required|in:available,occupied,reserved,maintenance',
@@ -94,7 +102,16 @@ class TableController extends Controller
         $this->authorize('update', $table);
 
         $validated = $request->validate([
-            'table_number' => 'required|string|max:10|unique:tables,table_number,' . $table->id,
+            'table_number' => [
+                'required',
+                'string',
+                'max:10',
+                Rule::unique('tables', 'table_number')
+                    ->ignore($table->id)
+                    ->where(function ($query) use ($table) {
+                        return $query->where('user_id', $table->user_id);
+                    }),
+            ],
             'table_name' => 'required|string|max:255',
             'seats' => 'required|integer|min:1|max:20',
             'status' => 'required|in:available,occupied,reserved,maintenance',

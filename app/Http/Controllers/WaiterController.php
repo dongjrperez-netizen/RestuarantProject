@@ -317,6 +317,34 @@ class WaiterController extends Controller
         ]);
     }
 
+    /**
+     * Take-out ordering: skip table selection and route directly to order screen
+     * using a dedicated "Take Out" virtual table per restaurant.
+     */
+    public function takeOut()
+    {
+        $employee = Auth::guard('waiter')->user();
+
+        if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
+            abort(403, 'Access denied. Waiters only.');
+        }
+
+        // Ensure a dedicated "Take Out" table exists for this restaurant/user
+        $takeOutTable = Table::firstOrCreate(
+            [
+                'user_id' => $employee->user_id,
+                'table_number' => 'TO',
+            ],
+            [
+                'table_name' => 'Take Out',
+                'seats' => 0,
+                'status' => 'available',
+            ]
+        );
+
+        return redirect()->route('waiter.orders.create', ['tableId' => $takeOutTable->id]);
+    }
+
     public function createOrder(Request $request, $tableId)
     {
         $employee = Auth::guard('waiter')->user();
@@ -337,9 +365,25 @@ class WaiterController extends Controller
             ->where('user_id', $employee->user_id)
             ->firstOrFail();
 
-        // Check for existing active order for this table
+        // Special handling for Take Out virtual table
+        $isTakeOutTable = ($table->table_number === 'TO') || ($table->table_name === 'Take Out');
+
+        // Check for existing active order
         $existingOrder = null;
-        if ($table->status === 'occupied') {
+
+        // If an explicit orderId is provided (e.g. from Take Out Orders "Add Order" button),
+        // always try to load that specific order regardless of table type.
+        if ($request->has('orderId')) {
+            $orderId = $request->get('orderId');
+            $existingOrder = CustomerOrder::where('order_id', $orderId)
+                ->where('table_id', $tableId)
+                ->where('restaurant_id', $employee->user_id)
+                ->whereIn('status', ['pending', 'in_progress', 'ready'])
+                ->with(['orderItems.dish'])
+                ->latest()
+                ->first();
+        } elseif (!$isTakeOutTable && $table->status === 'occupied') {
+            // For dine-in tables without explicit orderId, fall back to the latest active order
             $existingOrder = CustomerOrder::where('table_id', $tableId)
                 ->whereIn('status', ['pending', 'in_progress', 'ready'])
                 ->with(['orderItems.dish'])
@@ -461,6 +505,7 @@ public function storeOrder(Request $request)
             'table_id' => 'required|exists:tables,id',
             'customer_name' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
+            'existing_order_id' => 'nullable|integer|exists:customer_orders,order_id',
             'order_items' => 'required|array|min:1',
             'order_items.*.dish_id' => 'required|exists:dishes,dish_id',
             'order_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
@@ -475,17 +520,45 @@ public function storeOrder(Request $request)
             ->where('user_id', $employee->user_id)
             ->firstOrFail();
 
-        // Check for existing active order on this table (regardless of table status)
-        $existingOrder = CustomerOrder::where('table_id', $validated['table_id'])
-            ->whereIn('status', ['pending', 'in_progress', 'ready'])
-            ->latest()
-            ->first();
+        // Special handling for Take Out virtual table
+        $isTakeOutTable = ($table->table_number === 'TO') || ($table->table_name === 'Take Out');
 
-        DB::transaction(function () use ($validated, $employee, $table, $existingOrder, $restaurantId) {
+        // Determine existing order to extend (if any)
+        $existingOrder = null;
+
+        // If an explicit existing_order_id is provided (e.g. when adding to an existing Take Out order),
+        // prefer that specific order.
+        if (!empty($validated['existing_order_id'])) {
+            $existingOrder = CustomerOrder::where('order_id', $validated['existing_order_id'])
+                ->where('table_id', $validated['table_id'])
+                ->where('restaurant_id', $employee->user_id)
+                ->whereIn('status', ['pending', 'in_progress', 'ready'])
+                ->latest()
+                ->first();
+        } else {
+            // Otherwise, fall back to the latest active order for this table
+            $existingOrder = CustomerOrder::where('table_id', $validated['table_id'])
+                ->whereIn('status', ['pending', 'in_progress', 'ready'])
+                ->latest()
+                ->first();
+
+            // For the special Take Out table without explicit existing_order_id, always create a new order
+            if ($isTakeOutTable) {
+                $existingOrder = null;
+            }
+        }
+
+        DB::transaction(function () use ($validated, $employee, $table, $existingOrder, $restaurantId, $isTakeOutTable) {
 
             if ($existingOrder) {
                 // Add items to existing order
                 $order = $existingOrder;
+
+                // If the order was previously marked as ready but new items are being added,
+                // reset the order status so the kitchen can process the new dishes again.
+                if ($order->status === 'ready') {
+                    $order->status = 'pending';
+                }
 
                 // Check if order doesn't have reservation but table has active reservation
                 if (!$order->reservation_id) {
@@ -609,9 +682,14 @@ public function storeOrder(Request $request)
                 }
             }
 
-            // Update table status to occupied if it was available
-            if ($table->status === 'available') {
+            // Update table status to occupied if it was available (dine-in only)
+            // Don't update status for Take Out virtual table
+            if (!$isTakeOutTable && $table->status === 'available') {
                 $table->update(['status' => 'occupied']);
+            }
+            // Keep Take Out table always available
+            if ($isTakeOutTable) {
+                $table->update(['status' => 'available']);
             }
 
             // Recalculate order totals
@@ -624,8 +702,12 @@ public function storeOrder(Request $request)
             }
         });
 
+        // After storing the order, redirect based on table type.
+        // For Take Out orders, go to the Take Out Orders list; for dine-in, go back to dashboard.
+        $redirectRoute = $isTakeOutTable ? 'waiter.take-out-orders' : 'waiter.dashboard';
+
         return redirect()
-            ->route('waiter.dashboard')
+            ->route($redirectRoute)
             ->with('success', $existingOrder ? 'Items added to existing order successfully!' : 'Order created successfully!');
     }
 
@@ -803,8 +885,112 @@ public function storeOrder(Request $request)
     }
 
     /**
+     * Mark all items in a specific order as served.
+     * This is used when the waiter clicks the "Served" button for a particular PO/order.
+     */
+    public function markOrderFullyServed(Request $request, $orderId)
+    {
+        $employee = Auth::guard('waiter')->user();
+
+        if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
+            return response()->json(['error' => 'Access denied. Waiters only.'], 403);
+        }
+
+        try {
+            $order = CustomerOrder::with(['orderItems'])
+                ->where('order_id', $orderId)
+                ->where('restaurant_id', $employee->user_id)
+                ->whereNotIn('status', ['paid', 'cancelled', 'completed', 'voided'])
+                ->first();
+
+            if (!$order) {
+                return response()->json(['error' => 'Order not found'], 404);
+            }
+
+            foreach ($order->orderItems as $item) {
+                $item->served_quantity = $item->quantity;
+                $item->status = 'served';
+                $item->save();
+            }
+
+            // Do NOT change the overall order status here; cashier and other flows
+            // rely on existing status (e.g. 'ready') to show unpaid bills.
+            // We only broadcast that items were served.
+            broadcast(new OrderServed($order))->toOthers();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order marked as served successfully',
+                'order' => [
+                    'order_id' => $order->order_id,
+                    'status' => $order->status,
+                    'items' => $order->orderItems->map(function ($item) {
+                        return [
+                            'item_id' => $item->item_id,
+                            'quantity' => $item->quantity,
+                            'served_quantity' => $item->served_quantity,
+                            'status' => $item->status,
+                        ];
+                    }),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error marking order as fully served:', [
+                'error' => $e->getMessage(),
+                'order_id' => $orderId,
+                'employee_id' => $employee->employee_id,
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to mark order as served',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Check dish ingredient availability considering current cart items
      */
+    public function takeOutOrders()
+    {
+        // Get the authenticated employee
+        $employee = Auth::guard('waiter')->user();
+
+        if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
+            abort(403, 'Access denied. Waiters only.');
+        }
+
+        // Fetch active take-out orders (attached to the special Take Out table)
+        $orders = CustomerOrder::with(['table'])
+            ->where('restaurant_id', $employee->user_id)
+            ->whereIn('status', ['pending', 'in_progress', 'ready'])
+            ->whereHas('table', function ($query) use ($employee) {
+                $query->where('user_id', $employee->user_id)
+                      ->where('table_number', 'TO');
+            })
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($order) {
+                return [
+                    'order_id' => $order->order_id,
+                    'order_number' => $order->order_number,
+                    'status' => $order->status,
+                    'customer_name' => $order->customer_name,
+                    'total_amount' => $order->total_amount,
+                    'created_at' => $order->created_at,
+                    'table_id' => optional($order->table)->id,
+                    'table_name' => optional($order->table)->table_name,
+                    'table_number' => optional($order->table)->table_number,
+                ];
+            });
+
+        return Inertia::render('Waiter/TakeOutOrders', [
+            'orders' => $orders,
+            'employee' => $employee->load('role'),
+            'readyOrders' => $this->getReadyOrders($employee->user_id),
+        ]);
+    }
+
     public function checkDishAvailability(Request $request)
     {
         $employee = Auth::guard('waiter')->user();

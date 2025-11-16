@@ -306,10 +306,10 @@ const formatCurrency = (amount: number) => {
                 <h3 class="text-lg font-semibold">Subscription Plans</h3>
                 <Dialog v-model:open="showPlanDialog">
                   <DialogTrigger as-child>
-                    <Button @click="showPlanDialog = true; resetPlanForm()">
+                    <!-- <Button @click="showPlanDialog = true; resetPlanForm()">
                       <Plus class="h-4 w-4 mr-2" />
                       Add Plan
-                    </Button>
+                    </Button> -->
                   </DialogTrigger>
                   <DialogContent class="max-w-2xl">
                     <DialogHeader>

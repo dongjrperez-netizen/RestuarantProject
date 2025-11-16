@@ -17,14 +17,15 @@ interface PurchaseOrderItem {
   };
   ordered_quantity: number;
   received_quantity: number;
+  supplier_delivered_quantity?: number;
   unit_price: number;
   total_price: number;
   unit_of_measure: string;
-  notes?: string;
   quality_rating?: string;
-  condition_notes?: string;
   has_discrepancy?: boolean;
+  condition_notes?: string;
   discrepancy_reason?: string;
+  notes?: string;
 }
 
 interface PurchaseOrder {
@@ -34,20 +35,23 @@ interface PurchaseOrder {
   order_date: string;
   expected_delivery_date?: string;
   actual_delivery_date?: string;
-  delivery_condition?: string;
-  received_by?: string;
-  receiving_notes?: string;
   subtotal: number;
-  tax_amount: number;
-  shipping_amount: number;
-  discount_amount: number;
   total_amount: number;
   notes?: string;
   delivery_instructions?: string;
-  supplier: {
-    supplier_id: number;
-    supplier_name: string;
-    contact_person?: string;
+  delivery_condition?: string;
+  received_by?: string | null;
+  receiving_notes?: string | null;
+  created_by?: {
+    name: string;
+  } | null;
+  created_by_employee?: {
+    full_name: string;
+  } | null;
+  approved_by?: {
+    name: string;
+  } | null;
+  supplier?: {
     phone?: string;
     email?: string;
   } | null;
@@ -79,14 +83,30 @@ const submitForm = useForm({});
 const approveForm = useForm({});
 const cancelForm = useForm({});
 
-const getStatusBadge = (status: string) => {
+const getStatusBadge = (order: PurchaseOrder) => {
+  const status = order.status;
+  const receivedBy = order.received_by;
+
+  // Derived statuses for supplier vs owner
+  if (status === 'partially_delivered') {
+    if (!receivedBy) {
+      return { variant: 'warning' as const, label: 'Supplier Partial  Awaiting Receive' };
+    }
+    return { variant: 'default' as const, label: 'Partially Received (Owner)' };
+  }
+
+  if (status === 'delivered') {
+    if (!receivedBy) {
+      return { variant: 'warning' as const, label: 'Supplier Delivered  Awaiting Receive' };
+    }
+    return { variant: 'success' as const, label: 'Completed (Owner)' };
+  }
+
   const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning'; label: string }> = {
     'draft': { variant: 'secondary', label: 'Draft' },
     'pending': { variant: 'default', label: 'Pending' },
     'sent': { variant: 'default', label: 'Sent' },
     'confirmed': { variant: 'success', label: 'Confirmed' },
-    'partially_delivered': { variant: 'warning', label: 'Partially Delivered' },
-    'delivered': { variant: 'success', label: 'Delivered' },
     'cancelled': { variant: 'destructive', label: 'Cancelled' }
   };
   
@@ -176,8 +196,8 @@ const canReceiveDelivery = computed(() => {
           <p class="text-muted-foreground">View and manage purchase order details</p>
         </div>
         <div class="flex space-x-2">
-          <Badge :variant="getStatusBadge(purchaseOrder.status).variant" class="text-sm px-3 py-1">
-            {{ getStatusBadge(purchaseOrder.status).label }}
+          <Badge :variant="getStatusBadge(purchaseOrder).variant" class="text-sm px-3 py-1">
+            {{ getStatusBadge(purchaseOrder).label }}
           </Badge>
         </div>
       </div>
@@ -253,9 +273,36 @@ const canReceiveDelivery = computed(() => {
               <div>{{ formatDate(purchaseOrder.actual_delivery_date) }}</div>
             </div>
 
-            <div v-if="purchaseOrder.created_by">
+            <!-- Owner Receive Status -->
+            <div v-if="['partially_delivered', 'delivered'].includes(purchaseOrder.status)">
+              <label class="text-sm font-medium text-muted-foreground">Owner Receive Status</label>
+              <div class="text-sm">
+                <template v-if="!purchaseOrder.received_by">
+                  <span class="text-amber-700">
+                    Supplier has marked this order as 
+                    <strong>{{ purchaseOrder.status === 'delivered' ? 'delivered' : 'partially delivered' }}</strong>.
+                    The owner has not recorded receipt yet.
+                  </span>
+                </template>
+                <template v-else>
+                  <span>
+                    Received by <strong>{{ purchaseOrder.received_by }}</strong>
+                    <span v-if="purchaseOrder.actual_delivery_date">
+                      on {{ formatDate(purchaseOrder.actual_delivery_date) }}
+                    </span>
+                    <span v-else>
+                      (date not recorded)
+                    </span>.
+                  </span>
+                </template>
+              </div>
+            </div>
+
+            <div v-if="purchaseOrder.created_by_employee || purchaseOrder.created_by">
               <label class="text-sm font-medium text-muted-foreground">Created By</label>
-              <div>{{ purchaseOrder.created_by.name }}</div>
+              <div>
+                {{ purchaseOrder.created_by_employee?.full_name ?? purchaseOrder.created_by?.name }}
+              </div>
             </div>
 
             <div v-if="purchaseOrder.approved_by">
@@ -356,22 +403,51 @@ const canReceiveDelivery = computed(() => {
                   {{ item.ordered_quantity }}
                 </TableCell>
                 <TableCell>
-                  <div class="flex items-center space-x-2">
-                    <span>{{ item.received_quantity }}</span>
-                    <Badge 
-                      v-if="item.received_quantity > 0 && item.received_quantity < item.ordered_quantity"
-                      variant="secondary"
-                      class="text-xs"
-                    >
-                      Partial
-                    </Badge>
-                    <Badge 
-                      v-else-if="item.received_quantity >= item.ordered_quantity"
-                      variant="default"
-                      class="text-xs"
-                    >
-                      Complete
-                    </Badge>
+                  <div class="flex flex-col space-y-1">
+                    <div class="flex items-center space-x-2">
+                      <span>
+                        <!-- Prefer actual received quantity; fall back to supplier-delivered quantity for visibility -->
+                        {{ item.received_quantity > 0
+                          ? item.received_quantity
+                          : (item.supplier_delivered_quantity ?? 0)
+                        }}
+                      </span>
+                      <!-- Owner/restaurant receive status -->
+                      <Badge 
+                        v-if="item.received_quantity > 0 && item.received_quantity < item.ordered_quantity"
+                        variant="secondary"
+                        class="text-xs"
+                      >
+                        Partial (Owner)
+                      </Badge>
+                      <Badge 
+                        v-else-if="item.received_quantity >= item.ordered_quantity && item.received_quantity > 0"
+                        variant="default"
+                        class="text-xs"
+                      >
+                        Complete (Owner)
+                      </Badge>
+                    </div>
+                    <!-- Supplier-delivered status, when owner hasn't processed receive yet -->
+                    <div v-if="item.received_quantity === 0 && (item.supplier_delivered_quantity ?? 0) > 0" class="flex items-center space-x-2 text-xs text-muted-foreground">
+                      <span>
+                        Supplier: {{ item.supplier_delivered_quantity }}/{{ item.ordered_quantity }} {{ item.unit_of_measure }}
+                      </span>
+                      <Badge 
+                        v-if="item.supplier_delivered_quantity! < item.ordered_quantity"
+                        variant="secondary"
+                        class="text-xs"
+                      >
+                        Supplier Partial
+                      </Badge>
+                      <Badge 
+                        v-else
+                        variant="default"
+                        class="text-xs"
+                      >
+                        Supplier Complete
+                      </Badge>
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell>

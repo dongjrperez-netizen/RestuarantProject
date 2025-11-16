@@ -19,10 +19,17 @@ interface PurchaseOrderItem {
   };
   ordered_quantity: number;
   received_quantity: number;
+  supplier_delivered_quantity?: number; // outstanding delivered but not yet received
   unit_price: number;
   total_price: number;
   unit_of_measure: string;
   notes?: string;
+}
+
+interface DeliveredItem {
+  purchase_order_item_id: number;
+  ordered_quantity: number;
+  delivered_quantity: number;
 }
 
 interface PurchaseOrder {
@@ -34,6 +41,7 @@ interface PurchaseOrder {
   actual_delivery_date?: string;
   subtotal: number;
   total_amount: number;
+  received_by?: string | null;
   notes?: string;
   delivery_instructions?: string;
   restaurant: {
@@ -59,6 +67,36 @@ const showConfirmDialog = ref(false);
 const showRejectDialog = ref(false);
 const showDeliveredDialog = ref(false);
 
+const toNumber = (value: unknown): number => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+};
+
+const getRemainingQuantity = (item: PurchaseOrderItem) => {
+  const ordered = toNumber(item.ordered_quantity);
+  const delivered = toNumber(item.supplier_delivered_quantity);
+  const remaining = ordered - delivered;
+  return remaining > 0 ? remaining : 0;
+};
+
+const deliveredItems = ref<DeliveredItem[]>(
+  props.purchaseOrder.items.map(item => ({
+    purchase_order_item_id: item.purchase_order_item_id,
+    ordered_quantity: item.ordered_quantity,
+    delivered_quantity: getRemainingQuantity(item),
+  }))
+);
+
+const getMaxDeliverable = (row: DeliveredItem) => {
+  const base = props.purchaseOrder.items.find(i => i.purchase_order_item_id === row.purchase_order_item_id);
+  if (!base) return row.ordered_quantity;
+  return getRemainingQuantity(base);
+};
+
 const confirmForm = useForm({
   expected_delivery_date: props.purchaseOrder.expected_delivery_date || '',
   notes: ''
@@ -70,7 +108,9 @@ const rejectForm = useForm({
 
 const deliveredForm = useForm({
   delivery_date: new Date().toISOString().split('T')[0],
-  delivery_notes: ''
+  delivery_type: 'full' as 'full' | 'partial',
+  delivery_notes: '',
+  items: deliveredItems.value,
 });
 
 const getStatusBadge = (status: string) => {
@@ -105,8 +145,17 @@ const canReject = (status: string) => {
   return ['sent', 'pending'].includes(status);
 };
 
-const canMarkDelivered = (status: string) => {
-  return status === 'confirmed';
+const canMarkDelivered = (order: PurchaseOrder) => {
+  const status = order.status;
+
+  // If the owner has already fully received this order, supplier should no longer mark it as delivered
+  const fullyReceivedByOwner = status === 'delivered' && !!order.received_by;
+  if (fullyReceivedByOwner) {
+    return false;
+  }
+
+  // Allow marking delivered when confirmed or already partially delivered
+  return ['confirmed', 'partially_delivered'].includes(status);
 };
 
 const confirmOrder = () => {
@@ -127,11 +176,54 @@ const rejectOrder = () => {
   });
 };
 
+const openDeliveredDialog = () => {
+  // Always use today's date for delivery date
+  deliveredForm.delivery_date = new Date().toISOString().split('T')[0];
+
+  // Refresh remaining quantities each time dialog is opened
+  deliveredItems.value = props.purchaseOrder.items.map(item => ({
+    purchase_order_item_id: item.purchase_order_item_id,
+    ordered_quantity: item.ordered_quantity,
+    delivered_quantity: getRemainingQuantity(item),
+  }));
+  showDeliveredDialog.value = true;
+};
+
 const markDelivered = () => {
+  // Derive full vs partial based on cumulative delivered quantities (previous + this batch)
+  const items = deliveredItems.value;
+  const allFull = items.every(row => {
+    const base = props.purchaseOrder.items.find(i => i.purchase_order_item_id === row.purchase_order_item_id);
+    if (!base) return false;
+    const alreadyDelivered = toNumber(base.supplier_delivered_quantity);
+    const cumulative = alreadyDelivered + row.delivered_quantity;
+    return cumulative >= toNumber(base.ordered_quantity) && cumulative > 0;
+  });
+  deliveredForm.delivery_type = allFull ? 'full' : 'partial';
+
+  // Build a concise summary into delivery_notes (e.g. "Chicken: 5/10 kg; Rice: 10/10 kg")
+  deliveredForm.delivery_notes = items
+    .map(item => {
+      const base = props.purchaseOrder.items.find(i => i.purchase_order_item_id === item.purchase_order_item_id);
+      if (!base) return null;
+      return `${base.ingredient.ingredient_name}: ${item.delivered_quantity}/${item.ordered_quantity} ${base.unit_of_measure}`;
+    })
+    .filter((s): s is string => !!s)
+    .join('; ');
+
+  // Sync items into the form payload (backend currently ignores, but we send for future use)
+  (deliveredForm as any).items = items;
+
   deliveredForm.post(`/supplier/purchase-orders/${props.purchaseOrder.purchase_order_id}/mark-delivered`, {
     onSuccess: () => {
       showDeliveredDialog.value = false;
       deliveredForm.reset();
+      // Re-init deliveredItems after reset so dialog starts with remaining quantities next time
+      deliveredItems.value = props.purchaseOrder.items.map(item => ({
+        purchase_order_item_id: item.purchase_order_item_id,
+        ordered_quantity: item.ordered_quantity,
+        delivered_quantity: getRemainingQuantity(item),
+      }));
     }
   });
 };
@@ -163,7 +255,7 @@ const markDelivered = () => {
       </div>
 
       <!-- Action Buttons -->
-      <div v-if="canConfirm(purchaseOrder.status) || canReject(purchaseOrder.status) || canMarkDelivered(purchaseOrder.status)" class="flex flex-col sm:flex-row gap-2">
+      <div v-if="canConfirm(purchaseOrder.status) || canReject(purchaseOrder.status) || canMarkDelivered(purchaseOrder)" class="flex flex-col sm:flex-row gap-2">
         <Button 
           v-if="canConfirm(purchaseOrder.status)"
           @click="showConfirmDialog = true"
@@ -181,15 +273,15 @@ const markDelivered = () => {
           <XCircle class="h-4 w-4 mr-2" />
           Reject Order
         </Button>
-<!-- 
+
         <Button 
-          v-if="canMarkDelivered(purchaseOrder.status)"
-          @click="showDeliveredDialog = true"
+          v-if="canMarkDelivered(purchaseOrder)"
+          @click="openDeliveredDialog"
           class="bg-blue-600 hover:bg-blue-700"
         >
           <Package class="h-4 w-4 mr-2" />
           Mark as Delivered
-        </Button> -->
+        </Button>
       </div>
 
       <div class="grid gap-4 md:gap-6 lg:grid-cols-3">
@@ -207,7 +299,8 @@ const markDelivered = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Ingredient</TableHead>
-                      <TableHead>Quantity</TableHead>
+                      <TableHead>Ordered</TableHead>
+                      <TableHead>Delivered in Restaurant</TableHead>
                       <TableHead>Unit Price</TableHead>
                       <TableHead>Unit</TableHead>
                       <TableHead>Total</TableHead>
@@ -220,7 +313,10 @@ const markDelivered = () => {
                         {{ item.ingredient.ingredient_name }}
                       </TableCell>
                       <TableCell>
-                        {{ item.ordered_quantity }}
+                        {{ toNumber(item.ordered_quantity) }} {{ item.unit_of_measure }}
+                      </TableCell>
+                      <TableCell>
+                        {{ toNumber(item.supplier_delivered_quantity) }} {{ item.unit_of_measure }}
                       </TableCell>
                       <TableCell>
                         {{ formatCurrency(item.unit_price) }}
@@ -247,8 +343,12 @@ const markDelivered = () => {
 
                   <div class="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <div class="text-muted-foreground text-xs">Quantity</div>
-                      <div class="font-medium">{{ item.ordered_quantity }} {{ item.unit_of_measure }}</div>
+                      <div class="text-muted-foreground text-xs">Ordered</div>
+                      <div class="font-medium">{{ toNumber(item.ordered_quantity) }} {{ item.unit_of_measure }}</div>
+                    </div>
+                    <div>
+                      <div class="text-muted-foreground text-xs">Delivered in Restaurant</div>
+                      <div class="font-medium">{{ toNumber(item.supplier_delivered_quantity) }} {{ item.unit_of_measure }}</div>
                     </div>
                     <div>
                       <div class="text-muted-foreground text-xs">Unit Price</div>
@@ -457,16 +557,109 @@ const markDelivered = () => {
         
         <form @submit.prevent="markDelivered" class="space-y-4">
           <div>
-            <Label for="delivery_date">Delivery Date *</Label>
-            <Input
-              id="delivery_date"
-              v-model="deliveredForm.delivery_date"
-              type="date"
-              :max="new Date().toISOString().split('T')[0]"
-              required
-            />
-            <div v-if="deliveredForm.errors.delivery_date" class="text-sm text-red-600 mt-1">
-              {{ deliveredForm.errors.delivery_date }}
+            <Label>Delivery Date</Label>
+            <div class="mt-1 text-sm font-medium">
+              {{ deliveredForm.delivery_date }}
+            </div>
+          </div>
+
+          <!-- Per-item delivered quantities -->
+          <div>
+            <Label class="mb-2 block">Delivered Quantities per Item</Label>
+            <div class="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ingredient</TableHead>
+                    <TableHead>Ordered</TableHead>
+                    <TableHead>Delivered Now</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow
+                    v-for="row in deliveredItems"
+                    :key="row.purchase_order_item_id"
+                  >
+                    <TableCell class="font-medium">
+                      {{ purchaseOrder.items.find(i => i.purchase_order_item_id === row.purchase_order_item_id)?.ingredient.ingredient_name }}
+                    </TableCell>
+                    <TableCell>
+                      {{ row.ordered_quantity }}
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        :max="getMaxDeliverable(row)"
+                        step="0.01"
+                        v-model.number="row.delivered_quantity"
+                        class="w-28"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <span class="text-xs px-2 py-1 rounded-full"
+                            :class="{
+                              'bg-secondary text-secondary-foreground': row.delivered_quantity === 0,
+                              'bg-yellow-100 text-yellow-800': row.delivered_quantity > 0 && row.delivered_quantity < row.ordered_quantity,
+                              'bg-green-100 text-green-800': row.delivered_quantity >= row.ordered_quantity,
+                            }">
+                        <template v-if="row.delivered_quantity === 0">
+                          Not delivered
+                        </template>
+                        <template v-else-if="row.delivered_quantity < row.ordered_quantity">
+                          Partial
+                        </template>
+                        <template v-else>
+                          Complete
+                        </template>
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+
+            <!-- Mobile view -->
+            <div class="md:hidden space-y-3 mt-2">
+              <div
+                v-for="row in deliveredItems"
+                :key="row.purchase_order_item_id"
+                class="border rounded-lg p-3"
+              >
+                <div class="font-semibold mb-1">
+                  {{ purchaseOrder.items.find(i => i.purchase_order_item_id === row.purchase_order_item_id)?.ingredient.ingredient_name }}
+                </div>
+                <div class="text-xs text-muted-foreground mb-1">
+                  Ordered: {{ row.ordered_quantity }}
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    :max="getMaxDeliverable(row)"
+                    step="0.01"
+                    v-model.number="row.delivered_quantity"
+                    class="w-24"
+                  />
+                  <span class="text-xs px-2 py-1 rounded-full"
+                        :class="{
+                          'bg-secondary text-secondary-foreground': row.delivered_quantity === 0,
+                          'bg-yellow-100 text-yellow-800': row.delivered_quantity > 0 && row.delivered_quantity < row.ordered_quantity,
+                          'bg-green-100 text-green-800': row.delivered_quantity >= row.ordered_quantity,
+                        }">
+                    <template v-if="row.delivered_quantity === 0">
+                      Not delivered
+                    </template>
+                    <template v-else-if="row.delivered_quantity < row.ordered_quantity">
+                      Partial
+                    </template>
+                    <template v-else>
+                      Complete
+                    </template>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -475,7 +668,7 @@ const markDelivered = () => {
             <Textarea
               id="delivery_notes"
               v-model="deliveredForm.delivery_notes"
-              placeholder="Any notes about the delivery..."
+              placeholder="Any notes about the delivery... (e.g. which items are pending or backordered)"
               rows="3"
             />
             <div v-if="deliveredForm.errors.delivery_notes" class="text-sm text-red-600 mt-1">
@@ -488,7 +681,7 @@ const markDelivered = () => {
               Cancel
             </Button>
             <Button type="submit" :disabled="deliveredForm.processing">
-              {{ deliveredForm.processing ? 'Marking Delivered...' : 'Mark as Delivered' }}
+              {{ deliveredForm.processing ? 'Saving...' : 'Save Delivery Status' }}
             </Button>
           </div>
         </form>

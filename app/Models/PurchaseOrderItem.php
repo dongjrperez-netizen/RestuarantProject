@@ -19,6 +19,7 @@ class PurchaseOrderItem extends Model
         'ingredient_id',
         'ordered_quantity',
         'received_quantity',
+        'supplier_delivered_quantity',
         'unit_price',
         'total_price',
         'unit_of_measure',
@@ -32,6 +33,7 @@ class PurchaseOrderItem extends Model
     protected $casts = [
         'ordered_quantity' => 'decimal:2',
         'received_quantity' => 'decimal:2',
+        'supplier_delivered_quantity' => 'decimal:2',
         'unit_price' => 'decimal:2',
         'total_price' => 'decimal:2',
         'has_discrepancy' => 'boolean',

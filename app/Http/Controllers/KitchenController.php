@@ -22,7 +22,7 @@ class KitchenController extends Controller
             abort(403, 'Access denied. Kitchen staff only.');
         }
 
-        $restaurantId = $employee->user_id; // Employee belongs to their specific restaurant
+        $restaurantOwnerId = $employee->user_id; // Employee belongs to a specific restaurant owner
 
         try {
             // Single optimized query with all relationships loaded eagerly
@@ -35,7 +35,7 @@ class KitchenController extends Controller
                 },
                 'employee'
             ])
-            ->where('restaurant_id', $restaurantId)
+            ->where('restaurant_id', $restaurantOwnerId)
             ->whereIn('status', ['pending', 'confirmed', 'in_progress', 'ready'])
             ->whereDate('created_at', today())
             ->whereHas('orderItems', function ($query) {
@@ -52,7 +52,7 @@ class KitchenController extends Controller
                 SUM(CASE WHEN status = "in_progress" THEN 1 ELSE 0 END) as in_progress_orders,
                 SUM(CASE WHEN status = "ready" THEN 1 ELSE 0 END) as ready_orders
             ')
-            ->where('restaurant_id', $restaurantId)
+            ->where('restaurant_id', $restaurantOwnerId)
             ->whereDate('created_at', today())
             ->first();
 
@@ -83,7 +83,10 @@ class KitchenController extends Controller
         $ingredients = [];
         $types = [];
         try {
-            $ingredients = \App\Models\Ingredients::where('restaurant_id', $restaurantId)
+            // Ingredients are linked to restaurant_data (restaurant_id), which is linked to the owner (user_id)
+            $ingredients = \App\Models\Ingredients::whereHas('restaurant', function ($query) use ($employee) {
+                    $query->where('user_id', $employee->user_id);
+                })
                 ->orderBy('ingredient_name')
                 ->get(['ingredient_id', 'ingredient_name', 'base_unit']);
             $types = \App\Models\DamageSpoilageLog::getTypes();

@@ -457,7 +457,7 @@ class ReportsController extends Controller
     {
         $query = PurchaseOrder::where('restaurant_id', $restaurantId)
             ->whereBetween('created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
-            ->with(['supplier', 'items.ingredient']);
+            ->with(['supplier', 'items.ingredient', 'createdBy', 'createdByEmployee', 'approvedBy']);
 
         if ($status !== 'all') {
             $query->where('status', $status);

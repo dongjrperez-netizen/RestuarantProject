@@ -1,8 +1,9 @@
 <?php
 
 namespace App\Models;
-
+ 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Employee;
 
 class PurchaseOrder extends Model
 {
@@ -33,6 +34,7 @@ class PurchaseOrder extends Model
         'received_by',
         'receiving_notes',
         'created_by_user_id',
+        'created_by_employee_id',
         'approved_by_user_id',
         'approved_at',
     ];
@@ -76,6 +78,11 @@ class PurchaseOrder extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function createdByEmployee()
+    {
+        return $this->belongsTo(Employee::class, 'created_by_employee_id', 'employee_id');
     }
 
     public function approvedBy()

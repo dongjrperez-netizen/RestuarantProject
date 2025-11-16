@@ -28,6 +28,7 @@ interface PurchaseOrderItem {
   };
   ordered_quantity: number;
   received_quantity: number;
+  supplier_delivered_quantity?: number;
   unit_price: number;
   total_price: number;
   unit_of_measure: string;
@@ -77,7 +78,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 const receiveItems = ref<ReceiveItem[]>(
   props.purchaseOrder.items.map(item => ({
     purchase_order_item_id: item.purchase_order_item_id,
-    received_quantity: 0,
+    // Pre-fill with supplier-delivered quantity minus already received, so owner can confirm
+    received_quantity: Math.max((item.supplier_delivered_quantity ?? 0) - item.received_quantity, 0),
     quality_rating: '',
     condition_notes: '',
     has_discrepancy: false,
@@ -125,7 +127,19 @@ const formatCurrency = (amount: number) => {
 };
 
 const getRemainingQuantity = (item: PurchaseOrderItem) => {
-  return item.ordered_quantity - item.received_quantity;
+  const alreadyReceived = item.received_quantity;
+  const supplierTotalDelivered = item.supplier_delivered_quantity ?? 0;
+  const outstandingFromSupplier = Math.max(supplierTotalDelivered - alreadyReceived, 0);
+
+  // If supplier has delivered more than we've already received, prefer that
+  // amount for this batch, but never exceed remaining ordered.
+  if (outstandingFromSupplier > 0) {
+    const remainingToOrder = item.ordered_quantity - alreadyReceived;
+    return Math.min(outstandingFromSupplier, remainingToOrder);
+  }
+
+  // Fallback: original behavior (remaining to fully complete the order)
+  return item.ordered_quantity - alreadyReceived;
 };
 
 const setFullQuantity = (index: number) => {
