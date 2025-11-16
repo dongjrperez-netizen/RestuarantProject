@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
-import { type BreadcrumbItem, type User } from '@/types';
+import { type BreadcrumbItem } from '@/types';
 
 interface Props {
     mustVerifyEmail: boolean;
@@ -27,14 +27,29 @@ const breadcrumbItems: BreadcrumbItem[] = [
 ];
 
 const page = usePage();
-const user = page.props.auth.user as User;
+const auth = page.props.auth as { user: any; userType?: string };
+const user = auth.user;
+const userType = auth.userType ?? 'owner';
+
+// Normalize gender value to match the radio options (Male/Female/Other)
+const normalizeGender = (gender: string | null | undefined): string => {
+    if (!gender) return '';
+    const lower = gender.toLowerCase();
+    if (lower === 'male') return 'Male';
+    if (lower === 'female') return 'Female';
+    if (lower === 'other') return 'Other';
+    return gender;
+};
+
+const isEmployee = userType === 'employee';
 
 const form = useForm({
-    first_name: user.first_name,
-    last_name: user.last_name,
-    middle_name: user.middle_name || '',
+    // For employees, backend fields are firstname/lastname/middlename
+    first_name: isEmployee ? user.firstname : user.first_name,
+    last_name: isEmployee ? user.lastname : user.last_name,
+    middle_name: (isEmployee ? user.middlename : user.middle_name) || '',
     date_of_birth: user.date_of_birth || '',
-    gender: user.gender,
+    gender: normalizeGender(user.gender),
     email: user.email,
 });
 

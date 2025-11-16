@@ -103,11 +103,12 @@ class PurchaseOrder extends Model
         // Generate a unique PO number based on the primary key to avoid duplicates
         // and race conditions from using static::count().
         static::created(function ($model) {
-            // Respect manually-set PO numbers (e.g. manual receive: PO-MANUAL-xxxxxx)
-            if (!empty($model->po_number)) {
+            // Allow manual receive POs to keep their custom number (PO-MANUAL-xxxxxx)
+            if (!empty($model->po_number) && str_starts_with($model->po_number, 'PO-MANUAL-')) {
                 return;
             }
 
+            // For all regular POs, always derive po_number from the primary key so it's unique
             $model->po_number = 'PO-' . date('Y') . '-' . str_pad($model->purchase_order_id, 6, '0', STR_PAD_LEFT);
 
             // Save quietly to avoid firing events again
