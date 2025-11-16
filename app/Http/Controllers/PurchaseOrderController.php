@@ -430,37 +430,59 @@ class PurchaseOrderController extends Controller
 
     public function store(Request $request)
     {
+        \Log::info('=== PURCHASE ORDER STORE STARTED ===', [
+            'user_id' => optional(auth()->user())->id,
+            'request_data' => $request->all(),
+        ]);
+
         // Basic validation only; do not enforce a supplier-side "maximum" here.
         // This avoids hidden failures if there is any mismatch between frontend limits
         // and the ingredient_suppliers.minimum_order_quantity value in the database.
-        $validated = $request->validate([
-            'supplier_id' => 'required|exists:suppliers,supplier_id',
-            'notes' => 'nullable|string',
-            'delivery_instructions' => 'nullable|string',
-            'items' => 'required|array|min:1',
-            'items.*.ingredient_id' => 'required|exists:ingredients,ingredient_id',
-            'items.*.ordered_quantity' => [
-                'required',
-                'numeric',
-                'min:0.01',
-            ],
-            'items.*.unit_price' => 'required|numeric|min:0.01',
-            'items.*.unit_of_measure' => 'required|string|max:50',
-            'items.*.notes' => 'nullable|string',
-        ]);
+        try {
+            $validated = $request->validate([
+                'supplier_id' => 'required|exists:suppliers,supplier_id',
+                'notes' => 'nullable|string',
+                'delivery_instructions' => 'nullable|string',
+                'items' => 'required|array|min:1',
+                'items.*.ingredient_id' => 'required|exists:ingredients,ingredient_id',
+                'items.*.ordered_quantity' => [
+                    'required',
+                    'numeric',
+                    'min:0.01',
+                ],
+                'items.*.unit_price' => 'required|numeric|min:0.01',
+                'items.*.unit_of_measure' => 'required|string|max:50',
+                'items.*.notes' => 'nullable|string',
+            ]);
+
+            \Log::info('PURCHASE ORDER VALIDATION PASSED', [
+                'supplier_id' => $validated['supplier_id'] ?? null,
+                'items_count' => count($validated['items'] ?? []),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('PURCHASE ORDER VALIDATION FAILED', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all(),
+            ]);
+            throw $e; // Let Inertia / validation handling behave normally
+        }
 
         try {
             DB::beginTransaction();
- 
+
             $subtotal = collect($validated['items'])->sum(function ($item) {
                 return $item['ordered_quantity'] * $item['unit_price'];
             });
- 
+
             $user = auth()->user();
             if (! $user->restaurantData) {
+                \Log::error('PURCHASE ORDER STORE FAILED: no restaurantData for user', [
+                    'user_id' => $user?->id,
+                ]);
+
                 return redirect()->back()->with('error', 'No restaurant data found.');
             }
- 
+
             // If a manager/supervisor employee is creating this PO, capture their employee_id
             $createdByEmployeeId = null;
             if (\Auth::guard('employee')->check()) {
@@ -472,7 +494,16 @@ class PurchaseOrderController extends Controller
                     $createdByEmployeeId = $employee->employee_id;
                 }
             }
- 
+
+            \Log::info('CREATING PURCHASE ORDER', [
+                'restaurant_id' => $user->restaurantData->id,
+                'supplier_id' => $validated['supplier_id'],
+                'subtotal' => $subtotal,
+                'items' => $validated['items'],
+                'created_by_user_id' => $user->id,
+                'created_by_employee_id' => $createdByEmployeeId,
+            ]);
+
             $purchaseOrder = PurchaseOrder::create([
                 'restaurant_id' => $user->restaurantData->id,
                 'supplier_id' => $validated['supplier_id'],
@@ -490,10 +521,10 @@ class PurchaseOrderController extends Controller
                 'created_by_employee_id' => $createdByEmployeeId,
             ]);
 
-            foreach ($validated['items'] as $item) {
+            foreach ($validated['items'] as $index => $item) {
                 $totalPrice = $item['ordered_quantity'] * $item['unit_price'];
 
-                PurchaseOrderItem::create([
+                $itemData = [
                     'purchase_order_id' => $purchaseOrder->purchase_order_id,
                     'ingredient_id' => $item['ingredient_id'],
                     'ordered_quantity' => $item['ordered_quantity'],
@@ -501,16 +532,32 @@ class PurchaseOrderController extends Controller
                     'total_price' => $totalPrice,
                     'unit_of_measure' => $item['unit_of_measure'],
                     'notes' => $item['notes'],
+                ];
+
+                \Log::info('CREATING PURCHASE ORDER ITEM', [
+                    'index' => $index,
+                    'item' => $itemData,
                 ]);
+
+                PurchaseOrderItem::create($itemData);
             }
 
             DB::commit();
+
+            \Log::info('=== PURCHASE ORDER STORE COMPLETED ===', [
+                'purchase_order_id' => $purchaseOrder->purchase_order_id,
+            ]);
 
             return redirect()->route('purchase-orders.show', $purchaseOrder->purchase_order_id)
                 ->with('success', 'Purchase Order created successfully.');
 
         } catch (\Exception $e) {
             DB::rollback();
+
+            \Log::error('PURCHASE ORDER STORE FAILED WITH EXCEPTION', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
 
             return redirect()->back()
                 ->withInput()
