@@ -814,6 +814,8 @@ class CashierController extends Controller
                 'attempted_by_cashier' => $cashier->employee_id,
             ]);
 
+            // void function response 
+
             if ($request->header('X-Inertia')) {
                 return back()->withErrors(['error' => $statusMessage]);
             }
