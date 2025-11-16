@@ -100,10 +100,18 @@ class PurchaseOrder extends Model
     {
         parent::boot();
 
-        static::creating(function ($model) {
-            if (empty($model->po_number)) {
-                $model->po_number = 'PO-'.date('Y').'-'.str_pad(static::count() + 1, 6, '0', STR_PAD_LEFT);
+        // Generate a unique PO number based on the primary key to avoid duplicates
+        // and race conditions from using static::count().
+        static::created(function ($model) {
+            // Respect manually-set PO numbers (e.g. manual receive: PO-MANUAL-xxxxxx)
+            if (!empty($model->po_number)) {
+                return;
             }
+
+            $model->po_number = 'PO-' . date('Y') . '-' . str_pad($model->purchase_order_id, 6, '0', STR_PAD_LEFT);
+
+            // Save quietly to avoid firing events again
+            $model->saveQuietly();
         });
     }
 }
