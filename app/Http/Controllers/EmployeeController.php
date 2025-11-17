@@ -38,8 +38,8 @@ class EmployeeController extends Controller
         }
 
         $employees = $query->paginate(15)->withQueryString();
-        // Allow owners to create manager-level employees in addition to Waiter/Cashier/Kitchen
-        $roles = Role::whereIn('role_name', ['Manager', 'Supervisor', 'Waiter', 'Cashier', 'Kitchen'])->get();
+        // Only allow these roles in user management filters
+        $roles = Role::whereIn('role_name', ['Manager', 'Cashier', 'Waiter', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/Employees', [
             'employees' => $employees,
@@ -53,8 +53,8 @@ class EmployeeController extends Controller
         $limitService = new SubscriptionLimitService();
         $limitCheck = $limitService->canAddEmployee(Auth::user());
  
-        // Allow creating manager-level employees
-        $roles = Role::whereIn('role_name', ['Manager', 'Supervisor', 'Waiter', 'Cashier', 'Kitchen'])->get();
+        // Only allow these roles when creating an employee from user management
+        $roles = Role::whereIn('role_name', ['Manager', 'Cashier', 'Waiter', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/CreateEmployee', [
             'roles' => $roles,
@@ -119,8 +119,8 @@ class EmployeeController extends Controller
         $this->authorizeEmployeeAccess($employee);
  
         $employee->load(['role']);
-        // Allow editing manager-level employees
-        $roles = Role::whereIn('role_name', ['Manager', 'Supervisor', 'Waiter', 'Cashier', 'Kitchen'])->get();
+        // Only allow these roles when editing an employee from user management
+        $roles = Role::whereIn('role_name', ['Manager', 'Cashier', 'Waiter', 'Kitchen'])->get();
 
         return Inertia::render('UserManagement/EditEmployee', [
             'employee' => $employee,
