@@ -42,22 +42,14 @@ class PasswordController extends Controller
         $owner = Auth::guard('web')->user();
         $employee = Auth::guard('employee')->user();
 
-        if ($employee && ! $owner) {
+        // If the request was validated against the employee guard, always
+        // treat this as an employee password change, even if an owner is
+        // also authenticated in the same session.
+        if ($guard === 'employee' && $employee) {
             // Manager / employee changing their own password
             $employee->update([
                 'password' => $hashedPassword,
             ]);
-
-            // Optionally keep linked owner record (if any) in sync
-            if ($employee->user_id) {
-                /** @var \App\Models\User|null $linkedOwner */
-                $linkedOwner = User::find($employee->user_id);
-                if ($linkedOwner && $linkedOwner->email === $employee->email) {
-                    $linkedOwner->update([
-                        'password' => $hashedPassword,
-                    ]);
-                }
-            }
         } else {
             // Default behaviour: restaurant owner changing their password
             $user = $owner ?: $request->user();

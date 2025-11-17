@@ -56,25 +56,6 @@ class ProfileController extends Controller
             $employee->email = $validated['email'];
             $employee->save();
 
-            // Optionally keep linked owner record (if any) in sync
-            if ($employee->user_id) {
-                /** @var \App\Models\User|null $linkedOwner */
-                $linkedOwner = User::find($employee->user_id);
-                if ($linkedOwner) {
-                    $linkedOwner->first_name = $validated['first_name'];
-                    $linkedOwner->last_name = $validated['last_name'];
-                    $linkedOwner->middle_name = $validated['middle_name'] ?? null;
-                    $linkedOwner->date_of_birth = $validated['date_of_birth'];
-                    $linkedOwner->gender = $validated['gender'];
-
-                    if ($linkedOwner->email !== $validated['email']) {
-                        $linkedOwner->email_verified_at = null;
-                    }
-
-                    $linkedOwner->email = $validated['email'];
-                    $linkedOwner->save();
-                }
-            }
         } else {
             // Default behaviour: restaurant owner updating their profile
             /** @var \App\Models\User $user */
