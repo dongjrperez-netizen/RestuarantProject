@@ -297,7 +297,7 @@ const submit = async () => {
                     :class="{ 'bg-muted/50': selectedBillId === bill.bill_id }"
                   >
                     <TableCell class="font-medium">{{ bill.bill_number }}</TableCell>
-                    <TableCell>{{ bill.supplier.supplier_name }}</TableCell>
+                    <TableCell>{{ (bill.supplier && bill.supplier.supplier_name) || bill.supplier_name }}</TableCell>
                     <TableCell>{{ formatDate(bill.due_date) }}</TableCell>
                     <TableCell>{{ formatCurrency(bill.outstanding_amount) }}</TableCell>
                     <TableCell>
@@ -339,7 +339,7 @@ const submit = async () => {
                 <div class="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <span class="text-muted-foreground">Supplier:</span>
-                    <span class="ml-1">{{ selectedBill.supplier.supplier_name }}</span>
+                    <span class="ml-1">{{ (selectedBill.supplier && selectedBill.supplier.supplier_name) || selectedBill.supplier_name }}</span>
                   </div>
                   <div>
                     <span class="text-muted-foreground">Outstanding:</span>

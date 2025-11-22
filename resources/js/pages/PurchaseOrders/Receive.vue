@@ -180,7 +180,7 @@ const submit = () => {
             </div>
             <div>
               <label class="text-sm font-medium text-muted-foreground">Supplier</label>
-              <div>{{ purchaseOrder.supplier.supplier_name }}</div>
+              <div>{{ (purchaseOrder.supplier && purchaseOrder.supplier.supplier_name) || purchaseOrder.supplier_name }}</div>
             </div>
             <div>
               <label class="text-sm font-medium text-muted-foreground">Order Date</label>

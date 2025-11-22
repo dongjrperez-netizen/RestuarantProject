@@ -39,6 +39,8 @@ class PurchaseOrderController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        \Log::info('PurchaseOrderController@index returning count', ['count' => $purchaseOrders->count(), 'user_id' => $user->id ?? null, 'restaurant_id' => $restaurantId, 'request_url' => request()->fullUrl()]);
+
         // Get pending approvals count for managers/owners
         $pendingApprovalsCount = 0;
         if ($user->role_id <= 2) { // Owner or Manager
@@ -103,59 +105,83 @@ class PurchaseOrderController extends Controller
 
         $restaurantId = $user->restaurantData->id;
 
-        // Get suppliers that have ingredient offerings (only for this restaurant)
+        // Get all suppliers (without ingredient relationships to avoid ingredient_suppliers table)
         $suppliers = Supplier::where('is_active', true)
             ->where('restaurant_id', $restaurantId)
-            ->whereHas('ingredients')
-            ->with(['ingredients'])
             ->orderBy('supplier_name')
             ->get();
 
-        // Get all ingredient offerings (supplier inventory) - only for suppliers of this restaurant
-        $supplierOfferings = IngredientSupplier::with(['ingredient', 'supplier'])
-            ->where('is_active', true)
-            ->whereHas('supplier', function ($query) use ($restaurantId) {
-                $query->where('restaurant_id', $restaurantId);
-            })
-            ->orderBy('id')
+        // Get all ingredients from ingredient library for manual PO entry
+        $ingredients = Ingredients::where('restaurant_id', $restaurantId)
+            ->orderBy('ingredient_name')
             ->get()
-            ->groupBy('supplier_id');
+            ->map(function ($ingredient) {
+                return [
+                    'ingredient_id' => $ingredient->ingredient_id,
+                    'ingredient_name' => $ingredient->ingredient_name,
+                    'unit' => $ingredient->base_unit,
+                    'current_stock' => $ingredient->current_stock,
+                    'reorder_level' => $ingredient->reorder_level,
+                    'cost_per_unit' => $ingredient->cost_per_unit,
+                ];
+            });
 
         return Inertia::render('PurchaseOrders/Create', [
             'suppliers' => $suppliers,
-            'supplierOfferings' => $supplierOfferings,
+            'ingredients' => $ingredients,
         ]);
     }
 
     public function store(Request $request)
     {
+        // Diagnostic logging: record incoming request details to help debug why
+        // the client may not be receiving the expected Inertia payload.
+        try {
+            $hdrs = [];
+            foreach ($request->headers->all() as $k => $v) {
+                $hdrs[$k] = is_array($v) ? $v : [$v];
+            }
+
+            // Mask the X-CSRF-TOKEN value to avoid leaking token into logs
+            if (isset($hdrs['x-csrf-token'])) {
+                $hdrs['x-csrf-token'] = ['[MASKED]'];
+            }
+
+            \Log::info('PurchaseOrderController@store called', [
+                'url' => $request->fullUrl(),
+                'method' => $request->method(),
+                'is_authenticated' => auth()->check() ? auth()->id() : null,
+                'headers' => $hdrs,
+                'cookies' => $request->cookie(),
+                'payload_keys' => array_keys($request->all()),
+            ]);
+        } catch (\Exception $e) {
+            // swallow any logging error - diagnostics should not break the request
+            \Log::warning('Failed to log diagnostic for PurchaseOrderController@store: '.$e->getMessage());
+        }
+        // Custom validation: must have either supplier_id OR supplier_name
+        $request->validate([
+            'supplier_id' => 'nullable|exists:suppliers,supplier_id',
+            'supplier_name' => 'nullable|string|max:255',
+            'supplier_contact' => 'nullable|string|max:100',
+            'supplier_email' => 'nullable|email|max:255',
+            'supplier_phone' => 'nullable|string|max:50',
+        ]);
+
+        // Ensure at least one supplier identifier is provided
+        if (!$request->filled('supplier_id') && !$request->filled('supplier_name')) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['supplier' => 'Please either select an existing supplier or enter a supplier name.']);
+        }
+
         $validated = $request->validate([
-            'supplier_id' => 'required|exists:suppliers,supplier_id',
             'expected_delivery_date' => 'nullable|date',
             'notes' => 'nullable|string',
             'delivery_instructions' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.ingredient_id' => 'required|exists:ingredients,ingredient_id',
-            'items.*.ordered_quantity' => [
-                'required',
-                'numeric',
-                'min:0.01',
-                function ($attribute, $value, $fail) use ($request) {
-                    $itemIndex = explode('.', $attribute)[1];
-                    $ingredientId = $request->input("items.{$itemIndex}.ingredient_id");
-                    $supplierId = $request->input('supplier_id');
-
-                    $ingredientSupplier = IngredientSupplier::where('ingredient_id', $ingredientId)
-                        ->where('supplier_id', $supplierId)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if ($ingredientSupplier && $value > $ingredientSupplier->minimum_order_quantity) {
-                        $ingredientName = Ingredients::find($ingredientId)->ingredient_name ?? 'this ingredient';
-                        $fail("The ordered quantity for {$ingredientName} cannot exceed the supplier's maximum order quantity of {$ingredientSupplier->minimum_order_quantity} {$ingredientSupplier->package_unit}.");
-                    }
-                },
-            ],
+            'items.*.ordered_quantity' => 'required|numeric|min:0.01',
             'items.*.unit_price' => 'required|numeric|min:0.01',
             'items.*.unit_of_measure' => 'required|string|max:50',
             'items.*.notes' => 'nullable|string',
@@ -173,15 +199,54 @@ class PurchaseOrderController extends Controller
                 return redirect()->back()->with('error', 'No restaurant data found.');
             }
 
-            // Calculate expected delivery date if not provided
+            // Calculate expected delivery date if not provided and supplier_id exists
             $expectedDeliveryDate = $validated['expected_delivery_date'];
-            if (empty($expectedDeliveryDate)) {
-                $expectedDeliveryDate = $this->calculateExpectedDeliveryDate($validated['supplier_id'], $validated['items']);
+            if (empty($expectedDeliveryDate) && $request->filled('supplier_id')) {
+                $expectedDeliveryDate = $this->calculateExpectedDeliveryDate($request->input('supplier_id'), $validated['items']);
+            }
+
+            // Auto-save supplier information for future reuse
+            $supplierIdToUse = $request->input('supplier_id');
+            if (! $request->filled('supplier_id') && ($request->filled('supplier_email') || $request->filled('supplier_name'))) {
+                // Try to find existing supplier by email first, then by name
+                $supplierQuery = Supplier::where('restaurant_id', $user->restaurantData->id);
+
+                if ($request->filled('supplier_email')) {
+                    $supplierQuery->where('email', $request->input('supplier_email'));
+                } elseif ($request->filled('supplier_name')) {
+                    $supplierQuery->where('supplier_name', $request->input('supplier_name'));
+                }
+
+                $existingSupplier = $supplierQuery->first();
+
+                if ($existingSupplier) {
+                    $supplierIdToUse = $existingSupplier->supplier_id;
+                    \Log::info('Found existing supplier for PO', ['supplier_id' => $supplierIdToUse]);
+                } else {
+                    // Create new supplier for future reuse (password is nullable for email-only suppliers)
+                    $newSupplier = Supplier::create([
+                        'restaurant_id' => $user->restaurantData->id,
+                        'supplier_name' => $request->input('supplier_name') ?? 'Unnamed Supplier',
+                        'contact_number' => $request->input('supplier_phone') ?? $request->input('supplier_contact'),
+                        'email' => $request->input('supplier_email'),
+                        'is_active' => true,
+                        'payment_terms' => 'COD',
+                        'credit_limit' => 0.00, // Default to 0 for new suppliers
+                        'password' => null, // Email-only supplier, no login access
+                    ]);
+
+                    $supplierIdToUse = $newSupplier->supplier_id;
+                    \Log::info('Auto-created supplier for future reuse', ['supplier_id' => $supplierIdToUse, 'name' => $newSupplier->supplier_name]);
+                }
             }
 
             $purchaseOrder = PurchaseOrder::create([
                 'restaurant_id' => $user->restaurantData->id,
-                'supplier_id' => $validated['supplier_id'],
+                'supplier_id' => $supplierIdToUse,
+                'supplier_name' => $request->input('supplier_name'),
+                'supplier_contact' => $request->input('supplier_contact'),
+                'supplier_email' => $request->input('supplier_email'),
+                'supplier_phone' => $request->input('supplier_phone'),
                 'status' => 'draft',
                 'order_date' => now(),
                 'expected_delivery_date' => $expectedDeliveryDate,
@@ -207,15 +272,92 @@ class PurchaseOrderController extends Controller
                     'unit_of_measure' => $item['unit_of_measure'],
                     'notes' => $item['notes'],
                 ]);
+
+                // If the ingredient doesn't have a cost recorded, and the user provided a unit_price,
+                // save it to the ingredients table so future POs autofill the price.
+                try {
+                    $ingredientModel = \App\Models\Ingredients::find($item['ingredient_id']);
+                    if ($ingredientModel && (empty($ingredientModel->cost_per_unit) || $ingredientModel->cost_per_unit == 0) && !empty($item['unit_price'])) {
+                        $ingredientModel->cost_per_unit = $item['unit_price'];
+                        $ingredientModel->save();
+                        \Log::info('Updated ingredient cost_per_unit from PO', ['ingredient_id' => $ingredientModel->ingredient_id, 'new_cost' => $ingredientModel->cost_per_unit]);
+                    }
+                } catch (\Exception $ex) {
+                    \Log::warning('Failed to update ingredient cost_per_unit: '.$ex->getMessage(), ['ingredient_id' => $item['ingredient_id']]);
+                }
             }
 
             DB::commit();
 
+            \Log::info('PurchaseOrderController@store created PO', ['purchase_order_id' => $purchaseOrder->purchase_order_id]);
+
+            // Success message with PO number
+            $successMessage = "Purchase Order {$purchaseOrder->po_number} created successfully! Total: ₱" . number_format($purchaseOrder->total_amount, 2);
+
+            \Log::info('PurchaseOrderController@store returning purchase order data', [
+                'purchase_order_id' => $purchaseOrder->purchase_order_id,
+                'route' => route('purchase-orders.show', $purchaseOrder->purchase_order_id),
+                'success_message' => $successMessage,
+            ]);
+
+            // Load relationships needed for the summary modal
+            $purchaseOrder->load(['supplier', 'items.ingredient']);
+
+            \Log::info('PurchaseOrder data being returned', [
+                'po_id' => $purchaseOrder->purchase_order_id,
+                'po_number' => $purchaseOrder->po_number,
+                'has_supplier' => $purchaseOrder->supplier ? 'yes' : 'no',
+                'items_count' => $purchaseOrder->items->count(),
+            ]);
+
+            // For Inertia requests, return the purchase order data so the modal can display
+            if (request()->header('X-Inertia')) {
+                // Get suppliers and ingredients for the Create page
+                $restaurantId = $user->restaurantData->id;
+                $suppliers = Supplier::where('is_active', true)
+                    ->where('restaurant_id', $restaurantId)
+                    ->orderBy('supplier_name')
+                    ->get();
+
+                $ingredients = Ingredients::where('restaurant_id', $restaurantId)
+                    ->orderBy('ingredient_name')
+                    ->get()
+                    ->map(function ($ingredient) {
+                        return [
+                            'ingredient_id' => $ingredient->ingredient_id,
+                            'ingredient_name' => $ingredient->ingredient_name,
+                            'unit' => $ingredient->base_unit,
+                            'current_stock' => $ingredient->current_stock,
+                            'reorder_level' => $ingredient->reorder_level,
+                            'cost_per_unit' => $ingredient->cost_per_unit,
+                        ];
+                    });
+
+                \Log::info('Returning Inertia response with purchaseOrder', [
+                    'page' => 'PurchaseOrders/Create',
+                    'has_purchaseOrder' => isset($purchaseOrder),
+                ]);
+
+                return Inertia::render('PurchaseOrders/Create', [
+                    'suppliers' => $suppliers,
+                    'ingredients' => $ingredients,
+                    'purchaseOrder' => $purchaseOrder,
+                ])->with('success', $successMessage);
+            }
+
+            // For non-Inertia requests (shouldn't happen but fallback)
             return redirect()->route('purchase-orders.show', $purchaseOrder->purchase_order_id)
-                ->with('success', 'Purchase Order created successfully.');
+                ->with('success', $successMessage);
+
 
         } catch (\Exception $e) {
             DB::rollback();
+
+            \Log::error('PurchaseOrderController@store exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => auth()->id(),
+            ]);
 
             return redirect()->back()
                 ->withInput()
@@ -240,28 +382,31 @@ class PurchaseOrderController extends Controller
 
         $restaurantId = $user->restaurantData->id;
 
-        // Get suppliers that have ingredient offerings (only for this restaurant)
+        // Get all suppliers (without ingredient relationships to avoid ingredient_suppliers table)
         $suppliers = Supplier::where('is_active', true)
             ->where('restaurant_id', $restaurantId)
-            ->whereHas('ingredients')
-            ->with(['ingredients'])
             ->orderBy('supplier_name')
             ->get();
 
-        // Get all ingredient offerings (supplier inventory) - only for suppliers of this restaurant
-        $supplierOfferings = IngredientSupplier::with(['ingredient', 'supplier'])
-            ->where('is_active', true)
-            ->whereHas('supplier', function ($query) use ($restaurantId) {
-                $query->where('restaurant_id', $restaurantId);
-            })
-            ->orderBy('id')
+        // Get all ingredients from ingredient library for manual PO entry
+        $ingredients = Ingredients::where('restaurant_id', $restaurantId)
+            ->orderBy('ingredient_name')
             ->get()
-            ->groupBy('supplier_id');
+            ->map(function ($ingredient) {
+                return [
+                    'ingredient_id' => $ingredient->ingredient_id,
+                    'ingredient_name' => $ingredient->ingredient_name,
+                    'unit' => $ingredient->base_unit,
+                    'current_stock' => $ingredient->current_stock,
+                    'reorder_level' => $ingredient->reorder_level,
+                    'cost_per_unit' => $ingredient->cost_per_unit,
+                ];
+            });
 
         return Inertia::render('PurchaseOrders/Edit', [
             'purchaseOrder' => $purchaseOrder,
             'suppliers' => $suppliers,
-            'supplierOfferings' => $supplierOfferings,
+            'ingredients' => $ingredients,
         ]);
     }
 
@@ -274,33 +419,29 @@ class PurchaseOrderController extends Controller
                 ->with('error', 'Cannot update purchase order with status: '.$purchaseOrder->status);
         }
 
+        // Custom validation: must have either supplier_id OR supplier_name
+        $request->validate([
+            'supplier_id' => 'nullable|exists:suppliers,supplier_id',
+            'supplier_name' => 'nullable|string|max:255',
+            'supplier_contact' => 'nullable|string|max:100',
+            'supplier_email' => 'nullable|email|max:255',
+            'supplier_phone' => 'nullable|string|max:50',
+        ]);
+
+        // Ensure at least one supplier identifier is provided
+        if (!$request->filled('supplier_id') && !$request->filled('supplier_name')) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['supplier' => 'Please either select an existing supplier or enter a supplier name.']);
+        }
+
         $validated = $request->validate([
-            'supplier_id' => 'required|exists:suppliers,supplier_id',
             'expected_delivery_date' => 'nullable|date',
             'notes' => 'nullable|string',
             'delivery_instructions' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.ingredient_id' => 'required|exists:ingredients,ingredient_id',
-            'items.*.ordered_quantity' => [
-                'required',
-                'numeric',
-                'min:0.01',
-                function ($attribute, $value, $fail) use ($request) {
-                    $itemIndex = explode('.', $attribute)[1];
-                    $ingredientId = $request->input("items.{$itemIndex}.ingredient_id");
-                    $supplierId = $request->input('supplier_id');
-
-                    $ingredientSupplier = IngredientSupplier::where('ingredient_id', $ingredientId)
-                        ->where('supplier_id', $supplierId)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if ($ingredientSupplier && $value > $ingredientSupplier->minimum_order_quantity) {
-                        $ingredientName = Ingredients::find($ingredientId)->ingredient_name ?? 'this ingredient';
-                        $fail("The ordered quantity for {$ingredientName} cannot exceed the supplier's maximum order quantity of {$ingredientSupplier->minimum_order_quantity} {$ingredientSupplier->package_unit}.");
-                    }
-                },
-            ],
+            'items.*.ordered_quantity' => 'required|numeric|min:0.01',
             'items.*.unit_price' => 'required|numeric|min:0.01',
             'items.*.unit_of_measure' => 'required|string|max:50',
             'items.*.notes' => 'nullable|string',
@@ -313,14 +454,36 @@ class PurchaseOrderController extends Controller
                 return $item['ordered_quantity'] * $item['unit_price'];
             });
 
-            // Calculate expected delivery date if not provided
+            // Calculate expected delivery date if not provided and supplier_id exists
             $expectedDeliveryDate = $validated['expected_delivery_date'];
-            if (empty($expectedDeliveryDate)) {
-                $expectedDeliveryDate = $this->calculateExpectedDeliveryDate($validated['supplier_id'], $validated['items']);
+            if (empty($expectedDeliveryDate) && $request->filled('supplier_id')) {
+                $expectedDeliveryDate = $this->calculateExpectedDeliveryDate($request->input('supplier_id'), $validated['items']);
+            }
+
+            // Try to find existing supplier if manual entry was used
+            $supplierIdToUse = $request->input('supplier_id');
+            if (! $request->filled('supplier_id') && ($request->filled('supplier_email') || $request->filled('supplier_name'))) {
+                $supplierQuery = Supplier::where('restaurant_id', $purchaseOrder->restaurant_id);
+
+                if ($request->filled('supplier_email')) {
+                    $supplierQuery->where('email', $request->input('supplier_email'));
+                } elseif ($request->filled('supplier_name')) {
+                    $supplierQuery->where('supplier_name', $request->input('supplier_name'));
+                }
+
+                $existingSupplier = $supplierQuery->first();
+
+                if ($existingSupplier) {
+                    $supplierIdToUse = $existingSupplier->supplier_id;
+                }
             }
 
             $purchaseOrder->update([
-                'supplier_id' => $validated['supplier_id'],
+                'supplier_id' => $supplierIdToUse,
+                'supplier_name' => $request->input('supplier_name'),
+                'supplier_contact' => $request->input('supplier_contact'),
+                'supplier_email' => $request->input('supplier_email'),
+                'supplier_phone' => $request->input('supplier_phone'),
                 'expected_delivery_date' => $expectedDeliveryDate,
                 'subtotal' => $subtotal,
                 'total_amount' => $subtotal,
@@ -376,7 +539,7 @@ class PurchaseOrderController extends Controller
         // Send notification to supplier about the new order
         $this->notifySupplierOfNewOrder($purchaseOrder);
 
-        return redirect()->back()
+        return redirect()->route('purchase-orders.show', $purchaseOrder->purchase_order_id)
             ->with('success', 'Purchase Order approved and sent to supplier.');
     }
 
@@ -394,7 +557,7 @@ class PurchaseOrderController extends Controller
         // Send notification to restaurant owner/managers for approval
         $this->notifyManagersForApproval($purchaseOrder);
 
-        return redirect()->back()
+        return redirect()->route('purchase-orders.show', $purchaseOrder->purchase_order_id)
             ->with('success', 'Purchase Order submitted for approval.');
     }
 
@@ -604,9 +767,52 @@ class PurchaseOrderController extends Controller
     private function notifySupplierOfNewOrder(PurchaseOrder $purchaseOrder)
     {
         // Load required relationships
-        $purchaseOrder->load(['supplier', 'restaurant']);
+        $purchaseOrder->load(['supplier', 'restaurant', 'items.ingredient']);
 
-        // Send notification to supplier
-        $purchaseOrder->supplier->notify(new PurchaseOrderApproved($purchaseOrder));
+        // Send supplier an email with signed confirm/reject links when we have an email address
+        try {
+            if ($purchaseOrder->supplier && $purchaseOrder->supplier->email) {
+                $purchaseOrder->supplier->notify(new \App\Notifications\SupplierPurchaseOrderAction($purchaseOrder));
+                return;
+            }
+
+            // If supplier relation not present but we have supplier_email on PO, send mail directly
+            if (! empty($purchaseOrder->supplier_email)) {
+                // Create signed confirm/reject links for direct email
+                $confirmUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                    'supplier.purchase-orders.respond',
+                    now()->addDays(7),
+                    ['id' => $purchaseOrder->purchase_order_id, 'action' => 'confirm']
+                );
+
+                $rejectUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                    'supplier.purchase-orders.respond',
+                    now()->addDays(7),
+                    ['id' => $purchaseOrder->purchase_order_id, 'action' => 'reject']
+                );
+
+                // Use the same nice email template
+                \Mail::send('emails.supplier_purchase_order_action', [
+                    'purchaseOrder' => $purchaseOrder,
+                    'confirmUrl' => $confirmUrl,
+                    'rejectUrl' => $rejectUrl,
+                    'notifiableName' => $purchaseOrder->supplier_name ?? 'Supplier',
+                ], function ($message) use ($purchaseOrder) {
+                    $message->to($purchaseOrder->supplier_email)
+                        ->subject('Purchase Order – Action Required: ' . $purchaseOrder->po_number);
+                });
+
+                \Log::info('Sent PO notification to non-registered supplier email', [
+                    'po_id' => $purchaseOrder->purchase_order_id,
+                    'supplier_email' => $purchaseOrder->supplier_email,
+                ]);
+
+                return;
+            }
+
+            \Log::info('No supplier contact found for PO '.$purchaseOrder->purchase_order_id);
+        } catch (\Exception $e) {
+            \Log::error('Failed to notify supplier for PO '.$purchaseOrder->purchase_order_id.': '.$e->getMessage());
+        }
     }
 }

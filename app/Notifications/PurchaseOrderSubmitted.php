@@ -37,14 +37,17 @@ class PurchaseOrderSubmitted extends Notification implements ShouldQueue
      */
     public function toMail(object $notifiable): MailMessage
     {
+        $supplierName = $this->purchaseOrder->supplier?->supplier_name ?? $this->purchaseOrder->supplier_name;
+        $submittedBy = ($this->purchaseOrder->createdBy?->first_name ?? '') . ' ' . ($this->purchaseOrder->createdBy?->last_name ?? '');
+
         return (new MailMessage)
             ->subject('Purchase Order Requires Your Approval')
             ->greeting('Hello '.$notifiable->first_name.'!')
             ->line('A new purchase order has been submitted and requires your approval.')
             ->line('**Purchase Order:** '.$this->purchaseOrder->po_number)
-            ->line('**Supplier:** '.$this->purchaseOrder->supplier->supplier_name)
+            ->line('**Supplier:** '.$supplierName)
             ->line('**Total Amount:** ₱'.number_format($this->purchaseOrder->total_amount, 2))
-            ->line('**Submitted by:** '.$this->purchaseOrder->createdBy->first_name.' '.$this->purchaseOrder->createdBy->last_name)
+            ->line('**Submitted by:** '.trim($submittedBy))
             ->action('Review Purchase Order', url('/purchase-orders/'.$this->purchaseOrder->purchase_order_id))
             ->line('Please review and approve this purchase order to proceed with the order.')
             ->salutation('Best regards, '.config('app.name'));
@@ -62,7 +65,7 @@ class PurchaseOrderSubmitted extends Notification implements ShouldQueue
             'message' => 'Purchase order '.$this->purchaseOrder->po_number.' requires your approval',
             'purchase_order_id' => $this->purchaseOrder->purchase_order_id,
             'po_number' => $this->purchaseOrder->po_number,
-            'supplier_name' => $this->purchaseOrder->supplier->supplier_name,
+            'supplier_name' => $this->purchaseOrder->supplier?->supplier_name ?? $this->purchaseOrder->supplier_name,
             'total_amount' => $this->purchaseOrder->total_amount,
             'action_url' => '/purchase-orders/'.$this->purchaseOrder->purchase_order_id,
         ];

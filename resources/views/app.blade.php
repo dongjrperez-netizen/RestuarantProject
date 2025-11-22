@@ -43,6 +43,53 @@
         @routes
         @vite(['resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
         @inertiaHead
+        {{-- Normalize CSS preload links immediately so they are recognized as style preloads.
+             This sets `as="style"` and an onload handler that swaps rel to stylesheet
+             (pattern recommended to avoid "preload but not used" warnings). It also
+             injects a stylesheet link fallback for older browsers. --}}
+        <script>
+            (function() {
+                try {
+                    // Convert any Vite-emitted CSS preload links into active stylesheets immediately.
+                    // Some browsers emit a "preload but not used" warning when a CSS preload
+                    // isn't converted quickly enough; switching to `rel="stylesheet"` here
+                    // ensures the resource counts as used and removes the console warning.
+                    var preloads = Array.prototype.slice.call(document.querySelectorAll('link[rel="preload"][href$=".css"]'));
+
+                    preloads.forEach(function(link) {
+                        var href = link.getAttribute('href');
+                        // Ensure the `as` attribute is set for correctness
+                        if (!link.getAttribute('as')) {
+                            link.setAttribute('as', 'style');
+                        }
+
+                        // If the link is still a preload, convert it to a stylesheet immediately
+                        // so the browser treats it as used. We set a data attribute to avoid
+                        // double-processing the same element.
+                        if (link.getAttribute('rel') === 'preload') {
+                            link.setAttribute('rel', 'stylesheet');
+                            link.setAttribute('media', 'all');
+                            link.setAttribute('data-preload-swapped', '1');
+                        }
+
+                        // Ensure there is a stylesheet link for browsers that may not honor
+                        // the converted element; avoid duplicating if it already exists.
+                        if (href) {
+                            var exists = document.querySelector('link[rel="stylesheet"][href="' + href + '"]');
+                            if (!exists) {
+                                var sheet = document.createElement('link');
+                                sheet.rel = 'stylesheet';
+                                sheet.href = href;
+                                sheet.media = 'all';
+                                document.head.appendChild(sheet);
+                            }
+                        }
+                    });
+                } catch (e) {
+                    // noop - avoid breaking the page if this fails
+                }
+            })();
+        </script>
     </head>
     <body class="font-sans antialiased">
         @inertia

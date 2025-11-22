@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\IngredientsController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:web', 'verified'])->prefix('inventory')->group(function () {
@@ -29,4 +30,25 @@ Route::middleware(['auth:web', 'verified'])->prefix('inventory')->group(function
 
     Route::get('/dish/ingredient-cost', [InventoryController::class, 'calculateIngredientCost'])
         ->name('inventory.dish.ingredient-cost');
+});
+
+// Ingredients Library Management
+Route::middleware(['auth:web', 'verified', 'check.subscription'])->prefix('ingredients-library')->group(function () {
+    Route::get('/', [IngredientsController::class, 'index'])
+        ->name('ingredients.index');
+
+    Route::get('/create', [IngredientsController::class, 'create'])
+        ->name('ingredients.create');
+
+    Route::post('/', [IngredientsController::class, 'store'])
+        ->name('ingredients.store');
+
+    Route::get('/{ingredient}/edit', [IngredientsController::class, 'edit'])
+        ->name('ingredients.edit');
+
+    Route::put('/{ingredient}', [IngredientsController::class, 'update'])
+        ->name('ingredients.update');
+
+    Route::delete('/{ingredient}', [IngredientsController::class, 'destroy'])
+        ->name('ingredients.destroy');
 });

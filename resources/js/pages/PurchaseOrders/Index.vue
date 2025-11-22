@@ -25,6 +25,9 @@ interface PurchaseOrder {
   supplier: {
     supplier_name: string;
   };
+  supplier_name?: string;
+  supplier_response?: string | null;
+  supplier_responded_at?: string | null;
   items: PurchaseOrderItem[];
 }
 
@@ -65,6 +68,21 @@ const formatCurrency = (amount: number) => {
 
 const getTotalItems = (items: PurchaseOrderItem[]) => {
   return items.reduce((sum, item) => sum + item.ordered_quantity, 0);
+};
+
+const getSupplierResponseBadge = (response: string | null | undefined) => {
+  type BadgeVariant = "default" | "destructive" | "outline" | "secondary" | "success" | "warning" | undefined;
+
+  if (!response) {
+    return { variant: 'secondary' as BadgeVariant, label: 'Pending Response' };
+  }
+
+  const responseConfig: Record<string, { variant: BadgeVariant; label: string }> = {
+    'confirm': { variant: 'success', label: 'Confirmed' },
+    'reject': { variant: 'destructive', label: 'Rejected' }
+  };
+
+  return responseConfig[response] || { variant: 'secondary' as BadgeVariant, label: response };
 };
 </script>
 
@@ -137,6 +155,7 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                 <TableHead>Items</TableHead>
                 <TableHead>Total Amount</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Supplier Response</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -146,7 +165,7 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                   {{ order.po_number }}
                 </TableCell>
                 <TableCell>
-                  {{ order.supplier.supplier_name }}
+                  {{ (order.supplier && order.supplier.supplier_name) || order.supplier_name }}
                 </TableCell>
                 <TableCell>
                   {{ formatDate(order.order_date) }}
@@ -170,6 +189,16 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                   <Badge :variant="getStatusBadge(order.status).variant">
                     {{ getStatusBadge(order.status).label }}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  <div class="flex flex-col gap-1">
+                    <Badge :variant="getSupplierResponseBadge(order.supplier_response).variant">
+                      {{ getSupplierResponseBadge(order.supplier_response).label }}
+                    </Badge>
+                    <span v-if="order.supplier_responded_at" class="text-xs text-muted-foreground">
+                      {{ formatDate(order.supplier_responded_at) }}
+                    </span>
+                  </div>
                 </TableCell>
                 <TableCell class="text-right">
                   <div class="flex justify-end space-x-2">

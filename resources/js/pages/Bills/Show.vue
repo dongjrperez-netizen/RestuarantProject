@@ -374,7 +374,7 @@ const payFullAmountPaypal = () => {
         <div>
           <h2 class="text-2xl font-bold tracking-tight">{{ bill.bill_number }}</h2>
           <p class="text-muted-foreground">
-            Supplier: {{ bill.supplier.supplier_name }}
+            Supplier: {{ (bill.supplier && bill.supplier.supplier_name) || bill.supplier_name }}
           </p>
         </div>
         <div class="flex items-center space-x-3">
@@ -613,22 +613,22 @@ const payFullAmountPaypal = () => {
           <CardContent class="space-y-4">
             <div>
               <p class="text-sm font-medium text-muted-foreground">Supplier</p>
-              <p class="font-medium">{{ bill.supplier.supplier_name }}</p>
+              <p class="font-medium">{{ (bill.supplier && bill.supplier.supplier_name) || bill.supplier_name }}</p>
             </div>
-            <div v-if="bill.supplier.contact_number" class="grid grid-cols-2 gap-4">
+              <div v-if="(bill.supplier && bill.supplier.contact_number) || bill.supplier_contact_number" class="grid grid-cols-2 gap-4">
               <div>
                 <p class="text-sm font-medium text-muted-foreground">Contact</p>
-                <p class="font-medium">{{ bill.supplier.contact_number }}</p>
+                  <p class="font-medium">{{ (bill.supplier && bill.supplier.contact_number) || bill.supplier_contact_number }}</p>
               </div>
               <div v-if="bill.supplier.payment_terms">
                 <p class="text-sm font-medium text-muted-foreground">Terms</p>
-                <p class="font-medium">{{ bill.supplier.payment_terms }}</p>
+                  <p class="font-medium">{{ (bill.supplier && bill.supplier.payment_terms) || bill.supplier_payment_terms }}</p>
               </div>
             </div>
-            <div v-if="bill.supplier.email">
-              <p class="text-sm font-medium text-muted-foreground">Email</p>
-              <p class="font-medium">{{ bill.supplier.email }}</p>
-            </div>
+              <div v-if="(bill.supplier && bill.supplier.email) || bill.supplier_email">
+                <p class="text-sm font-medium text-muted-foreground">Email</p>
+                <p class="font-medium">{{ (bill.supplier && bill.supplier.email) || bill.supplier_email }}</p>
+              </div>
           </CardContent>
         </Card>
       </div>

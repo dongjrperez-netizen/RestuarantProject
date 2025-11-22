@@ -31,6 +31,7 @@ use App\Http\Controllers\SuppliersController;
 use App\Http\Controllers\UsersubscriptionController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\SupplierPurchaseOrderController;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -176,6 +177,36 @@ Route::get('/test-void-notification/{restaurantId}', function($restaurantId) {
 Route::get('dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified','check.subscription'])
     ->name('dashboard');
+
+// Public signed route for suppliers to confirm/reject purchase orders (signed URL)
+Route::get('/supplier/purchase-orders/{id}/respond', [SupplierPurchaseOrderController::class, 'respond'])
+    ->middleware(['web', 'signed'])
+    ->name('supplier.purchase-orders.respond');
+
+// Test route to generate a signed URL
+Route::get('/test-supplier-url/{id}', function($id) {
+    $purchaseOrder = \App\Models\PurchaseOrder::findOrFail($id);
+
+    $confirmUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+        'supplier.purchase-orders.respond',
+        now()->addDays(7),
+        ['id' => $purchaseOrder->purchase_order_id, 'action' => 'confirm']
+    );
+
+    $rejectUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+        'supplier.purchase-orders.respond',
+        now()->addDays(7),
+        ['id' => $purchaseOrder->purchase_order_id, 'action' => 'reject']
+    );
+
+    return response()->json([
+        'po_number' => $purchaseOrder->po_number,
+        'confirmUrl' => $confirmUrl,
+        'rejectUrl' => $rejectUrl,
+        'app_url' => config('app.url'),
+        'test_instructions' => 'Copy one of these URLs and test it in your browser',
+    ]);
+})->name('test.supplier.url');
 
 
 

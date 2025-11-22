@@ -401,7 +401,7 @@ const statusOptions = [
               <div>
                 <p class="font-medium">{{ order.order_number }}</p>
                 <p class="text-sm text-muted-foreground">
-                  {{ order.supplier.supplier_name }} • {{ formatDate(order.created_at) }}
+                  {{ (order.supplier && order.supplier.supplier_name) || order.supplier_name }} • {{ formatDate(order.created_at) }}
                 </p>
               </div>
               <div class="text-right">
@@ -441,7 +441,7 @@ const statusOptions = [
                   class="border-b hover:bg-muted/50"
                 >
                   <td class="p-4 font-medium">{{ order.order_number }}</td>
-                  <td class="p-4">{{ order.supplier.supplier_name }}</td>
+                  <td class="p-4">{{ (order.supplier && order.supplier.supplier_name) || order.supplier_name }}</td>
                   <td class="p-4">{{ formatDate(order.created_at) }}</td>
                   <td class="p-4">
                     <Badge :variant="getStatusBadgeVariant(order.status)">
@@ -485,7 +485,7 @@ const statusOptions = [
                   class="border-b hover:bg-muted/50"
                 >
                   <td class="p-4 font-medium">{{ order.order_number }}</td>
-                  <td class="p-4">{{ order.supplier.supplier_name }}</td>
+                  <td class="p-4">{{ (order.supplier && order.supplier.supplier_name) || order.supplier_name }}</td>
                   <td class="p-4">{{ formatDate(order.created_at) }}</td>
                   <td class="p-4">
                     <Badge :variant="getStatusBadgeVariant(order.status)">

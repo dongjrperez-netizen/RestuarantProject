@@ -12,10 +12,21 @@ class SupplierController extends Controller
 {
     public function index()
     {
-        $suppliers = Supplier::with(['ingredients', 'purchaseOrders'])
-            ->where('restaurant_id', auth()->user()->restaurantData->id)
-            ->orderBy('supplier_name')
-            ->get();
+        try {
+            $suppliers = Supplier::with(['ingredients', 'purchaseOrders'])
+                ->where('restaurant_id', auth()->user()->restaurantData->id)
+                ->orderBy('supplier_name')
+                ->get();
+        } catch (\Exception $e) {
+            // If the ingredient_suppliers pivot table or related resources are missing
+            // (e.g. during migration), avoid throwing a 500 and instead fall back to
+            // a minimal supplier query. Log the issue for diagnostics.
+            \Log::warning('SupplierController@index failed to eager load relations, falling back to safe query', ['error' => $e->getMessage()]);
+
+            $suppliers = Supplier::where('restaurant_id', auth()->user()->restaurantData->id)
+                ->orderBy('supplier_name')
+                ->get();
+        }
 
         return Inertia::render('Suppliers/Index', [
             'suppliers' => $suppliers,
@@ -25,8 +36,13 @@ class SupplierController extends Controller
 
     public function show($id)
     {
-        $supplier = Supplier::with(['ingredients', 'purchaseOrders', 'bills.payments'])
-            ->findOrFail($id);
+        try {
+            $supplier = Supplier::with(['ingredients', 'purchaseOrders', 'bills.payments'])
+                ->findOrFail($id);
+        } catch (\Exception $e) {
+            \Log::warning('SupplierController@show failed to eager load relations, loading minimal supplier', ['supplier_id' => $id, 'error' => $e->getMessage()]);
+            $supplier = Supplier::findOrFail($id);
+        }
 
         return Inertia::render('Suppliers/Show', [
             'supplier' => $supplier,
@@ -87,7 +103,12 @@ class SupplierController extends Controller
 
     public function edit($id)
     {
-        $supplier = Supplier::with(['ingredients'])->findOrFail($id);
+        try {
+            $supplier = Supplier::with(['ingredients'])->findOrFail($id);
+        } catch (\Exception $e) {
+            \Log::warning('SupplierController@edit failed to eager load ingredients, loading minimal supplier', ['supplier_id' => $id, 'error' => $e->getMessage()]);
+            $supplier = Supplier::findOrFail($id);
+        }
         $allIngredients = Ingredients::where('restaurant_id', auth()->user()->restaurantData->id)
             ->orderBy('ingredient_name')
             ->get();

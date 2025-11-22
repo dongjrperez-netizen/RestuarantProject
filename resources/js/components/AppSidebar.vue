@@ -4,7 +4,7 @@ import { Link, usePage } from '@inertiajs/vue3'
 import {
   Users, UserRound, Box, ClipboardList,
   UtensilsCrossed, ShoppingCart, Truck, Receipt,
-  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar, BarChart3, ChevronRight
+  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar, BarChart3, ChevronRight, BookmarkPlus
 } from "lucide-vue-next"
 
 import {
@@ -65,6 +65,7 @@ const baseNavItems = [
     title: "Inventory",
     icon: Warehouse,
     children: [
+      { title: "Ingredients Library", href: "/ingredients-library", icon: BookmarkPlus },
       { title: "Ingredients", href: "/inventory", icon: ChefHat },
     ]
   },

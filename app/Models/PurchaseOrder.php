@@ -18,6 +18,10 @@ class PurchaseOrder extends Model
         'po_number',
         'restaurant_id',
         'supplier_id',
+        'supplier_name',
+        'supplier_contact',
+        'supplier_email',
+        'supplier_phone',
         'status',
         'order_date',
         'expected_delivery_date',
@@ -35,6 +39,8 @@ class PurchaseOrder extends Model
         'created_by_user_id',
         'approved_by_user_id',
         'approved_at',
+        'supplier_response',
+        'supplier_responded_at',
     ];
 
     protected $casts = [
@@ -47,6 +53,7 @@ class PurchaseOrder extends Model
         'discount_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'approved_at' => 'datetime',
+        'supplier_responded_at' => 'datetime',
     ];
 
     protected $appends = [
@@ -87,6 +94,15 @@ class PurchaseOrder extends Model
     public function getOrderNumberAttribute()
     {
         return $this->po_number;
+    }
+
+    // Accessor to get supplier display name (from relationship or manual entry)
+    public function getSupplierDisplayNameAttribute()
+    {
+        if ($this->supplier_id && $this->supplier) {
+            return $this->supplier->supplier_name;
+        }
+        return $this->supplier_name ?? 'N/A';
     }
 
     protected static function boot()

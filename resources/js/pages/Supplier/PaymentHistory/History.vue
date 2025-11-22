@@ -9,7 +9,6 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import Badge from '@/components/ui/badge/Badge.vue';
-import { format } from 'date-fns';
 
 interface Supplier {
   supplier_id: number;
@@ -56,8 +55,10 @@ const formatCurrency = (amount: number) =>
     minimumFractionDigits: 2,
   })}`;
 
-const formatDate = (dateString: string) =>
-  format(new Date(dateString), 'MMM d, yyyy');
+const formatDate = (dateString: string) => {
+  const d = new Date(dateString);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 const getStatusColor = (status?: string) => {
   switch (status?.toLowerCase()) {

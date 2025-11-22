@@ -64,6 +64,10 @@ interface PurchaseOrder {
 
 interface Props {
   purchaseOrder: PurchaseOrder;
+  flash?: {
+    success?: string;
+    error?: string;
+  };
 }
 
 const props = defineProps<Props>();
@@ -131,6 +135,21 @@ const cancelOrder = () => {
             {{ getStatusBadge(purchaseOrder.status).label }}
           </Badge>
         </div>
+      </div>
+
+      <!-- Flash Messages -->
+      <div v-if="flash?.success" class="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        <span>{{ flash.success }}</span>
+      </div>
+
+      <div v-if="flash?.error" class="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+        </svg>
+        <span>{{ flash.error }}</span>
       </div>
 
       <!-- Action Buttons -->
@@ -249,22 +268,22 @@ const cancelOrder = () => {
           <CardContent class="space-y-4">
             <div>
               <label class="text-sm font-medium text-muted-foreground">Supplier Name</label>
-              <div class="font-medium">{{ purchaseOrder.supplier.supplier_name }}</div>
+              <div class="font-medium">{{ (purchaseOrder.supplier && purchaseOrder.supplier.supplier_name) || purchaseOrder.supplier_name }}</div>
             </div>
-            
-            <div v-if="purchaseOrder.supplier.contact_person">
+
+            <div v-if="(purchaseOrder.supplier && purchaseOrder.supplier.contact_person) || purchaseOrder.supplier_contact">
               <label class="text-sm font-medium text-muted-foreground">Contact Person</label>
-              <div>{{ purchaseOrder.supplier.contact_person }}</div>
+              <div>{{ (purchaseOrder.supplier && purchaseOrder.supplier.contact_person) || purchaseOrder.supplier_contact }}</div>
             </div>
 
-            <div v-if="purchaseOrder.supplier.phone">
+            <div v-if="(purchaseOrder.supplier && purchaseOrder.supplier.phone) || purchaseOrder.supplier_phone">
               <label class="text-sm font-medium text-muted-foreground">Phone</label>
-              <div>{{ purchaseOrder.supplier.phone }}</div>
+              <div>{{ (purchaseOrder.supplier && purchaseOrder.supplier.phone) || purchaseOrder.supplier_phone }}</div>
             </div>
 
-            <div v-if="purchaseOrder.supplier.email">
+            <div v-if="(purchaseOrder.supplier && purchaseOrder.supplier.email) || purchaseOrder.supplier_email">
               <label class="text-sm font-medium text-muted-foreground">Email</label>
-              <div>{{ purchaseOrder.supplier.email }}</div>
+              <div>{{ (purchaseOrder.supplier && purchaseOrder.supplier.email) || purchaseOrder.supplier_email }}</div>
             </div>
           </CardContent>
         </Card>
