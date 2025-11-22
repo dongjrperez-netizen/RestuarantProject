@@ -1022,117 +1022,117 @@ public function storeOrder(Request $request)
         ]);
 
         try {
-            // Get the dish with ingredients, scoped to the waiter's restaurant
-            $dish = Dish::with(['dishIngredients.ingredient', 'variants'])
-                ->where('restaurant_id', $restaurantId)
+            // Get the dish, scoped to the waiter's restaurant
+            $dish = Dish::where('restaurant_id', $restaurantId)
                 ->findOrFail($validated['dish_id']);
 
-            // Get variant multiplier
-            $variantMultiplier = 1.0;
-            if (!empty($validated['variant_id'])) {
-                $variant = $dish->variants->where('variant_id', $validated['variant_id'])->first();
-                if ($variant) {
-                    $variantMultiplier = $variant->quantity_multiplier ?? 1.0;
+            // Get today's date
+            $today = now()->format('Y-m-d');
+
+            // Find the active menu plan for today
+            $activeMenuPlan = MenuPlan::where('restaurant_id', $restaurantId)
+                ->where('is_active', true)
+                ->where('start_date', '<=', $today)
+                ->where('end_date', '>=', $today)
+                ->orderByRaw("CASE WHEN plan_type = 'weekly' THEN 1 WHEN plan_type = 'daily' THEN 2 ELSE 3 END")
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $isDefaultPlan = false;
+            $plannedQuantity = 0;
+
+            if (!$activeMenuPlan) {
+                // Fall back to the default plan
+                $activeMenuPlan = MenuPlan::where('restaurant_id', $restaurantId)
+                    ->where('is_default', true)
+                    ->where('is_active', true)
+                    ->first();
+                $isDefaultPlan = true;
+            }
+
+            if ($activeMenuPlan) {
+                // Get the planned quantity for this dish today
+                if ($isDefaultPlan) {
+                    // For default plans, get any entry for this dish (ignore date)
+                    $menuPlanDish = $activeMenuPlan->menuPlanDishes()
+                        ->where('dish_id', $validated['dish_id'])
+                        ->first();
+                } else {
+                    // For specific plans, filter by today's date
+                    $menuPlanDish = $activeMenuPlan->menuPlanDishes()
+                        ->where('dish_id', $validated['dish_id'])
+                        ->where('planned_date', $today)
+                        ->first();
+                }
+
+                if ($menuPlanDish) {
+                    $plannedQuantity = $menuPlanDish->planned_quantity;
                 }
             }
 
-            // Calculate total ingredient requirements from cart
-            $cartIngredientRequirements = [];
+            // If no planned quantity found, dish is not available in menu plan
+            if ($plannedQuantity === 0) {
+                return response()->json([
+                    'success' => true,
+                    'available' => false,
+                    'max_quantity' => 0,
+                    'limiting_ingredient' => 'Not in menu plan for today',
+                    'dish_name' => $dish->dish_name,
+                    'requested_quantity' => $validated['requested_quantity'],
+                    'planned_quantity' => 0,
+                    'already_ordered' => 0,
+                ]);
+            }
+
+            // Calculate how many of this dish have already been ordered today
+            $alreadyOrdered = CustomerOrderItem::whereHas('customerOrder', function ($query) use ($employee, $today) {
+                    $query->where('restaurant_id', $employee->user_id)
+                          ->whereDate('ordered_at', $today)
+                          ->whereNotIn('status', ['cancelled', 'voided']); // Exclude cancelled and voided orders
+                })
+                ->where('dish_id', $validated['dish_id'])
+                ->sum('quantity');
+
+            // Calculate quantity in current cart
+            $cartQuantity = 0;
             if (!empty($validated['cart_items'])) {
                 foreach ($validated['cart_items'] as $cartItem) {
-                    $cartDish = Dish::with(['dishIngredients.ingredient', 'variants'])
-                        ->where('restaurant_id', $employee->user_id)
-                        ->find($cartItem['dish_id']);
-
-                    if (!$cartDish) continue;
-
-                    // Get variant multiplier for cart item
-                    $cartVariantMultiplier = 1.0;
-                    if (!empty($cartItem['variant_id'])) {
-                        $cartVariant = $cartDish->variants->where('variant_id', $cartItem['variant_id'])->first();
-                        if ($cartVariant) {
-                            $cartVariantMultiplier = $cartVariant->quantity_multiplier ?? 1.0;
-                        }
-                    }
-
-                    // Get excluded ingredients for this cart item
-                    $excludedIngredients = $cartItem['excluded_ingredients'] ?? [];
-
-                    // Add ingredient requirements for this cart item
-                    foreach ($cartDish->dishIngredients as $dishIngredient) {
-                        // Skip if ingredient is excluded in this cart item
-                        if (in_array($dishIngredient->ingredient_id, $excludedIngredients)) {
-                            continue;
-                        }
-
-                        $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
-                        $totalRequired = $quantityInBaseUnit * $cartVariantMultiplier * $cartItem['quantity'];
-
-                        if (!isset($cartIngredientRequirements[$dishIngredient->ingredient_id])) {
-                            $cartIngredientRequirements[$dishIngredient->ingredient_id] = 0;
-                        }
-                        $cartIngredientRequirements[$dishIngredient->ingredient_id] += $totalRequired;
+                    if ($cartItem['dish_id'] == $validated['dish_id']) {
+                        $cartQuantity += $cartItem['quantity'];
                     }
                 }
             }
 
-            // Check availability for the requested dish
-            $ingredientDetails = [];
-            $isAvailable = true;
-            $maxQuantity = PHP_INT_MAX;
-            $limitingIngredient = null;
+            // Calculate available quantity
+            $availableQuantity = $plannedQuantity - $alreadyOrdered - $cartQuantity;
+            $maxQuantity = max(0, $availableQuantity);
 
-            foreach ($dish->dishIngredients as $dishIngredient) {
-                $ingredient = $dishIngredient->ingredient;
-                $quantityInBaseUnit = $dishIngredient->getQuantityInBaseUnit();
-                $requiredPerDish = $quantityInBaseUnit * $variantMultiplier;
+            // Check if requested quantity is available
+            $isAvailable = $validated['requested_quantity'] <= $maxQuantity;
 
-                // Calculate total required (cart + requested)
-                $cartUsage = $cartIngredientRequirements[$ingredient->ingredient_id] ?? 0;
-                $requestedUsage = $requiredPerDish * $validated['requested_quantity'];
-                $totalRequired = $cartUsage + $requestedUsage;
-
-                // Check current stock
-                $currentStock = $ingredient->current_stock;
-                $availableStock = $currentStock - $cartUsage;
-
-                // Calculate max quantity possible for this ingredient
-                $maxForThisIngredient = $availableStock > 0
-                    ? floor($availableStock / $requiredPerDish)
-                    : 0;
-
-                if ($maxForThisIngredient < $maxQuantity) {
-                    $maxQuantity = $maxForThisIngredient;
-                    $limitingIngredient = $ingredient->ingredient_name;
-                }
-
-                $ingredientDetails[] = [
-                    'ingredient_id' => $ingredient->ingredient_id,
-                    'ingredient_name' => $ingredient->ingredient_name,
-                    'current_stock' => $currentStock,
-                    'base_unit' => $ingredient->base_unit,
-                    'required_per_dish' => round($requiredPerDish, 4),
-                    'cart_usage' => round($cartUsage, 4),
-                    'requested_usage' => round($requestedUsage, 4),
-                    'total_required' => round($totalRequired, 4),
-                    'available_after_cart' => round($availableStock, 4),
-                    'is_sufficient' => $totalRequired <= $currentStock,
-                    'max_quantity' => (int)$maxForThisIngredient,
-                ];
-
-                if ($totalRequired > $currentStock) {
-                    $isAvailable = false;
-                }
-            }
+            \Log::info('Menu Plan Availability Check', [
+                'dish_id' => $validated['dish_id'],
+                'dish_name' => $dish->dish_name,
+                'planned_quantity' => $plannedQuantity,
+                'already_ordered' => $alreadyOrdered,
+                'cart_quantity' => $cartQuantity,
+                'available_quantity' => $availableQuantity,
+                'requested_quantity' => $validated['requested_quantity'],
+                'is_available' => $isAvailable,
+                'menu_plan_id' => $activeMenuPlan ? $activeMenuPlan->menu_plan_id : null,
+                'is_default_plan' => $isDefaultPlan,
+            ]);
 
             return response()->json([
                 'success' => true,
                 'available' => $isAvailable,
-                'max_quantity' => max(0, (int)$maxQuantity),
-                'limiting_ingredient' => $limitingIngredient,
+                'max_quantity' => $maxQuantity,
+                'limiting_ingredient' => $maxQuantity === 0 ? 'Menu plan limit reached' : null,
                 'dish_name' => $dish->dish_name,
                 'requested_quantity' => $validated['requested_quantity'],
-                'ingredients' => $ingredientDetails,
+                'planned_quantity' => $plannedQuantity,
+                'already_ordered' => $alreadyOrdered,
+                'cart_quantity' => $cartQuantity,
             ]);
 
         } catch (\Exception $e) {

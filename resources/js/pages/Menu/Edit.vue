@@ -22,8 +22,11 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed, watch, onMounted } from 'vue';
-import { Plus, Trash2, Clock, Users, Edit, Package, X, ChevronDown, Search, Save } from 'lucide-vue-next';
+import { Plus, Trash2, Clock, Users, Edit, Package, X, ChevronDown, Search, Save, Eye } from 'lucide-vue-next';
 import ImageUpload from '@/components/ImageUpload.vue';
+
+// Ensure window is typed correctly for TypeScript
+declare const window: Window & typeof globalThis;
 
 interface MenuCategory {
   category_id: number;
@@ -45,7 +48,6 @@ interface AvailableUnits {
 }
 
 interface DishIngredient {
-  [key: string]: any;
   unique_key: string;
   ingredient_id?: number;
   ingredient_name: string;
@@ -53,6 +55,7 @@ interface DishIngredient {
   unit: string;
   is_optional: boolean;
   preparation_note: string;
+  [key: string]: any; // Index signature for FormDataConvertible compatibility
 }
 
 interface DishVariant {
@@ -61,6 +64,7 @@ interface DishVariant {
   price_modifier: number | string;
   quantity_multiplier: number | string;
   is_default: boolean;
+  [key: string]: any; // Index signature for FormDataConvertible compatibility
 }
 
 interface Dish {
@@ -134,7 +138,7 @@ const removeIngredient = (index: number) => {
 const imageUploadRef = ref();
 const selectedIngredientId = ref('');
 const ingredientSearchTerm = ref('');
-const comboboxValue = ref<Ingredient | undefined>();
+const comboboxValue = ref<Ingredient | undefined>(undefined);
 
 // Get all available units in a flat array for easy use
 const allUnits = computed(() => [
@@ -195,6 +199,19 @@ const getCompatibleUnits = (ingredient: Ingredient | undefined): string[] => {
 
   const baseUnit = ingredient.base_unit.toLowerCase();
 
+  // For kg ingredients, only show kg to simplify UX
+  // Backend will handle g/kg conversions automatically
+  if (baseUnit === 'kg') {
+    return ['kg'];
+  }
+
+  // For count units (pcs, item, unit), only show the same unit
+  // to avoid confusion between pieces, items, and units
+  if (baseUnit === 'pcs' || baseUnit === 'item' || baseUnit === 'unit') {
+    return [baseUnit];
+  }
+
+  // For other weight units, show all weight options
   if (props.availableUnits.weight.includes(baseUnit)) {
     return props.availableUnits.weight;
   } else if (props.availableUnits.volume.includes(baseUnit)) {
@@ -463,6 +480,36 @@ const setDefaultVariant = (index: number) => {
   });
 };
 
+// Variant ingredient preview
+const showVariantPreview = ref(false);
+const selectedVariantIndex = ref<number | null>(null);
+
+const previewVariantIngredients = computed(() => {
+  if (selectedVariantIndex.value === null || !form.variants[selectedVariantIndex.value]) {
+    return [];
+  }
+
+  const variant = form.variants[selectedVariantIndex.value];
+  const multiplier = parseFloat(variant.quantity_multiplier?.toString() || '1');
+
+  return form.ingredients.map(ingredient => ({
+    name: ingredient.ingredient_name,
+    baseQuantity: ingredient.quantity,
+    variantQuantity: (ingredient.quantity * multiplier).toFixed(2),
+    unit: ingredient.unit,
+  }));
+});
+
+const openVariantPreview = (index: number) => {
+  selectedVariantIndex.value = index;
+  showVariantPreview.value = true;
+};
+
+const closeVariantPreview = () => {
+  showVariantPreview.value = false;
+  selectedVariantIndex.value = null;
+};
+
 const submit = () => {
   form.put(`/menu/${props.dish.dish_id}`, {
     onSuccess: () => {
@@ -618,20 +665,6 @@ const submit = () => {
                 </div>
               </div>
 
-              <!-- Stock Status Alert -->
-              <div v-if="form.ingredients.length > 0" class="mb-4">
-                <div
-                  :class="[
-                    'p-3 rounded-lg text-sm',
-                    stockStatusMessage.type === 'success'
-                      ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800'
-                      : 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800'
-                  ]"
-                >
-                  {{ stockStatusMessage.message }}
-                </div>
-              </div>
-
               <div v-if="!form.ingredients || form.ingredients.length === 0" class="text-sm text-muted-foreground text-center py-8">
                 No ingredients selected yet
               </div>
@@ -639,12 +672,9 @@ const submit = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead class="w-[25%]">Ingredient</TableHead>
-                      <TableHead class="w-[12%]">Quantity</TableHead>
-                      <TableHead class="w-[8%]">Unit</TableHead>
-                      <TableHead class="w-[8%]">Optional</TableHead>
-                      <TableHead class="w-[20%]">Stock Status</TableHead>
-                      <TableHead class="w-[17%]">Notes</TableHead>
+                      <TableHead class="w-[50%]">Ingredient</TableHead>
+                      <TableHead class="w-[20%]">Quantity</TableHead>
+                      <TableHead class="w-[20%]">Unit</TableHead>
                       <TableHead class="w-[10%]">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -680,40 +710,6 @@ const submit = () => {
                             </SelectItem>
                           </SelectContent>
                         </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Checkbox
-                          v-model:checked="ingredient.is_optional"
-                          class="mx-2"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div v-if="ingredient.ingredient_id" class="text-xs space-y-1">
-                          <div class="flex items-center gap-1">
-                            <Badge
-                              :variant="getIngredientStockStatus(ingredient).sufficient ? 'default' : 'destructive'"
-                              class="text-xs px-1"
-                            >
-                              {{ getIngredientStockStatus(ingredient).sufficient ? '✓' : '⚠' }}
-                            </Badge>
-                            <span :class="getIngredientStockStatus(ingredient).sufficient ? 'text-green-600' : 'text-red-600'">
-                              {{ Math.round(getIngredientStockStatus(ingredient).availableInDisplayUnit * 100) / 100 }} {{ ingredient.unit }}
-                            </span>
-                          </div>
-                          <div class="text-muted-foreground">
-                            Need: {{ getIngredientStockStatus(ingredient).neededInDisplayUnit }} {{ ingredient.unit }}
-                          </div>
-                        </div>
-                        <div v-else class="text-xs text-muted-foreground">
-                          No stock info
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          v-model="ingredient.preparation_note"
-                          placeholder="e.g., diced, chopped..."
-                          class="w-full text-xs"
-                        />
                       </TableCell>
                       <TableCell>
                         <Button
@@ -773,11 +769,12 @@ const submit = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead class="w-[25%]">Size Name</TableHead>
-                    <TableHead class="w-[20%]">Price</TableHead>
-                    <TableHead class="w-[20%]">Quantity Multiplier</TableHead>
-                    <TableHead class="w-[15%]">Default</TableHead>
-                    <TableHead class="w-[20%]">Actions</TableHead>
+                    <TableHead class="w-[20%]">Size Name</TableHead>
+                    <TableHead class="w-[15%]">Price</TableHead>
+                    <TableHead class="w-[15%]">Quantity Multiplier</TableHead>
+                    <TableHead class="w-[10%]">Default</TableHead>
+                    <TableHead class="w-[15%]">Preview</TableHead>
+                    <TableHead class="w-[15%]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -820,6 +817,18 @@ const submit = () => {
                         @change="setDefaultVariant(index)"
                         class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                       />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        @click="openVariantPreview(index)"
+                        class="flex items-center gap-1"
+                      >
+                        <Eye class="w-3 h-3" />
+                        Show
+                      </Button>
                     </TableCell>
                     <TableCell>
                       <Button
@@ -882,5 +891,52 @@ const submit = () => {
         </div>
       </form>
     </div>
+
+    <!-- Variant Ingredient Preview Modal -->
+    <Dialog v-model:open="showVariantPreview">
+      <DialogContent class="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            Ingredient Preview: {{ selectedVariantIndex !== null ? form.variants[selectedVariantIndex]?.size_name : '' }}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div class="space-y-4">
+          <div v-if="selectedVariantIndex !== null" class="text-sm text-muted-foreground">
+            <p>Multiplier: <span class="font-semibold">{{ form.variants[selectedVariantIndex]?.quantity_multiplier }}x</span></p>
+            <p class="mt-1">This shows the exact ingredients that will be deducted from inventory when this size is ordered.</p>
+          </div>
+
+          <div v-if="previewVariantIngredients.length === 0" class="text-center py-8 text-muted-foreground">
+            No ingredients added yet. Add ingredients to the dish first.
+          </div>
+
+          <Table v-else>
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[40%]">Ingredient</TableHead>
+                <TableHead class="w-[25%]">Base Recipe</TableHead>
+                <TableHead class="w-[25%]">This Variant</TableHead>
+                <TableHead class="w-[10%]">Unit</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="(ingredient, idx) in previewVariantIngredients" :key="idx">
+                <TableCell class="font-medium">{{ ingredient.name }}</TableCell>
+                <TableCell class="text-muted-foreground">{{ ingredient.baseQuantity }}</TableCell>
+                <TableCell class="font-semibold text-green-600">{{ ingredient.variantQuantity }}</TableCell>
+                <TableCell>{{ ingredient.unit }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+
+          <div class="flex justify-end gap-2 pt-4">
+            <Button type="button" variant="outline" @click="closeVariantPreview">
+              Close
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   </AppLayout>
 </template>

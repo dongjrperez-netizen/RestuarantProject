@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Employee;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -86,12 +87,39 @@ class HandleInertiaRequests extends Middleware
                 ->first();
         }
 
+        // Determine restaurant (restaurant_data) for current context
+        $restaurant = null;
+        if ($user) {
+            // 1) Direct restaurantData relation (restaurant owner user)
+            if (method_exists($user, 'restaurantData')) {
+                $user->loadMissing('restaurantData');
+                $restaurant = $user->restaurantData;
+            }
+
+            // 2) Supplier/Employee-style relation: check if restaurant() exists
+            if (! $restaurant && method_exists($user, 'restaurant')) {
+                $user->loadMissing('restaurant');
+                $userRestaurant = $user->restaurant;
+
+                // If restaurant is already Restaurant_Data instance (e.g., Supplier), use it directly
+                if ($userRestaurant instanceof \App\Models\Restaurant_Data) {
+                    $restaurant = $userRestaurant;
+                }
+                // If restaurant is a User instance (e.g., Employee), get its restaurantData
+                elseif ($userRestaurant && method_exists($userRestaurant, 'restaurantData')) {
+                    $userRestaurant->loadMissing('restaurantData');
+                    $restaurant = $userRestaurant->restaurantData;
+                }
+            }
+        }
+
         return array_merge(parent::share($request), [
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $user,
                 'userType' => $userType,
+                'restaurant' => $restaurant,
                 'subscription' => $subscription ? [
                     'plan_name' => $subscription->subscriptionPackage->plan_name ?? null,
                     'plan_id' => $subscription->plan_id ?? null,

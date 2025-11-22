@@ -751,6 +751,7 @@ const payFullAmountPaypal = () => {
                 <TableHead>Date</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Method</TableHead>
+                <TableHead>Transaction Ref</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created By</TableHead>
               </TableRow>
@@ -763,6 +764,12 @@ const payFullAmountPaypal = () => {
                 <TableCell>{{ formatDate(payment.payment_date) }}</TableCell>
                 <TableCell>{{ formatCurrency(payment.payment_amount) }}</TableCell>
                 <TableCell>{{ getPaymentMethodDisplay(payment.payment_method) }}</TableCell>
+                <TableCell>
+                  <span v-if="payment.transaction_reference" class="text-sm">
+                    {{ payment.transaction_reference }}
+                  </span>
+                  <span v-else class="text-sm text-muted-foreground">-</span>
+                </TableCell>
                 <TableCell>
                   <Badge :variant="payment.status === 'completed' ? 'default' : 'secondary'">
                     {{ formatStatus(payment.status) }}

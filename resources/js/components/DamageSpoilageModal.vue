@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,31 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { watch } from 'vue';
-import { AlertTriangle, Package, Save, X } from 'lucide-vue-next';
-import axios from 'axios';
+import { Card, CardContent } from '@/components/ui/card';
+import { AlertTriangle, Package, Save, X, Plus, Trash2 } from 'lucide-vue-next';
 
 interface Ingredient {
   ingredient_id: number;
   ingredient_name: string;
   base_unit: string;
 }
-
-const unitOptions = [
-  // Weight units
-  'g', 'gram', 'grams',
-  'kg', 'kilogram', 'kilograms',
-  'lb', 'pound', 'pounds',
-  'oz', 'ounce', 'ounces',
-  // Volume units
-  'ml', 'milliliter', 'milliliters',
-  'l', 'liter', 'liters',
-  'cup', 'cups',
-  'tbsp', 'tablespoon', 'tablespoons',
-  'tsp', 'teaspoon', 'teaspoons',
-  // Count units
-  'pcs', 'piece', 'pieces', 'item', 'items', 'unit', 'units',
-];
 
 interface Props {
   isOpen: boolean;
@@ -46,28 +30,100 @@ interface Emits {
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
-const form = useForm({
-  ingredient_id: '',
+interface IngredientEntry {
+  ingredient_id: string;
+  quantity: string;
+  unit: string;
+  estimated_cost: string;
+}
+
+const selectedType = ref('');
+const selectedReason = ref('');
+const selectedNotes = ref('');
+const selectedDate = ref(new Date().toISOString().split('T')[0]);
+const ingredientEntries = ref<IngredientEntry[]>([
+  {
+    ingredient_id: '',
+    quantity: '',
+    unit: '',
+    estimated_cost: '',
+  },
+]);
+
+const form = useForm<{
+  type: string;
+  reason: string;
+  notes: string;
+  incident_date: string;
+  ingredients: Array<{
+    ingredient_id: string;
+    quantity: string;
+    unit: string;
+    estimated_cost: string;
+  }>;
+}>({
   type: '',
-  quantity: '',
-  unit: '',
   reason: '',
   notes: '',
-  incident_date: new Date().toISOString().split('T')[0],
-  estimated_cost: '',
+  incident_date: '',
+  ingredients: [],
 });
 
-// Handle ingredient change (unit is entered manually by user)
-const onIngredientChange = (ingredientId: string) => {
-  form.ingredient_id = ingredientId;
+const addIngredientEntry = () => {
+  ingredientEntries.value.push({
+    ingredient_id: '',
+    quantity: '',
+    unit: '',
+    estimated_cost: '',
+  });
+};
+
+// Auto-populate unit when ingredient is selected
+const onIngredientChange = (index: number, ingredientId: string | number | boolean | null | undefined) => {
+  if (!ingredientId || typeof ingredientId !== 'string') return;
+
+  const ingredient = props.ingredients.find(ing => ing.ingredient_id.toString() === ingredientId);
+  if (ingredient) {
+    ingredientEntries.value[index].ingredient_id = ingredientId;
+    ingredientEntries.value[index].unit = ingredient.base_unit;
+  }
+};
+
+const removeIngredientEntry = (index: number) => {
+  if (ingredientEntries.value.length > 1) {
+    ingredientEntries.value.splice(index, 1);
+  }
 };
 
 const resetForm = () => {
+  selectedType.value = '';
+  selectedReason.value = '';
+  selectedNotes.value = '';
+  selectedDate.value = new Date().toISOString().split('T')[0];
+  ingredientEntries.value = [
+    {
+      ingredient_id: '',
+      quantity: '',
+      unit: '',
+      estimated_cost: '',
+    },
+  ];
   form.reset();
-  form.incident_date = new Date().toISOString().split('T')[0];
 };
 
 const submit = async () => {
+  // Prepare form data
+  form.type = selectedType.value;
+  form.reason = selectedReason.value;
+  form.notes = selectedNotes.value;
+  form.incident_date = selectedDate.value;
+  form.ingredients = ingredientEntries.value.filter(entry => entry.ingredient_id && entry.quantity);
+
+  if (form.ingredients.length === 0) {
+    alert('Please add at least one ingredient');
+    return;
+  }
+
   try {
     await form.post('/damage-spoilage', {
       preserveScroll: true,
@@ -119,7 +175,7 @@ const commonReasons = {
 
 <template>
   <Dialog :open="isOpen" @update:open="closeModal">
-    <DialogContent class="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+    <DialogContent class="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2">
           <AlertTriangle class="w-5 h-5 text-orange-600" />
@@ -128,33 +184,12 @@ const commonReasons = {
       </DialogHeader>
 
       <form @submit.prevent="submit" class="space-y-6 mt-4">
+        <!-- General Information -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Ingredient Selection -->
-          <div class="space-y-2">
-            <Label for="ingredient_id">Ingredient *</Label>
-            <Select :model-value="form.ingredient_id" @update:model-value="onIngredientChange">
-              <SelectTrigger :class="{ 'border-red-500': form.errors.ingredient_id }">
-                <SelectValue placeholder="Select ingredient" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="ingredient in ingredients"
-                  :key="ingredient.ingredient_id"
-                  :value="ingredient.ingredient_id.toString()"
-                >
-                  {{ ingredient.ingredient_name }} ({{ ingredient.base_unit }})
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p v-if="form.errors.ingredient_id" class="text-sm text-red-500">
-              {{ form.errors.ingredient_id }}
-            </p>
-          </div>
-
           <!-- Type Selection -->
           <div class="space-y-2">
             <Label for="type">Type *</Label>
-            <Select v-model="form.type">
+            <Select v-model="selectedType">
               <SelectTrigger :class="{ 'border-red-500': form.errors.type }">
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
@@ -173,51 +208,12 @@ const commonReasons = {
             </p>
           </div>
 
-          <!-- Quantity -->
-          <div class="space-y-2">
-            <Label for="quantity">Quantity *</Label>
-            <div class="flex gap-2">
-              <Input
-                id="quantity"
-                v-model="form.quantity"
-                type="number"
-                step="0.001"
-                min="0"
-                placeholder="0.000"
-                :class="{ 'border-red-500': form.errors.quantity }"
-                class="flex-1"
-              />
-              <Select v-model="form.unit">
-                <SelectTrigger
-                  :class="[{ 'border-red-500': form.errors.unit }, 'w-28']"
-                >
-                  <SelectValue placeholder="Unit" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    v-for="unit in unitOptions"
-                    :key="unit"
-                    :value="unit"
-                  >
-                    {{ unit }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <p v-if="form.errors.quantity" class="text-sm text-red-500">
-              {{ form.errors.quantity }}
-            </p>
-            <p v-if="form.errors.unit" class="text-sm text-red-500">
-              {{ form.errors.unit }}
-            </p>
-          </div>
-
           <!-- Incident Date -->
           <div class="space-y-2">
             <Label for="incident_date">Incident Date *</Label>
             <Input
               id="incident_date"
-              v-model="form.incident_date"
+              v-model="selectedDate"
               type="date"
               :max="new Date().toISOString().split('T')[0]"
               :class="{ 'border-red-500': form.errors.incident_date }"
@@ -226,27 +222,115 @@ const commonReasons = {
               {{ form.errors.incident_date }}
             </p>
           </div>
+        </div>
 
-          <!-- Estimated Cost -->
-          <div class="space-y-2 md:col-span-2">
-            <Label for="estimated_cost">Estimated Cost (Optional)</Label>
-            <Input
-              id="estimated_cost"
-              v-model="form.estimated_cost"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              :class="{ 'border-red-500': form.errors.estimated_cost }"
-              class="max-w-xs"
-            />
-            <p v-if="form.errors.estimated_cost" class="text-sm text-red-500">
-              {{ form.errors.estimated_cost }}
-            </p>
-            <p class="text-xs text-muted-foreground">
-              Enter the monetary value of the lost ingredient (optional)
-            </p>
+        <!-- Ingredients Section -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <Label class="text-base font-semibold">Affected Ingredients *</Label>
+            <Button
+              type="button"
+              @click="addIngredientEntry"
+              size="sm"
+              variant="outline"
+              class="gap-2"
+            >
+              <Plus class="w-4 h-4" />
+              Add Ingredient
+            </Button>
           </div>
+
+          <div class="space-y-3">
+            <Card
+              v-for="(entry, index) in ingredientEntries"
+              :key="index"
+              class="border-2"
+            >
+              <CardContent class="pt-4">
+                <div class="space-y-4">
+                  <div class="flex items-start justify-between">
+                    <h4 class="text-sm font-medium text-gray-700">Ingredient #{{ index + 1 }}</h4>
+                    <Button
+                      v-if="ingredientEntries.length > 1"
+                      type="button"
+                      @click="removeIngredientEntry(index)"
+                      size="sm"
+                      variant="ghost"
+                      class="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 class="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <!-- Ingredient Selection -->
+                    <div class="space-y-2 md:col-span-2">
+                      <Label>Ingredient *</Label>
+                      <Select :model-value="entry.ingredient_id" @update:model-value="(value) => onIngredientChange(index, value)">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select ingredient" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem
+                            v-for="ingredient in ingredients"
+                            :key="ingredient.ingredient_id"
+                            :value="ingredient.ingredient_id.toString()"
+                          >
+                            {{ ingredient.ingredient_name }} ({{ ingredient.base_unit }})
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <!-- Quantity -->
+                    <div class="space-y-2">
+                      <Label>Quantity *</Label>
+                      <Input
+                        v-model="entry.quantity"
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        placeholder="0.000"
+                      />
+                    </div>
+
+                    <!-- Unit (Auto-populated, read-only) -->
+                    <div class="space-y-2">
+                      <Label>Unit *</Label>
+                      <Input
+                        v-model="entry.unit"
+                        type="text"
+                        readonly
+                        disabled
+                        placeholder="Auto"
+                        class="bg-gray-100 cursor-not-allowed"
+                      />
+                    </div>
+
+                    <!-- Estimated Cost -->
+                    <div class="space-y-2 md:col-span-4">
+                      <Label>Estimated Cost (Optional)</Label>
+                      <Input
+                        v-model="entry.estimated_cost"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        class="max-w-xs"
+                      />
+                      <p class="text-xs text-muted-foreground">
+                        Leave blank to auto-calculate based on ingredient cost
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <p v-if="form.errors.ingredients" class="text-sm text-red-500">
+            {{ form.errors.ingredients }}
+          </p>
         </div>
 
         <!-- Reason -->
@@ -255,23 +339,23 @@ const commonReasons = {
           <div class="space-y-2">
             <Textarea
               id="reason"
-              v-model="form.reason"
+              v-model="selectedReason"
               placeholder="Describe the cause of damage/spoilage..."
               rows="3"
               :class="{ 'border-red-500': form.errors.reason }"
             />
 
             <!-- Quick Reason Selection -->
-            <div v-if="form.type && commonReasons[form.type as keyof typeof commonReasons]" class="space-y-2">
+            <div v-if="selectedType && commonReasons[selectedType as keyof typeof commonReasons]" class="space-y-2">
               <p class="text-sm text-muted-foreground">Quick select common reasons:</p>
               <div class="flex flex-wrap gap-2">
                 <Button
-                  v-for="reason in commonReasons[form.type as keyof typeof commonReasons]"
+                  v-for="reason in commonReasons[selectedType as keyof typeof commonReasons]"
                   :key="reason"
                   type="button"
                   variant="outline"
                   size="sm"
-                  @click="form.reason = reason"
+                  @click="selectedReason = reason"
                   class="text-xs"
                 >
                   {{ reason }}
@@ -289,7 +373,7 @@ const commonReasons = {
           <Label for="notes">Additional Notes (Optional)</Label>
           <Textarea
             id="notes"
-            v-model="form.notes"
+            v-model="selectedNotes"
             placeholder="Any additional details, prevention measures, or observations..."
             rows="2"
             :class="{ 'border-red-500': form.errors.notes }"
@@ -300,7 +384,7 @@ const commonReasons = {
         </div>
 
         <!-- Actions -->
-        <div class="flex justify-end space-x-2 pt-4">
+        <div class="flex justify-end space-x-2 pt-4 border-t">
           <Button
             type="button"
             variant="outline"
@@ -315,7 +399,7 @@ const commonReasons = {
             class="bg-orange-600 hover:bg-orange-700"
           >
             <Save class="w-4 h-4 mr-2" />
-            {{ form.processing ? 'Saving...' : 'Report Incident' }}
+            {{ form.processing ? 'Saving...' : `Report ${ingredientEntries.filter(e => e.ingredient_id).length} Incident${ingredientEntries.filter(e => e.ingredient_id).length !== 1 ? 's' : ''}` }}
           </Button>
         </div>
       </form>

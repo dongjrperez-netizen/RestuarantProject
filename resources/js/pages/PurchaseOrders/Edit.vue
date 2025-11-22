@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2, Plus } from 'lucide-vue-next';
 import { type BreadcrumbItem } from '@/types';
@@ -17,23 +15,12 @@ interface Supplier {
   supplier_name: string;
 }
 
-interface SupplierOffering {
-  id: number;
+interface Ingredient {
   ingredient_id: number;
-  supplier_id: number;
-  package_unit: string;
-  package_quantity: number;
-  package_price: number;
-  minimum_order_quantity: number;
-  ingredient: {
-    ingredient_id: number;
-    ingredient_name: string;
-    base_unit: string;
-  };
-  supplier: {
-    supplier_id: number;
-    supplier_name: string;
-  };
+  ingredient_name: string;
+  base_unit: string;
+  cost_per_unit: number;
+  current_stock: number;
 }
 
 interface PurchaseOrderItem {
@@ -41,6 +28,7 @@ interface PurchaseOrderItem {
   ingredient_id: number;
   ingredient: {
     ingredient_name: string;
+    base_unit: string;
   };
   ordered_quantity: number;
   unit_price: number;
@@ -51,29 +39,30 @@ interface PurchaseOrderItem {
 interface PurchaseOrder {
   purchase_order_id: number;
   po_number: string;
-  supplier_id: number;
+  supplier_id: number | null;
   notes: string;
-  delivery_instructions: string;
   supplier: {
     supplier_name: string;
-  };
+  } | null;
   items: PurchaseOrderItem[];
 }
 
 interface OrderItem {
   ingredient_id: number | null;
+  ingredient_name: string;
   ordered_quantity: number;
   unit_price: number;
   unit_of_measure: string;
   notes: string;
-  max_quantity?: number;
+  showDropdown?: boolean;
+  dropdownPosition?: { top: number; left: number; width: number };
   [key: string]: any;
 }
 
 interface Props {
   purchaseOrder: PurchaseOrder;
+  ingredients: Ingredient[];
   suppliers: Supplier[];
-  supplierOfferings: Record<number, SupplierOffering[]>;
 }
 
 const props = defineProps<Props>();
@@ -85,37 +74,53 @@ const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Edit', href: '#' },
 ];
 
-const selectedSupplier = ref<number>(props.purchaseOrder.supplier_id);
 const orderItems = ref<OrderItem[]>([]);
 
 const form = useForm({
-  supplier_id: props.purchaseOrder.supplier_id,
-  notes: props.purchaseOrder.notes || '',
-  delivery_instructions: props.purchaseOrder.delivery_instructions || '',
+  supplier_id: props.purchaseOrder.supplier_id || null,
+  supplier_name: props.purchaseOrder.supplier?.supplier_name || '',
   items: [] as OrderItem[]
 });
 
-const availableIngredients = computed(() => {
-  if (!selectedSupplier.value) return [];
-  
-  return props.supplierOfferings[selectedSupplier.value] || [];
-});
-
-const subtotal = computed(() => {
-  return orderItems.value.reduce((sum, item) => {
-    return sum + (item.ordered_quantity * item.unit_price);
-  }, 0);
-});
+const showSupplierDropdown = ref(false);
+const supplierDropdownPosition = ref<{ top: number; left: number; width: number } | null>(null);
 
 const addOrderItem = () => {
   orderItems.value.push({
     ingredient_id: null,
+    ingredient_name: '',
     ordered_quantity: 0,
     unit_price: 0,
     unit_of_measure: '',
-    notes: ''
+    notes: '',
+    showDropdown: false,
+    dropdownPosition: undefined
   });
 };
+
+const getFilteredIngredients = (itemIndex: number) => {
+  const searchQuery = orderItems.value[itemIndex].ingredient_name?.toLowerCase() || '';
+
+  if (!searchQuery) {
+    return [];
+  }
+
+  return props.ingredients.filter(ingredient =>
+    ingredient.ingredient_name.toLowerCase().includes(searchQuery)
+  );
+};
+
+const getFilteredSuppliers = computed(() => {
+  const searchQuery = form.supplier_name?.toLowerCase() || '';
+
+  if (!searchQuery) {
+    return [];
+  }
+
+  return props.suppliers.filter(supplier =>
+    supplier.supplier_name.toLowerCase().includes(searchQuery)
+  );
+});
 
 const removeOrderItem = (index: number) => {
   if (orderItems.value.length > 1) {
@@ -123,68 +128,154 @@ const removeOrderItem = (index: number) => {
   }
 };
 
-const onIngredientSelect = (itemIndex: number, ingredientId: number | null) => {
-  if (!ingredientId) return;
+const onIngredientInput = (itemIndex: number, event?: Event) => {
+  const item = orderItems.value[itemIndex];
+  item.showDropdown = item.ingredient_name.length > 0;
+  item.ingredient_id = null; // Reset ID when user types
 
-  const offering = availableIngredients.value.find(off => off.ingredient.ingredient_id === ingredientId);
-  if (offering) {
-    orderItems.value[itemIndex].ingredient_id = ingredientId;
-    // Set max quantity hint for user
-    orderItems.value[itemIndex].max_quantity = offering.minimum_order_quantity;
-    // Only set price and unit if it's a new ingredient (not editing existing)
-    if (!orderItems.value[itemIndex].unit_price) {
-      orderItems.value[itemIndex].unit_price = offering.package_price;
-      orderItems.value[itemIndex].unit_of_measure = offering.package_unit;
-    }
+  // Calculate dropdown position
+  if (event && event.target) {
+    const input = event.target as HTMLElement;
+    const rect = input.getBoundingClientRect();
+    item.dropdownPosition = {
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+      width: rect.width
+    };
   }
 };
 
-const getSelectedOffering = (itemIndex: number) => {
+const onIngredientFocus = (itemIndex: number, event: Event) => {
+  const item = orderItems.value[itemIndex];
+  item.showDropdown = item.ingredient_name.length > 0;
+
+  // Calculate dropdown position
+  if (event && event.target) {
+    const input = event.target as HTMLElement;
+    const rect = input.getBoundingClientRect();
+    item.dropdownPosition = {
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+      width: rect.width
+    };
+  }
+};
+
+const selectIngredient = (itemIndex: number, ingredient: Ingredient) => {
+  const item = orderItems.value[itemIndex];
+  item.ingredient_id = ingredient.ingredient_id;
+  item.ingredient_name = ingredient.ingredient_name;
+  item.unit_of_measure = ingredient.base_unit;
+  item.unit_price = ingredient.cost_per_unit;
+  item.showDropdown = false;
+};
+
+const getSelectedIngredient = (itemIndex: number) => {
   const item = orderItems.value[itemIndex];
   if (!item.ingredient_id) return null;
 
-  return availableIngredients.value.find(off => off.ingredient.ingredient_id === item.ingredient_id);
+  return props.ingredients.find(ing => ing.ingredient_id === item.ingredient_id);
 };
-
 
 const formatCurrency = (amount: number) => {
   return `₱${Number(amount).toLocaleString()}`;
+};
+
+const submit = () => {
+  // Filter out empty items and validate
+  const validItems = orderItems.value
+    .filter(item =>
+      item.ingredient_id &&
+      item.ordered_quantity > 0 &&
+      item.unit_price > 0
+    )
+    .map(item => ({
+      ingredient_id: item.ingredient_id,
+      ordered_quantity: item.ordered_quantity,
+      unit_price: item.unit_price,
+      unit_of_measure: item.unit_of_measure,
+      notes: item.notes
+    }));
+
+  form.items = validItems;
+
+  form.put(`/purchase-orders/${props.purchaseOrder.purchase_order_id}`, {
+    onError: (errors) => {
+      console.error('Purchase order validation/server errors', errors);
+    },
+  });
+};
+
+const closeDropdown = (itemIndex: number) => {
+  setTimeout(() => {
+    orderItems.value[itemIndex].showDropdown = false;
+  }, 200);
+};
+
+const onSupplierInput = (event: Event) => {
+  showSupplierDropdown.value = form.supplier_name.length > 0;
+  // Reset supplier_id when user types (forces them to select from dropdown)
+  form.supplier_id = null;
+
+  // Calculate dropdown position
+  if (event && event.target) {
+    const input = event.target as HTMLElement;
+    const rect = input.getBoundingClientRect();
+    supplierDropdownPosition.value = {
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+      width: rect.width
+    };
+  }
+};
+
+const onSupplierFocus = (event: Event) => {
+  showSupplierDropdown.value = form.supplier_name.length > 0;
+
+  // Calculate dropdown position
+  if (event && event.target) {
+    const input = event.target as HTMLElement;
+    const rect = input.getBoundingClientRect();
+    supplierDropdownPosition.value = {
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+      width: rect.width
+    };
+  }
+};
+
+const selectSupplier = (supplier: Supplier) => {
+  form.supplier_id = supplier.supplier_id;
+  form.supplier_name = supplier.supplier_name;
+  showSupplierDropdown.value = false;
+};
+
+const closeSupplierDropdown = () => {
+  setTimeout(() => {
+    showSupplierDropdown.value = false;
+  }, 200);
 };
 
 // Initialize form with existing data
 onMounted(() => {
   orderItems.value = props.purchaseOrder.items.map(item => ({
     ingredient_id: item.ingredient_id,
+    ingredient_name: item.ingredient.ingredient_name,
     ordered_quantity: item.ordered_quantity,
     unit_price: item.unit_price,
     unit_of_measure: item.unit_of_measure,
-    notes: item.notes || ''
+    notes: item.notes || '',
+    showDropdown: false,
+    dropdownPosition: undefined
   }));
 });
-
-watch(selectedSupplier, (newValue) => {
-  form.supplier_id = newValue;
-  // Don't reset items when editing - just update the supplier
-});
-
-const submit = () => {
-  // Filter out empty items and validate
-  const validItems = orderItems.value.filter(item => 
-    item.ingredient_id && 
-    item.ordered_quantity > 0 && 
-    item.unit_price > 0
-  );
-
-  form.items = validItems;
-  form.put(`/purchase-orders/${props.purchaseOrder.purchase_order_id}`);
-};
 </script>
 
 <template>
   <Head :title="`Edit Purchase Order ${purchaseOrder.po_number}`" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="space-y-6">
+      <div class="space-y-6 mx-6">
       <!-- Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Edit Purchase Order {{ purchaseOrder.po_number }}</h1>
@@ -192,116 +283,83 @@ const submit = () => {
       </div>
 
       <form @submit.prevent="submit" class="space-y-6">
+        <!-- Global error alert -->
+        <div
+          v-if="Object.keys(form.errors).length"
+          class="p-3 mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded"
+        >
+          <div v-for="(message, field) in form.errors" :key="field">
+            {{ message }}
+          </div>
+        </div>
+
         <!-- Basic Information -->
         <Card>
           <CardHeader>
             <CardTitle>Order Information</CardTitle>
           </CardHeader>
-          <CardContent class="space-y-4">
+          <CardContent class="space-y-6">
             <div class="space-y-2">
               <Label for="supplier">Supplier *</Label>
-              <Select v-model="selectedSupplier" required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    v-for="supplier in suppliers"
-                    :key="supplier.supplier_id"
-                    :value="supplier.supplier_id"
-                  >
-                    {{ supplier.supplier_name }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <div v-if="form.errors.supplier_id" class="text-sm text-red-600">
-                {{ form.errors.supplier_id }}
+              <Input
+                id="supplier"
+                v-model="form.supplier_name"
+                @input="onSupplierInput"
+                @focus="onSupplierFocus"
+                @blur="closeSupplierDropdown"
+                placeholder="Type supplier name..."
+                required
+              />
+              <div v-if="form.errors.supplier_name" class="text-sm text-red-600">
+                {{ form.errors.supplier_name }}
               </div>
             </div>
 
-            <div class="grid gap-4 md:grid-cols-2">
-              <div class="space-y-2">
-                <Label for="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  v-model="form.notes"
-                  placeholder="Any additional notes for this order..."
-                  rows="3"
-                />
-                <div v-if="form.errors.notes" class="text-sm text-red-600">
-                  {{ form.errors.notes }}
-                </div>
-              </div>
-
-              <div class="space-y-2">
-                <Label for="delivery_instructions">Delivery Instructions</Label>
-                <Textarea
-                  id="delivery_instructions"
-                  v-model="form.delivery_instructions"
-                  placeholder="Special delivery instructions..."
-                  rows="3"
-                />
-                <div v-if="form.errors.delivery_instructions" class="text-sm text-red-600">
-                  {{ form.errors.delivery_instructions }}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Order Items -->
-        <Card>
-          <CardHeader>
-            <div class="flex items-center justify-between">
-              <CardTitle>Order Items</CardTitle>
-              <Button 
-                type="button" 
-                @click="addOrderItem"
-                variant="outline"
-                size="sm"
-                :disabled="!selectedSupplier"
-              >
-                <Plus class="w-4 h-4 mr-2" />
-                Add Item
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
+            <!-- Order Items -->
             <div class="space-y-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ingredient</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Unit Price</TableHead>
-                    <TableHead>Package Unit</TableHead>
-                    <TableHead>Base Unit</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead class="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
+              <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold">Order Items</h3>
+                <Button
+                  type="button"
+                  @click="addOrderItem"
+                  variant="outline"
+                  size="sm"
+                >
+                  <Plus class="w-4 h-4 mr-2" />
+                  Add Item
+                </Button>
+              </div>
+
+              <div class="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead class="min-w-[280px]">Ingredient</TableHead>
+                      <TableHead class="min-w-[100px]">Quantity</TableHead>
+                      <TableHead class="min-w-[100px]">Base Unit</TableHead>
+                      <TableHead class="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   <TableRow v-for="(item, index) in orderItems" :key="index">
                     <TableCell>
-                      <Select 
-                        :model-value="item.ingredient_id"
-                        @update:model-value="(value) => onIngredientSelect(index, value ? Number(value) : null)"
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select ingredient" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem 
-                            v-for="offering in availableIngredients" 
-                            :key="offering.ingredient.ingredient_id"
-                            :value="offering.ingredient.ingredient_id"
-                          >
-                            {{ offering.ingredient.ingredient_name }} 
-                            ({{ formatCurrency(offering.package_price) }}/{{ offering.package_unit }})
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div class="space-y-1">
+                        <!-- Autocomplete Input -->
+                        <Input
+                          v-model="orderItems[index].ingredient_name"
+                          @input="(e) => onIngredientInput(index, e)"
+                          @focus="(e) => onIngredientFocus(index, e)"
+                          @blur="closeDropdown(index)"
+                          placeholder="Type ingredient name..."
+                          class="min-w-[250px]"
+                        />
+                        <div
+                          v-if="form.errors[`items.${index}.ingredient_id`]"
+                          class="text-xs text-red-600"
+                        >
+                          {{ form.errors[`items.${index}.ingredient_id`] }}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div class="space-y-1">
@@ -310,52 +368,23 @@ const submit = () => {
                           type="number"
                           step="0.01"
                           min="0.01"
-                          :max="getSelectedOffering(index)?.minimum_order_quantity"
                           placeholder="0"
-                          class="w-24"
-                          :class="{ 'border-red-500': getSelectedOffering(index) && item.ordered_quantity > getSelectedOffering(index).minimum_order_quantity }"
+                          class="min-w-[90px]"
                         />
-                        <div v-if="getSelectedOffering(index)" class="text-xs text-muted-foreground">
-                          Max: {{ getSelectedOffering(index).minimum_order_quantity }} {{ getSelectedOffering(index).package_unit }}
-                        </div>
-                        <div v-if="getSelectedOffering(index) && item.ordered_quantity > getSelectedOffering(index).minimum_order_quantity"
-                             class="text-xs text-red-600">
-                          Exceeds maximum order quantity
+                        <!-- Backend validation error for this row -->
+                        <div
+                          v-if="form.errors[`items.${index}.ordered_quantity`]"
+                          class="text-xs text-red-600"
+                        >
+                          {{ form.errors[`items.${index}.ordered_quantity`] }}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Input
-                        v-model.number="item.unit_price"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        placeholder="0.00"
-                        class="w-24"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        v-model="item.unit_of_measure"
-                        placeholder="kg, pcs, etc."
-                        class="w-20"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <span v-if="getSelectedOffering(index)" class="text-sm text-muted-foreground">
-                        {{ getSelectedOffering(index)?.ingredient.base_unit || '-' }}
+                      <span v-if="getSelectedIngredient(index)" class="text-sm text-muted-foreground">
+                        {{ getSelectedIngredient(index)?.base_unit || '-' }}
                       </span>
                       <span v-else class="text-sm text-muted-foreground">-</span>
-                    </TableCell>
-                    <TableCell class="font-medium">
-                      {{ formatCurrency(item.ordered_quantity * item.unit_price) }}
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        v-model="item.notes"
-                        placeholder="Optional notes"
-                        class="w-32"
-                      />
                     </TableCell>
                     <TableCell>
                       <Button
@@ -372,41 +401,27 @@ const submit = () => {
                   </TableRow>
                 </TableBody>
               </Table>
-              
+
               <div v-if="form.errors.items" class="text-sm text-red-600">
                 {{ form.errors.items }}
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <!-- Order Summary -->
-        <Card v-if="selectedSupplier && orderItems.some(item => item.ingredient_id)">
-          <CardHeader>
-            <CardTitle>Order Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="space-y-2">
-              <div class="flex justify-between text-lg font-semibold">
-                <span>Total Amount</span>
-                <span>{{ formatCurrency(subtotal) }}</span>
-              </div>
             </div>
           </CardContent>
         </Card>
 
         <!-- Action Buttons -->
         <div class="flex space-x-4">
-          <Button 
-            type="submit" 
-            :disabled="form.processing || !selectedSupplier || orderItems.length === 0"
+          <Button
+            type="submit"
+            :disabled="form.processing || !form.supplier_id || orderItems.length === 0"
           >
             {{ form.processing ? 'Updating...' : 'Update Purchase Order' }}
           </Button>
-          
-          <Button 
-            type="button" 
-            variant="outline" 
+
+          <Button
+            type="button"
+            variant="outline"
             @click="$inertia.visit(`/purchase-orders/${purchaseOrder.purchase_order_id}`)"
           >
             Cancel
@@ -414,5 +429,57 @@ const submit = () => {
         </div>
       </form>
     </div>
+
+    <!-- Dropdown teleported to body -->
+    <Teleport to="body">
+      <!-- Supplier Dropdown -->
+      <div
+        v-show="showSupplierDropdown && getFilteredSuppliers.length > 0 && supplierDropdownPosition"
+        :style="{
+          position: 'fixed',
+          top: `${supplierDropdownPosition?.top || 0}px`,
+          left: `${supplierDropdownPosition?.left || 0}px`,
+          width: `${supplierDropdownPosition?.width || 250}px`,
+          zIndex: 9999
+        }"
+        class="bg-popover border border-border rounded-md shadow-lg max-h-60 overflow-auto"
+      >
+        <div
+          v-for="supplier in getFilteredSuppliers"
+          :key="supplier.supplier_id"
+          @mousedown.prevent="selectSupplier(supplier)"
+          class="px-3 py-2 cursor-pointer hover:bg-accent hover:text-accent-foreground text-sm"
+        >
+          <div class="font-medium text-foreground">{{ supplier.supplier_name }}</div>
+        </div>
+      </div>
+
+      <!-- Ingredient Dropdowns -->
+      <div
+        v-for="(item, index) in orderItems"
+        :key="`dropdown-${index}`"
+        v-show="item.showDropdown && getFilteredIngredients(index).length > 0 && item.dropdownPosition"
+        :style="{
+          position: 'fixed',
+          top: `${item.dropdownPosition?.top || 0}px`,
+          left: `${item.dropdownPosition?.left || 0}px`,
+          width: `${item.dropdownPosition?.width || 250}px`,
+          zIndex: 9999
+        }"
+        class="bg-popover border border-border rounded-md shadow-lg max-h-60 overflow-auto"
+      >
+        <div
+          v-for="ingredient in getFilteredIngredients(index)"
+          :key="ingredient.ingredient_id"
+          @mousedown.prevent="selectIngredient(index, ingredient)"
+          class="px-3 py-2 cursor-pointer hover:bg-accent hover:text-accent-foreground text-sm"
+        >
+          <div class="font-medium text-foreground">{{ ingredient.ingredient_name }}</div>
+          <div class="text-xs text-muted-foreground">
+            Unit: {{ ingredient.base_unit }} | Stock: {{ ingredient.current_stock }}
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </AppLayout>
 </template>

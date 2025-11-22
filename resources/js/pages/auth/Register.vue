@@ -136,7 +136,6 @@ const closeModal = () => {
         <div class="space-y-4">
           <div class="text-center mb-4 sm:mb-6">
             <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Personal Information</h3>
-            <p class="text-xs sm:text-sm text-gray-600">Tell us about yourself</p>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">

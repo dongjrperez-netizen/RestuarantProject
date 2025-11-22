@@ -4,7 +4,7 @@ import { Link, usePage } from '@inertiajs/vue3'
 import {
   Users, UserRound, Box, ClipboardList,
   UtensilsCrossed, ShoppingCart, Truck, Receipt,
-  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar, BarChart3, ChevronRight
+  Folder, BookOpen, LayoutGrid, Package, Warehouse, CreditCard, ChefHat, FileText, Calendar, BarChart3, ChevronRight, Plus
 } from "lucide-vue-next"
 
 import {
@@ -24,12 +24,55 @@ import {
 
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 
-// Get page props to access subscription data
+// Get page props to access subscription and restaurant data
 const page = usePage()
 
 // Get current subscription plan
 const currentPlan = computed(() => {
   return page.props.auth?.subscription?.plan_name || null
+})
+
+// Get current restaurant information (if any)
+const restaurant = computed(() => {
+  const auth: any = page.props.auth || {}
+  const user = auth.user || null
+
+  // Prefer globally shared restaurant (works for owner and employees)
+  if (auth.restaurant) {
+    return auth.restaurant
+  }
+
+  // Fallback: restaurant relation on the active user (owner)
+  return user?.restaurantData || user?.restaurant_data || null
+})
+
+const restaurantName = computed(() => {
+  if (restaurant.value?.restaurant_name) {
+    return restaurant.value.restaurant_name
+  }
+
+  const auth: any = page.props.auth || {}
+  const user = auth.user || null
+
+  // Fallback to user name or a generic label
+  if (user?.name) {
+    return user.name
+  }
+
+  return 'Your Restaurant'
+})
+
+// Optional logo URL (to be wired via Settings/Profile later)
+const restaurantLogoUrl = computed(() => {
+  if (!restaurant.value) return null
+
+  // Check for logo field and prepend storage path if it exists
+  if (restaurant.value.logo) {
+    return `/storage/${restaurant.value.logo}`
+  }
+
+  // Fallback to other possible fields
+  return restaurant.value.logo_url || restaurant.value.logo_path || null
 })
 
 // Base navigation items
@@ -116,10 +159,39 @@ watch(openCollapsibles, (val) => {
 <template>
   <Sidebar class="flex flex-col h-full">
     <SidebarHeader class="border-b border-sidebar-border p-4">
-      <div class="flex items-center gap-3">
-        <img src="/Logo.png" alt="ServeWise Logo" class="h-8 w-8 object-contain" />
-        <span class="font-semibold text-lg">ServeWise</span>
-      </div>
+      <!-- Brand area: restaurant logo/name or default slot override -->
+      <slot
+        name="brand"
+        :restaurant="restaurant"
+        :restaurant-name="restaurantName"
+        :restaurant-logo-url="restaurantLogoUrl"
+      >
+        <div class="flex items-center gap-3">
+          <!-- Logo or placeholder -->
+          <div
+            class="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground overflow-hidden border border-sidebar-border/60"
+          >
+            <img
+              v-if="restaurantLogoUrl"
+              :src="restaurantLogoUrl"
+              :alt="`${restaurantName} logo`"
+              class="h-8 w-8 object-cover"
+            />
+            <Plus
+              v-else
+              class="h-4 w-4 text-sidebar-primary-foreground/80"
+            />
+          </div>
+
+          <!-- Restaurant / user name -->
+          <span
+            class="font-semibold text-lg truncate"
+            :title="restaurantName"
+          >
+            {{ restaurantName }}
+          </span>
+        </div>
+      </slot>
     </SidebarHeader>
     <SidebarContent class="flex-1">
       <SidebarGroup>

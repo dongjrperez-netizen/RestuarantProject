@@ -105,7 +105,12 @@ class DamageSpoilageController extends Controller
         $restaurantId = $restaurant->id;
 
         $validated = $request->validate([
-            'ingredient_id' => [
+            'type' => ['required', Rule::in(['damage', 'spoilage'])],
+            'reason' => ['nullable', 'string', 'max:500'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'incident_date' => ['required', 'date', 'before_or_equal:today'],
+            'ingredients' => ['required', 'array', 'min:1'],
+            'ingredients.*.ingredient_id' => [
                 'required',
                 'exists:ingredients,ingredient_id',
                 function ($attribute, $value, $fail) use ($employee) {
@@ -115,57 +120,94 @@ class DamageSpoilageController extends Controller
                         })
                         ->first();
                     if (!$ingredient) {
-                        $fail('The selected ingredient does not belong to your restaurant.');
+                        $fail('One or more selected ingredients do not belong to your restaurant.');
                     }
                 },
             ],
-            'type' => ['required', Rule::in(['damage', 'spoilage'])],
-            'quantity' => ['required', 'numeric', 'min:0.001'],
-            'unit' => ['required', 'string', 'max:50'],
-            'reason' => ['nullable', 'string', 'max:500'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-            'incident_date' => ['required', 'date', 'before_or_equal:today'],
-            'estimated_cost' => ['nullable', 'numeric', 'min:0'],
+            'ingredients.*.quantity' => ['required', 'numeric', 'min:0.001'],
+            'ingredients.*.unit' => ['required', 'string', 'max:50'],
+            'ingredients.*.estimated_cost' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        // Load ingredient once for cost calculation and stock deduction
-        $ingredient = Ingredients::find($validated['ingredient_id']);
+        $successCount = 0;
+        $failedCount = 0;
+        $logsCreated = [];
 
-        // Auto-calculate estimated cost if not provided
-        if (empty($validated['estimated_cost']) && $ingredient && $ingredient->cost_per_unit > 0) {
-            $validated['estimated_cost'] = $validated['quantity'] * $ingredient->cost_per_unit;
-        }
-
-        $log = DamageSpoilageLog::create([
-            'restaurant_id' => $restaurantId,
-            'user_id' => $employee->employee_id,
-            ...$validated,
-        ]);
-
-        // Deduct the damaged/spoiled quantity from ingredient stock
-        if ($ingredient) {
+        // Loop through each ingredient and create separate logs
+        foreach ($validated['ingredients'] as $ingredientData) {
             try {
-                $ingredient->decreaseStock($validated['quantity'], $validated['unit']);
+                // Load ingredient for cost calculation and stock deduction
+                $ingredient = Ingredients::find($ingredientData['ingredient_id']);
 
-                Log::info('Stock deducted for damage/spoilage report', [
-                    'damage_spoilage_log_id' => $log->id,
-                    'ingredient_id' => $ingredient->ingredient_id,
-                    'ingredient_name' => $ingredient->ingredient_name,
-                    'quantity' => $validated['quantity'],
-                    'unit' => $validated['unit'],
+                if (!$ingredient) {
+                    $failedCount++;
+                    continue;
+                }
+
+                // Auto-calculate estimated cost if not provided
+                $estimatedCost = $ingredientData['estimated_cost'] ?? null;
+                if (empty($estimatedCost) && $ingredient->cost_per_unit > 0) {
+                    $estimatedCost = $ingredientData['quantity'] * $ingredient->cost_per_unit;
+                }
+
+                // Create damage/spoilage log entry
+                $log = DamageSpoilageLog::create([
                     'restaurant_id' => $restaurantId,
+                    'user_id' => $employee->employee_id,
+                    'ingredient_id' => $ingredientData['ingredient_id'],
+                    'type' => $validated['type'],
+                    'quantity' => $ingredientData['quantity'],
+                    'unit' => $ingredientData['unit'],
+                    'reason' => $validated['reason'],
+                    'notes' => $validated['notes'],
+                    'incident_date' => $validated['incident_date'],
+                    'estimated_cost' => $estimatedCost,
                 ]);
+
+                $logsCreated[] = $log;
+
+                // Deduct the damaged/spoiled quantity from ingredient stock
+                try {
+                    $ingredient->decreaseStock($ingredientData['quantity'], $ingredientData['unit']);
+
+                    Log::info('Stock deducted for damage/spoilage report', [
+                        'damage_spoilage_log_id' => $log->id,
+                        'ingredient_id' => $ingredient->ingredient_id,
+                        'ingredient_name' => $ingredient->ingredient_name,
+                        'quantity' => $ingredientData['quantity'],
+                        'unit' => $ingredientData['unit'],
+                        'restaurant_id' => $restaurantId,
+                    ]);
+
+                    $successCount++;
+                } catch (\Exception $e) {
+                    Log::warning('Failed to deduct stock for damage/spoilage report', [
+                        'damage_spoilage_log_id' => $log->id,
+                        'ingredient_id' => $ingredient->ingredient_id ?? null,
+                        'message' => $e->getMessage(),
+                    ]);
+                    $failedCount++;
+                }
             } catch (\Exception $e) {
-                Log::warning('Failed to deduct stock for damage/spoilage report', [
-                    'damage_spoilage_log_id' => $log->id,
-                    'ingredient_id' => $ingredient->ingredient_id ?? null,
+                Log::error('Failed to create damage/spoilage log', [
+                    'ingredient_id' => $ingredientData['ingredient_id'] ?? null,
                     'message' => $e->getMessage(),
                 ]);
+                $failedCount++;
             }
         }
 
+        // Build success message
+        $message = $successCount > 0
+            ? "Successfully recorded {$successCount} damage/spoilage incident" . ($successCount !== 1 ? 's' : '') . '.'
+            : 'No damage/spoilage incidents were recorded.';
+
+        if ($failedCount > 0) {
+            $message .= " {$failedCount} incident" . ($failedCount !== 1 ? 's' : '') . " failed to process.";
+        }
+
         return redirect()->back()
-            ->with('success', 'Damage/spoilage log recorded successfully.');
+            ->with($successCount > 0 ? 'success' : 'error', $message);
     }
 
     public function show($id)

@@ -17,7 +17,6 @@ return new class extends Migration
             $table->string('supplier_name', 150);
             $table->string('contact_number', 20)->nullable();
             $table->string('email')->nullable();
-            $table->string('password');
             $table->string('address', 255)->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('business_registration')->nullable();

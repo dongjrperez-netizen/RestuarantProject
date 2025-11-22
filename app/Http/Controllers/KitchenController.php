@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MenuPreparationOrder;
 use App\Models\MenuPreparationItem;
 use App\Models\CustomerOrder;
+use App\Models\MenuPlan;
 use App\Events\OrderStatusUpdated;
 use App\Events\OrderReadyToServe;
 use Illuminate\Http\Request;
@@ -182,5 +183,67 @@ class KitchenController extends Controller
                 'message' => "Order status updated to {$request->status} (Demo Mode)"
             ]);
         }
+    }
+
+    public function todaysPlan()
+    {
+        $employee = Auth::guard('kitchen')->user();
+
+        if (!$employee || strtolower($employee->role->role_name) !== 'kitchen') {
+            abort(403, 'Access denied. Kitchen staff only.');
+        }
+
+        // Get the restaurant ID through the Restaurant_Data relationship
+        $restaurantData = \App\Models\Restaurant_Data::where('user_id', $employee->user_id)->first();
+        if (!$restaurantData) {
+            abort(404, 'Restaurant data not found for this employee.');
+        }
+        $restaurantId = $restaurantData->id;
+
+        // Get today's date
+        $today = now()->format('Y-m-d');
+
+        \Log::info('Kitchen Today\'s Plan - Menu Plan Lookup', [
+            'employee_user_id' => $employee->user_id,
+            'restaurant_id' => $restaurantId,
+            'today' => $today,
+        ]);
+
+        // First, try to find a specific menu plan for today
+        // Priority: weekly plans over daily plans when both cover the same date
+        $activeMenuPlan = MenuPlan::with(['menuPlanDishes.dish.category'])
+            ->where('restaurant_id', $restaurantId)
+            ->where('is_active', true)
+            ->where('start_date', '<=', $today)
+            ->where('end_date', '>=', $today)
+            ->orderByRaw("CASE WHEN plan_type = 'weekly' THEN 1 WHEN plan_type = 'daily' THEN 2 ELSE 3 END")
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        $isDefaultPlan = false;
+
+        if (!$activeMenuPlan) {
+            // Fall back to the default plan
+            $activeMenuPlan = MenuPlan::with(['menuPlanDishes.dish.category'])
+                ->where('restaurant_id', $restaurantId)
+                ->where('is_default', true)
+                ->where('is_active', true)
+                ->first();
+
+            $isDefaultPlan = true;
+        }
+
+        // If we have a specific (non-default) plan, filter dishes by today's date
+        if ($activeMenuPlan && !$isDefaultPlan) {
+            $activeMenuPlan->load(['menuPlanDishes' => function ($query) use ($today) {
+                $query->where('planned_date', $today)->with(['dish.category']);
+            }]);
+        }
+
+        return Inertia::render('Kitchen/TodaysPlan', [
+            'menuPlan' => $activeMenuPlan,
+            'currentDate' => $today,
+            'isDefaultPlan' => $isDefaultPlan,
+        ]);
     }
 }

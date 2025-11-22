@@ -36,12 +36,8 @@ const form = useForm({
   supplier_name: '',
   contact_number: '',
   email: '',
-  password: '',
   address: '',
-  business_registration: '',
-  tax_id: '',
   payment_terms: '',
-  notes: '',
   ingredients: [] as any[],
 });
 
@@ -141,26 +137,6 @@ const submit = () => {
               </div>
 
               <div>
-                <Label for="password">Password</Label>
-                <Input
-                  id="password"
-                  v-model="form.password"
-                  type="password"
-                  placeholder="Leave empty to send invitation"
-                  :class="{ 'border-red-500': form.errors.password }"
-                />
-                <div
-                  v-if="form.errors.password"
-                  class="text-red-500 text-sm mt-1"
-                >
-                  {{ form.errors.password }}
-                </div>
-                <p class="text-sm text-muted-foreground mt-1">
-                  If left empty, the supplier will receive an invitation to set their own password
-                </p>
-              </div>
-
-              <div>
                 <Label for="address">Address</Label>
                 <Input
                   id="address"
@@ -173,43 +149,6 @@ const submit = () => {
                   class="text-red-500 text-sm mt-1"
                 >
                   {{ form.errors.address }}
-                </div>
-              </div>
-            </div>
-
-            <!-- Business Details -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label for="business_registration">Business Registration ID</Label>
-                <Input
-                  id="business_registration"
-                  v-model="form.business_registration"
-                  type="text"
-                  :class="{
-                    'border-red-500': form.errors.business_registration,
-                  }"
-                />
-                <div
-                  v-if="form.errors.business_registration"
-                  class="text-red-500 text-sm mt-1"
-                >
-                  {{ form.errors.business_registration }}
-                </div>
-              </div>
-
-              <div>
-                <Label for="tax_id">Tax ID</Label>
-                <Input
-                  id="tax_id"
-                  v-model="form.tax_id"
-                  type="text"
-                  :class="{ 'border-red-500': form.errors.tax_id }"
-                />
-                <div
-                  v-if="form.errors.tax_id"
-                  class="text-red-500 text-sm mt-1"
-                >
-                  {{ form.errors.tax_id }}
                 </div>
               </div>
 
@@ -236,24 +175,6 @@ const submit = () => {
                 >
                   {{ form.errors.payment_terms }}
                 </div>
-              </div>
-            </div>
-
-            <!-- Notes -->
-            <div>
-              <Label for="notes">Notes</Label>
-              <textarea
-                id="notes"
-                v-model="form.notes"
-                rows="3"
-                class="w-full border rounded-md p-2 focus:ring focus:ring-indigo-200 focus:border-indigo-400"
-                :class="{ 'border-red-500': form.errors.notes }"
-              ></textarea>
-              <div
-                v-if="form.errors.notes"
-                class="text-red-500 text-sm mt-1"
-              >
-                {{ form.errors.notes }}
               </div>
             </div>
 

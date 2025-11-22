@@ -8,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import Badge from '@/components/ui/badge/Badge.vue';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed, watch } from 'vue';
 import { Plus, Trash2, Calendar, CalendarDays, Clock } from 'lucide-vue-next';
@@ -42,9 +41,18 @@ interface Ingredient {
   cost_per_unit: number;
 }
 
+interface ExistingPlanRange {
+  menu_plan_id: number;
+  plan_name: string;
+  start_date: string;
+  end_date: string;
+}
+
 interface Props {
   dishes: Dish[];
   ingredients: Ingredient[];
+  existingPlans: ExistingPlanRange[];
+  hasDefaultPlan: boolean;
 }
 
 const props = defineProps<Props>();
@@ -83,6 +91,34 @@ const planType = computed(() => {
   const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   return daysDiff === 0 ? 'daily' : 'weekly';
 });
+
+// ---- Date range conflict detection (frontend helper) ----
+const rangeConflictMessage = ref<string>('');
+
+const hasRangeConflict = computed(() => rangeConflictMessage.value.length > 0);
+
+const checkRangeConflict = () => {
+  rangeConflictMessage.value = '';
+
+  if (!form.start_date || !form.end_date) return;
+
+  const newStart = new Date(form.start_date);
+  const newEnd = new Date(form.end_date);
+  if (isNaN(newStart.getTime()) || isNaN(newEnd.getTime())) return;
+
+  // Overlap logic: existing.start <= newEnd && existing.end >= newStart
+  const conflictingPlan = props.existingPlans.find((plan) => {
+    const existingStart = new Date(plan.start_date);
+    const existingEnd = new Date(plan.end_date);
+    if (isNaN(existingStart.getTime()) || isNaN(existingEnd.getTime())) return false;
+
+    return existingStart <= newEnd && existingEnd >= newStart;
+  });
+
+  if (conflictingPlan) {
+    rangeConflictMessage.value = `This date range conflicts with existing plan "${conflictingPlan.plan_name}" (${new Date(conflictingPlan.start_date).toLocaleDateString()} - ${new Date(conflictingPlan.end_date).toLocaleDateString()}).`;
+  }
+};
 
 const selectedDishId = ref<string>('');
 const selectedQuantity = ref<number>(1);
@@ -124,6 +160,21 @@ watch(() => form.start_date, (newDate) => {
   if (newDate && !form.end_date) {
     form.end_date = newDate; // Default to same day if no end date set
   }
+  // Re-check conflicts whenever start changes
+  checkRangeConflict();
+});
+
+// Watch end date changes for conflict detection
+watch(() => form.end_date, () => {
+  checkRangeConflict();
+});
+
+// When plan is marked as default, force frequency to daily
+watch(() => form.is_default, (isDefault) => {
+  if (isDefault) {
+    selectedFrequency.value = 'daily';
+  }
+  // When unchecked, keep current value but allow user to change it
 });
 
 // Validate if adding a dish will cause stock shortage
@@ -161,12 +212,12 @@ const addDishToPlan = () => {
   const dish = props.dishes.find(d => d.dish_id.toString() === selectedDishId.value);
   if (!dish) return;
 
-  // Check stock availability before adding
+  // Check stock availability before adding (informational only, do not block planning)
   if (dish.ingredients && dish.ingredients.length > 0) {
     const stockCheck = validateStockForDish(dish, selectedQuantity.value);
     if (!stockCheck.sufficient) {
-      alert(`Cannot add dish: Insufficient stock for ${stockCheck.missingIngredients.join(', ')}`);
-      return;
+      // Optional: show a soft warning, but allow adding so user can plan for future stock
+      console.warn(`Insufficient stock for ${stockCheck.missingIngredients.join(', ')}, but allowing planning.`);
     }
   }
 
@@ -226,7 +277,8 @@ const addDishToPlan = () => {
   selectedDishId.value = '';
   selectedQuantity.value = 1;
   selectedNotes.value = '';
-  selectedFrequency.value = '';
+  // For default plans, keep frequency locked to daily so user can add multiple dishes
+  selectedFrequency.value = form.is_default ? 'daily' : '';
   selectedDate.value = '';
   selectedDayOfWeek.value = '';
 };
@@ -238,7 +290,7 @@ const removeDishFromPlan = (index: number) => {
 interface DishGroup {
   dishName: string;
   pattern: string;
-  totalQuantity: number;
+  quantityPerDay: number | string;
   dishes: PlanDish[];
   dates: string[];
 }
@@ -333,7 +385,11 @@ const groupedDishes = computed((): DishGroup[] => {
 
   return Object.entries(groups).map(([dishName, dishes]) => {
     const dates = dishes.map(d => d.planned_date).sort();
-    const totalQuantity = dishes.reduce((sum, d) => sum + d.planned_quantity, 0);
+
+    // Get quantity per day (check if all quantities are the same)
+    const quantities = dishes.map(d => d.planned_quantity);
+    const uniqueQuantities = [...new Set(quantities)];
+    const quantityPerDay = uniqueQuantities.length === 1 ? uniqueQuantities[0] : 'varies';
 
     // Determine pattern
     let pattern = '';
@@ -353,7 +409,7 @@ const groupedDishes = computed((): DishGroup[] => {
     return {
       dishName,
       pattern,
-      totalQuantity,
+      quantityPerDay,
       dishes,
       dates
     };
@@ -482,7 +538,7 @@ const submit = () => {
   <Head title="Create Menu Plan" />
 
   <AppLayout :breadcrumbs="breadcrumbs">
-    <div class="max-w-6xl mx-auto space-y-8 px-6">
+   <div class="mx-6 space-y-6">
       <!-- Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Create Menu Plan</h1>
@@ -539,7 +595,7 @@ const submit = () => {
                   id="start_date"
                   v-model="form.start_date"
                   type="date"
-                  :class="{ 'border-red-500': form.errors.start_date }"
+                  :class="{ 'border-red-500': form.errors.start_date || hasRangeConflict }"
                 />
                 <p v-if="form.errors.start_date" class="text-sm text-red-500">
                   {{ form.errors.start_date }}
@@ -552,7 +608,7 @@ const submit = () => {
                   id="end_date"
                   v-model="form.end_date"
                   type="date"
-                  :class="{ 'border-red-500': form.errors.end_date }"
+                  :class="{ 'border-red-500': form.errors.end_date || hasRangeConflict }"
                 />
                 <p v-if="form.errors.end_date" class="text-sm text-red-500">
                   {{ form.errors.end_date }}
@@ -561,6 +617,11 @@ const submit = () => {
                   {{ planType === 'daily' ? 'Set to same date as start for daily plans' : 'Select end date for multi-day plans' }}
                 </p>
               </div>
+            </div>
+
+            <!-- Range conflict warning -->
+            <div v-if="hasRangeConflict" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
+              {{ rangeConflictMessage }}
             </div>
 
             <div class="space-y-2">
@@ -573,7 +634,8 @@ const submit = () => {
               />
             </div>
 
-            <div class="flex items-center space-x-2">
+            <!-- Default plan toggle: only show when no default plan exists yet -->
+            <div v-if="!props.hasDefaultPlan" class="flex items-center space-x-2">
               <input
                 type="checkbox"
                 id="is_default"
@@ -590,51 +652,12 @@ const submit = () => {
                 ✓ This will be the default plan
               </div>
             </div>
+            <div v-else class="text-xs text-muted-foreground">
+              A default menu plan already exists and is used as fallback when no specific plan is active.
+            </div>
           </CardContent>
         </Card>
 
-        <!-- Overall Stock Status -->
-        <div v-if="form.dishes.length > 0" class="mb-6">
-          <div
-            :class="[
-              'p-4 rounded-lg border',
-              canProducePlan
-                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-            ]"
-          >
-            <div class="flex items-center gap-3">
-              <Badge
-                :variant="canProducePlan ? 'default' : 'destructive'"
-                class="text-sm px-3 py-1"
-              >
-                {{ canProducePlan ? '✓ Plan Feasible' : '⚠ Stock Issues' }}
-              </Badge>
-              <div :class="canProducePlan ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'">
-                <span v-if="canProducePlan" class="font-medium">
-                  All dishes can be produced with current inventory!
-                </span>
-                <span v-else class="font-medium">
-                  {{ insufficientIngredients.length }} ingredient(s) have insufficient stock for this plan
-                </span>
-              </div>
-            </div>
-            <div v-if="!canProducePlan" class="mt-3">
-              <div class="text-sm text-red-700 dark:text-red-300">
-                <strong>Missing ingredients:</strong>
-                <ul class="mt-1 space-y-1">
-                  <li v-for="ingredient in insufficientIngredients" :key="ingredient.ingredient_name" class="flex justify-between">
-                    <span>• {{ ingredient.ingredient_name }}</span>
-                    <span class="font-mono">
-                      Need: {{ ingredient.total_needed }} {{ ingredient.base_unit }} |
-                      Have: {{ ingredient.current_stock }} {{ ingredient.base_unit }}
-                    </span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <!-- Add Dishes to Plan -->
         <Card>
@@ -657,27 +680,8 @@ const submit = () => {
                       v-for="dish in dishes"
                       :key="dish.dish_id"
                       :value="dish.dish_id.toString()"
-                      :class="getDishStockStatus(dish).canProduce ? '' : 'text-red-600 dark:text-red-400'"
                     >
-                      <div class="flex items-center justify-between w-full">
-                        <span>{{ dish.dish_name }}</span>
-                        <div class="flex items-center gap-1">
-                          <Badge
-                            v-if="getDishStockStatus(dish).canProduce"
-                            variant="default"
-                            class="text-xs"
-                          >
-                            ✓
-                          </Badge>
-                          <Badge
-                            v-else
-                            variant="destructive"
-                            class="text-xs"
-                          >
-                            ⚠
-                          </Badge>
-                        </div>
-                      </div>
+                      {{ dish.dish_name }}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -696,7 +700,7 @@ const submit = () => {
 
               <div class="space-y-2">
                 <Label for="frequency">Frequency</Label>
-                <Select v-model="selectedFrequency">
+                <Select v-model="selectedFrequency" :disabled="form.is_default">
                   <SelectTrigger>
                     <SelectValue placeholder="Choose frequency" />
                   </SelectTrigger>
@@ -706,6 +710,9 @@ const submit = () => {
                     <SelectItem value="specific">Specific Date</SelectItem>
                   </SelectContent>
                 </Select>
+                <p v-if="form.is_default" class="text-xs text-muted-foreground">
+                  Default plans always use daily frequency; the frequency is locked to Daily.
+                </p>
               </div>
 
               <div class="space-y-2">
@@ -782,9 +789,8 @@ const submit = () => {
                 <TableRow>
                   <TableHead>Dish</TableHead>
                   <TableHead>Schedule Pattern</TableHead>
-                  <TableHead>Total Quantity</TableHead>
+                  <TableHead>Quantity (per day)</TableHead>
                   <TableHead>Dates Count</TableHead>
-                  <TableHead>Stock Status</TableHead>
                   <TableHead class="w-20">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -793,23 +799,14 @@ const submit = () => {
                   <TableCell class="font-medium">{{ group.dishName }}</TableCell>
                   <TableCell>
                     <div class="text-sm">
-                      {{ group.pattern }}
+                      {{ form.is_default ? '-' : group.pattern }}
                     </div>
                   </TableCell>
-                  <TableCell>{{ group.totalQuantity }}</TableCell>
+                  <TableCell>{{ group.quantityPerDay }}</TableCell>
                   <TableCell>{{ group.dates.length }} days</TableCell>
                   <TableCell>
-                    <div class="flex items-center gap-2">
-                      <Badge
-                        :variant="getDishStockStatus(props.dishes.find(d => d.dish_name === group.dishName)).canProduce ? 'default' : 'destructive'"
-                        class="text-xs"
-                      >
-                        {{ getDishStockStatus(props.dishes.find(d => d.dish_name === group.dishName)).canProduce ? '✓ Available' : '⚠ Low Stock' }}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
                     <Button
+                      type="button"
                       variant="ghost"
                       size="sm"
                       @click="removeDishGroup(group)"
@@ -840,7 +837,7 @@ const submit = () => {
           </Button>
           <Button
             type="submit"
-            :disabled="form.processing || !form.plan_name || !form.start_date || !form.end_date"
+            :disabled="form.processing || !form.plan_name || !form.start_date || !form.end_date || hasRangeConflict"
             @click="console.log('🎯 Submit button clicked!')"
           >
             <Clock v-if="form.processing" class="w-4 h-4 mr-2 animate-spin" />

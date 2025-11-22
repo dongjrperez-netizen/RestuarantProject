@@ -242,7 +242,6 @@
             $subtotal = $order->orderItems->sum(function($item) {
                 return $item->quantity * $item->unit_price;
             });
-            $tax = $subtotal * 0.12; // 12% VAT
 
             // Check for temporary discount first, then stored discount
             $discountAmount = 0;
@@ -271,10 +270,6 @@
         <div class="totals-row">
             <span>Subtotal</span>
             <span>₱{{ number_format($subtotal, 2) }}</span>
-        </div>
-        <div class="totals-row">
-            <span>Tax</span>
-            <span>₱{{ number_format($tax, 2) }}</span>
         </div>
         @if($order->reservation_fee && $order->reservation_fee > 0)
         <div class="totals-row">

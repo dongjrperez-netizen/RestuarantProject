@@ -229,7 +229,6 @@
             $subtotal = $order->orderItems->sum(function($item) {
                 return $item->quantity * $item->unit_price;
             });
-            $tax = $subtotal * 0.12; // 12% VAT
             $discountAmount = $order->discount_amount ?? 0;
             $finalTotal = $order->total_amount;
         @endphp
@@ -238,10 +237,6 @@
             <tr>
                 <td>Subtotal:</td>
                 <td class="text-right">₱{{ number_format($subtotal, 2) }}</td>
-            </tr>
-            <tr>
-                <td>Tax (12% VAT):</td>
-                <td class="text-right">₱{{ number_format($tax, 2) }}</td>
             </tr>
             @if($discountAmount > 0)
             <tr>

@@ -1,23 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import {
-  Combobox,
-  ComboboxAnchor,
-  ComboboxInput,
-  ComboboxList,
-  ComboboxItem,
-  ComboboxEmpty,
-  ComboboxTrigger
-} from '@/components/ui/combobox';
-import { ChevronDown, Search } from 'lucide-vue-next';
 import { type BreadcrumbItem } from '@/types';
 
 interface PurchaseOrderItem {
@@ -50,23 +39,21 @@ interface PurchaseOrder {
 interface ReceiveItem {
   purchase_order_item_id: number;
   received_quantity: number;
-  quality_rating: 'excellent' | 'good' | 'fair' | 'poor' | '';
-  condition_notes: string;
-  has_discrepancy: boolean;
-  discrepancy_reason: string;
-}
-
-interface Staff {
-  id: number;
-  name: string;
+  unit_price: number;
 }
 
 interface Props {
   purchaseOrder: PurchaseOrder;
-  staff: Staff[];
 }
 
 const props = defineProps<Props>();
+
+const page = usePage();
+const authUser = computed(() => page.props.auth.user as any);
+const currentUserName = computed(() => {
+  if (!authUser.value) return '';
+  return `${authUser.value.firstname || ''} ${authUser.value.lastname || ''}`.trim() || authUser.value.name || '';
+});
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Dashboard', href: '/dashboard' },
@@ -80,43 +67,14 @@ const receiveItems = ref<ReceiveItem[]>(
     purchase_order_item_id: item.purchase_order_item_id,
     // Pre-fill with supplier-delivered quantity minus already received, so owner can confirm
     received_quantity: Math.max((item.supplier_delivered_quantity ?? 0) - item.received_quantity, 0),
-    quality_rating: '',
-    condition_notes: '',
-    has_discrepancy: false,
-    discrepancy_reason: ''
+    unit_price: 0 // Default to 0, user must enter price
   }))
 );
 
-const staffSearchTerm = ref('');
-const comboboxValue = ref<Staff | undefined>();
-
 const form = useForm({
-  actual_delivery_date: new Date().toISOString().split('T')[0],
-  delivery_condition: 'good',
-  received_by: '',
-  general_notes: '',
+  received_by: currentUserName.value,
   items: receiveItems.value
 });
-
-// Filtered staff based on search
-const filteredStaff = computed(() => {
-  if (!staffSearchTerm.value) {
-    // Show only first 5 by default
-    return props.staff.slice(0, 5);
-  }
-  // Show all matching results when searching
-  return props.staff.filter(staff =>
-    staff.name.toLowerCase().includes(staffSearchTerm.value.toLowerCase())
-  );
-});
-
-// Handle staff selection
-const handleStaffSelect = (value: any) => {
-  if (value && typeof value === 'object' && 'name' in value) {
-    form.received_by = value.name;
-    comboboxValue.value = value;
-  }
-};
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString();
@@ -164,47 +122,42 @@ const clearAllQuantities = () => {
 };
 
 const getTotalReceiving = () => {
-  return receiveItems.value.reduce((sum, receiveItem, index) => {
-    const item = props.purchaseOrder.items[index];
-    return sum + (receiveItem.received_quantity * item.unit_price);
+  return receiveItems.value.reduce((sum, receiveItem) => {
+    return sum + (receiveItem.received_quantity * receiveItem.unit_price);
   }, 0);
 };
 
 const getReceiveStatus = (item: PurchaseOrderItem, receiveQuantity: number): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' } => {
   const totalAfterReceive = item.received_quantity + receiveQuantity;
   const ordered = item.ordered_quantity;
-  
+
   if (totalAfterReceive === 0) return { label: 'Not Received', variant: 'secondary' };
   if (totalAfterReceive < ordered) return { label: 'Partial', variant: 'warning' };
   if (totalAfterReceive === ordered) return { label: 'Complete', variant: 'success' };
   return { label: 'Over Received', variant: 'destructive' };
 };
 
-const getQualityBadge = (rating: string): { variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' } => {
-  const qualityConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' }> = {
-    'excellent': { variant: 'success' },
-    'good': { variant: 'default' },
-    'fair': { variant: 'warning' },
-    'poor': { variant: 'destructive' }
-  };
-  return qualityConfig[rating] || { variant: 'secondary' };
+const calculateItemTotal = (index: number): number => {
+  const receiveItem = receiveItems.value[index];
+  return receiveItem.received_quantity * receiveItem.unit_price;
 };
 
-const checkForDiscrepancy = (index: number) => {
-  const item = props.purchaseOrder.items[index];
-  const receiveItem = receiveItems.value[index];
-  
-  const hasQuantityDiscrepancy = receiveItem.received_quantity !== getRemainingQuantity(item);
-  const hasQualityIssue = receiveItem.quality_rating === 'fair' || receiveItem.quality_rating === 'poor';
-  
-  receiveItems.value[index].has_discrepancy = hasQuantityDiscrepancy || hasQualityIssue;
-  
-  if (!receiveItems.value[index].has_discrepancy) {
-    receiveItems.value[index].discrepancy_reason = '';
-  }
-};
+const validationError = ref<string>('');
 
 const submit = () => {
+  // Validate that all items with quantity > 0 have price > 0
+  const itemsWithoutPrice = receiveItems.value.filter(
+    (item, index) => item.received_quantity > 0 && item.unit_price <= 0
+  );
+
+  if (itemsWithoutPrice.length > 0) {
+    validationError.value = 'Please enter a price for all items being received. Price must be greater than 0.';
+    // Scroll to top to show error
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  validationError.value = '';
   form.items = receiveItems.value;
   form.post(`/purchase-orders/${props.purchaseOrder.purchase_order_id}/receive`);
 };
@@ -221,13 +174,21 @@ const submit = () => {
         <p class="text-muted-foreground">Record the quantities received for Purchase Order {{ purchaseOrder.po_number }}</p>
       </div>
 
+      <!-- Validation Error Alert -->
+      <div
+        v-if="validationError"
+        class="p-4 mb-4 text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+      >
+        <div class="font-medium">{{ validationError }}</div>
+      </div>
+
       <!-- Order Information -->
       <Card>
         <CardHeader>
           <CardTitle>Purchase Order Information</CardTitle>
         </CardHeader>
         <CardContent>
-          <div class="grid gap-4 md:grid-cols-4">
+          <div class="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
             <div>
               <label class="text-sm font-medium text-muted-foreground">PO Number</label>
               <div class="font-medium">{{ purchaseOrder.po_number }}</div>
@@ -241,108 +202,18 @@ const submit = () => {
               <div>{{ formatDate(purchaseOrder.order_date) }}</div>
             </div>
             <div>
-              <label class="text-sm font-medium text-muted-foreground">Expected Delivery</label>
-              <div>
-                <span v-if="purchaseOrder.expected_delivery_date">
-                  {{ formatDate(purchaseOrder.expected_delivery_date) }}
-                </span>
-                <span v-else class="text-muted-foreground">Not specified</span>
-              </div>
+              <label class="text-sm font-medium text-muted-foreground">Received By</label>
+              <div>{{ form.received_by }}</div>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-muted-foreground">Actual Delivery Date</label>
+              <div>{{ new Date().toLocaleDateString() }}</div>
             </div>
           </div>
         </CardContent>
       </Card>
 
       <form @submit.prevent="submit" class="space-y-6">
-        <!-- Delivery Information -->
-        <Card>
-          <CardHeader>
-            <CardTitle>Delivery Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="grid gap-4 md:grid-cols-3">
-              <div class="space-y-2">
-                <Label for="actual_delivery_date">Actual Delivery Date *</Label>
-                <Input
-                  id="actual_delivery_date"
-                  v-model="form.actual_delivery_date"
-                  type="date"
-                  required
-                />
-                <div v-if="form.errors.actual_delivery_date" class="text-sm text-red-600">
-                  {{ form.errors.actual_delivery_date }}
-                </div>
-              </div>
-
-              <div class="space-y-2">
-                <Label for="delivery_condition">Overall Delivery Condition</Label>
-                <select
-                  id="delivery_condition"
-                  v-model="form.delivery_condition"
-                  class="w-full px-3 py-2 border border-input rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
-                >
-                  <option value="excellent">Excellent</option>
-                  <option value="good">Good</option>
-                  <option value="fair">Fair</option>
-                  <option value="poor">Poor</option>
-                </select>
-              </div>
-
-              <div class="space-y-2">
-                <Label for="received_by">Received By *</Label>
-                <Combobox v-model="comboboxValue" by="name" @update:model-value="handleStaffSelect">
-                  <ComboboxAnchor as-child>
-                    <ComboboxTrigger as-child>
-                      <Button variant="outline" class="w-full justify-between">
-                        {{ comboboxValue?.name ?? 'Select staff member...' }}
-                        <ChevronDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </ComboboxTrigger>
-                  </ComboboxAnchor>
-
-                  <ComboboxList class="w-[--reka-combobox-trigger-width] max-h-[200px]">
-                    <div class="relative w-full max-w-sm items-center">
-                      <ComboboxInput
-                        v-model:search-term="staffSearchTerm"
-                        class="pl-9 focus-visible:ring-0 border-0 border-b rounded-none h-10"
-                        placeholder="Search staff..."
-                      />
-                      <span class="absolute start-0 inset-y-0 flex items-center justify-center px-3">
-                        <Search class="size-4 text-muted-foreground" />
-                      </span>
-                    </div>
-
-                    <ComboboxEmpty>No staff found</ComboboxEmpty>
-
-                    <ComboboxItem
-                      v-for="staff in filteredStaff"
-                      :key="staff.id"
-                      :value="staff"
-                      class="cursor-pointer"
-                    >
-                      {{ staff.name }}
-                    </ComboboxItem>
-                  </ComboboxList>
-                </Combobox>
-                <div v-if="form.errors.received_by" class="text-sm text-red-600">
-                  {{ form.errors.received_by }}
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-4 space-y-2">
-              <Label for="general_notes">General Delivery Notes</Label>
-              <textarea
-                id="general_notes"
-                v-model="form.general_notes"
-                rows="3"
-                class="w-full px-3 py-2 border border-input rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
-                placeholder="Add any general notes about the delivery..."
-              ></textarea>
-            </div>
-          </CardContent>
-        </Card>
-
         <!-- Receiving Items -->
         <Card>
           <CardHeader>
@@ -381,83 +252,69 @@ const submit = () => {
                 </div>
 
                 <!-- Receiving Details -->
-                <div class="grid gap-4 md:grid-cols-4">
+                <div class="grid gap-4 md:grid-cols-5">
                   <div class="space-y-2">
-                    <Label>Receiving Now</Label>
+                    <Label>Quantity</Label>
                     <Input
                       v-model.number="receiveItems[index].received_quantity"
                       type="number"
                       step="0.01"
                       min="0"
                       :max="getRemainingQuantity(item) * 1.1"
-                      @input="checkForDiscrepancy(index)"
                     />
                   </div>
 
                   <div class="space-y-2">
-                    <Label>Quality Rating</Label>
-                    <select
-                      v-model="receiveItems[index].quality_rating"
-                      @change="checkForDiscrepancy(index)"
-                      class="w-full px-3 py-2 border border-input rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
-                    >
-                      <option value="">Select Quality</option>
-                      <option value="excellent">Excellent</option>
-                      <option value="good">Good</option>
-                      <option value="fair">Fair</option>
-                      <option value="poor">Poor</option>
-                    </select>
-                    <Badge v-if="receiveItems[index].quality_rating" :variant="getQualityBadge(receiveItems[index].quality_rating).variant" class="text-xs">
-                      {{ receiveItems[index].quality_rating.charAt(0).toUpperCase() + receiveItems[index].quality_rating.slice(1) }}
-                    </Badge>
-                  </div>
-
-                  <div class="space-y-2">
-                    <Label>Condition Notes</Label>
+                    <Label>Price *</Label>
                     <Input
-                      v-model="receiveItems[index].condition_notes"
-                      type="text"
-                      placeholder="e.g., Fresh, slightly damaged"
+                      v-model.number="receiveItems[index].unit_price"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      placeholder="0"
+                      :class="{ 'border-red-500': receiveItems[index].received_quantity > 0 && receiveItems[index].unit_price <= 0 }"
                     />
+                    <p v-if="receiveItems[index].received_quantity > 0 && receiveItems[index].unit_price <= 0" class="text-xs text-red-600">
+                      Price is required and must be greater than 0
+                    </p>
+                  </div>
+
+                  <div class="space-y-2">
+                    <Label>Unit</Label>
+                    <div class="px-3 py-2 border border-input rounded-md bg-muted text-sm">
+                      {{ item.ingredient.base_unit }}
+                    </div>
+                  </div>
+
+                  <div class="space-y-2">
+                    <Label>Total Price</Label>
+                    <div class="px-3 py-2 border border-input rounded-md bg-muted text-sm font-medium">
+                      {{ formatCurrency(calculateItemTotal(index)) }}
+                    </div>
                   </div>
 
                   <div class="flex flex-col space-y-2">
                     <Label>Actions</Label>
                     <div class="flex space-x-1">
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
                         @click="setFullQuantity(index)"
-                        variant="outline" 
+                        variant="outline"
                         size="sm"
                         :disabled="getRemainingQuantity(item) === 0"
                       >
                         Full
                       </Button>
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
                         @click="clearQuantity(index)"
-                        variant="outline" 
+                        variant="outline"
                         size="sm"
                       >
                         Clear
                       </Button>
                     </div>
                   </div>
-                </div>
-
-                <!-- Discrepancy Section -->
-                <div v-if="receiveItems[index].has_discrepancy" class="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-                  <div class="flex items-center space-x-2 mb-2">
-                    <Badge variant="warning">Discrepancy Detected</Badge>
-                    <span class="text-sm font-medium text-yellow-800 dark:text-yellow-200">Please provide reason</span>
-                  </div>
-                  <textarea
-                    v-model="receiveItems[index].discrepancy_reason"
-                    rows="2"
-                    class="w-full px-3 py-2 border border-yellow-300 dark:border-yellow-700 rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                    placeholder="Explain the discrepancy (quantity difference, quality issues, etc.)"
-                    required
-                  ></textarea>
                 </div>
               </div>
             </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,16 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { router } from '@inertiajs/vue3';
 import { type BreadcrumbItem } from '@/types';
 import { ref, watch } from 'vue';
-import { Eye, Edit, Mail, Copy, UserCheck, UserX, CheckCircle, X } from 'lucide-vue-next';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogOverlay,
-} from '@/components/ui/dialog';
+import { Eye, Edit, CheckCircle, X } from 'lucide-vue-next';
 import {
   Select,
   SelectContent,
@@ -56,13 +47,8 @@ const processing = ref(false);
 const showNotification = ref(false);
 const notificationMessage = ref('');
 const notificationType = ref<'success' | 'error'>('success');
-const showModal = ref(false)
-const showInviteModal = ref(false);
-const selectedSupplier = ref<Supplier | null>(null);
 const selectedStatus = ref(props.filters.status);
 const searchQuery = ref(props.filters.search || '');
-
-const page = usePage();
 
 watch(selectedStatus, (newValue) => {
   router.get('/suppliers', { status: newValue, search: searchQuery.value }, { preserveState: true, preserveScroll: true });
@@ -71,19 +57,6 @@ watch(selectedStatus, (newValue) => {
 const handleSearch = () => {
   router.get('/suppliers', { status: selectedStatus.value, search: searchQuery.value }, { preserveState: true, preserveScroll: true });
 };
-
-// Watch for flash messages
-watch(() => (page.props as any).flash?.success, (success) => {
-  if (success) {
-    showSuccessNotification('Email sent!');
-  }
-});
-
-watch(() => (page.props as any).flash?.error, (error) => {
-  if (error) {
-    showErrorNotification(error as string);
-  }
-});
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Dashboard', href: '/dashboard' },
@@ -133,7 +106,7 @@ const hideNotification = () => {
 
 const toggleSupplierStatus = (supplier: Supplier) => {
   if (processing.value) return;
-  
+
   processing.value = true;
   router.post(`/suppliers/${supplier.supplier_id}/toggle-status`, {}, {
     onSuccess: () => {
@@ -143,51 +116,6 @@ const toggleSupplierStatus = (supplier: Supplier) => {
       processing.value = false;
     }
   });
-};
-
-const openInviteModal = (supplier: Supplier) => {
-  if (!supplier.email) {
-    showErrorNotification('Supplier must have an email address to send invitation');
-    return;
-  }
-
-  selectedSupplier.value = supplier;
-  showInviteModal.value = true;
-};
-
-
-const openModal = (supplier: any) => {
-  selectedSupplier.value = supplier
-  showModal.value = true
-}
-const confirmSendInvitation = () => {
-  if (!selectedSupplier.value) return
-  processing.value = true
-
-  router.post(`/suppliers/${selectedSupplier.value.supplier_id}/send-invitation`, {}, {
-    onFinish: () => {
-      processing.value = false
-      showModal.value = false
-    }
-  })
-}
-
-
-const getInvitationLink = (supplier: Supplier) => {
-  return route('supplier.register', {
-    restaurant_id: props.restaurant_id,
-    supplier_id: supplier.supplier_id
-  });
-};
-
-const copyInvitationLink = async (supplier: Supplier) => {
-  const link = getInvitationLink(supplier);
-  try {
-    await navigator.clipboard.writeText(link);
-    showSuccessNotification('Link copied!');
-  } catch {
-    showErrorNotification('Failed to copy link to clipboard');
-  }
 };
 </script>
 
@@ -297,8 +225,9 @@ const copyInvitationLink = async (supplier: Supplier) => {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Contact</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Address</TableHead>
                 <TableHead>Payment Terms</TableHead>
-                <TableHead>Ingredients</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
               </TableRow>
@@ -306,30 +235,19 @@ const copyInvitationLink = async (supplier: Supplier) => {
             <TableBody>
               <TableRow v-for="supplier in suppliers" :key="supplier.supplier_id">
                 <TableCell class="font-medium">
-                  <div>
-                    <div class="font-semibold">{{ supplier.supplier_name }}</div>
-                    <div v-if="supplier.address" class="text-sm text-muted-foreground">
-                      {{ supplier.address }}
-                    </div>
-                  </div>
+                  {{ supplier.supplier_name }}
                 </TableCell>
                 <TableCell>
-                  <div class="space-y-1">
-                    <div v-if="supplier.contact_number" class="text-sm">
-                      📞 {{ supplier.contact_number }}
-                    </div>
-                    <div v-if="supplier.email" class="text-sm">
-                      📧 {{ supplier.email }}
-                    </div>
-                  </div>
+                  {{ supplier.contact_number || '-' }}
+                </TableCell>
+                <TableCell>
+                  {{ supplier.email || '-' }}
+                </TableCell>
+                <TableCell>
+                  {{ supplier.address || '-' }}
                 </TableCell>
                 <TableCell>
                   {{ getPaymentTermsLabel(supplier.payment_terms) }}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">
-                    {{ supplier.ingredients?.length || 0 }} items
-                  </Badge>
                 </TableCell>
                 <TableCell>
                   <Badge :variant="getStatusBadgeVariant(supplier.is_active)">
@@ -348,27 +266,6 @@ const copyInvitationLink = async (supplier: Supplier) => {
                         <Edit class="h-4 w-4" />
                       </Button>
                     </Link>
-                   <Button
-                      v-if="supplier.email"
-                      variant="ghost"
-                      size="sm"
-                      class="h-8 w-8 p-0"
-                      @click="openModal(supplier)"
-                      :disabled="processing"
-                      title="Send Email Invitation"
-                    >
-                      <Mail class="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      class="h-8 w-8 p-0"
-                      @click="copyInvitationLink(supplier)"
-                      title="Copy Invitation Link"
-                    >
-                      <Copy class="h-4 w-4" />
-                    </Button>
-                   
                   </div>
                 </TableCell>
               </TableRow>
@@ -386,29 +283,4 @@ const copyInvitationLink = async (supplier: Supplier) => {
       </Card>
     </div>
   </AppLayout>
-
-<template>
-  <Dialog v-model:open="showModal">
-    <DialogOverlay class="fixed inset-0 bg-transparent" />
-    <DialogContent
-      class="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2
-             bg-white rounded-lg shadow-lg p-6 z-50"
-    >
-      <DialogHeader>
-        <DialogTitle>Send Invitation</DialogTitle>
-        <DialogDescription>
-          Send invitation email to {{ selectedSupplier?.email }}?
-        </DialogDescription>
-      </DialogHeader>
-
-      <DialogFooter class="flex justify-end gap-2 mt-4">
-        <Button variant="outline" @click="showModal = false">Cancel</Button>
-        <Button :disabled="processing" @click="confirmSendInvitation">
-          Send
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
-</template>
-
 </template>

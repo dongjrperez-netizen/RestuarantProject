@@ -85,31 +85,11 @@ class SupplierController extends Controller
             'supplier_name' => 'required|string|max:150',
             'contact_number' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
-            'password' => 'nullable|string|min:6',
             'address' => 'nullable|string|max:255',
-            'business_registration' => 'nullable|string|max:255',
-            'tax_id' => 'nullable|string|max:255',
             'payment_terms' => 'required|in:COD,NET_7,NET_15,NET_30,NET_60,NET_90',
-            'notes' => 'nullable|string',
         ]);
 
         $validated['restaurant_id'] = auth()->user()->restaurantData->id;
-
-        // If no password provided, generate a temporary one
-        if (empty($validated['password'])) {
-            $validated['password'] = 'temp_'.uniqid();
-        }
-
-        // Convert empty strings to null for nullable fields
-        if (empty($validated['business_registration'])) {
-            $validated['business_registration'] = null;
-        }
-        if (empty($validated['tax_id'])) {
-            $validated['tax_id'] = null;
-        }
-        if (empty($validated['notes'])) {
-            $validated['notes'] = null;
-        }
 
         $supplier = Supplier::create($validated);
 
@@ -138,23 +118,9 @@ class SupplierController extends Controller
             'contact_number' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'address' => 'nullable|string|max:255',
-            'business_registration' => 'nullable|string|max:255',
-            'tax_id' => 'nullable|string|max:255',
             'payment_terms' => 'required|in:COD,NET_7,NET_15,NET_30,NET_60,NET_90',
-            'notes' => 'nullable|string',
             'is_active' => 'boolean',
         ]);
-
-        // Convert empty strings to null for nullable fields
-        if (empty($validated['business_registration'])) {
-            $validated['business_registration'] = null;
-        }
-        if (empty($validated['tax_id'])) {
-            $validated['tax_id'] = null;
-        }
-        if (empty($validated['notes'])) {
-            $validated['notes'] = null;
-        }
 
         $supplier->update($validated);
 

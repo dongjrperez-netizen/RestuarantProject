@@ -404,27 +404,20 @@ class PurchaseOrderController extends Controller
 
         $restaurantId = $user->restaurantData->id;
 
-        // Get suppliers that have ingredient offerings (only for this restaurant)
-        $suppliers = Supplier::where('is_active', true)
-            ->where('restaurant_id', $restaurantId)
-            ->whereHas('ingredients')
-            ->with(['ingredients'])
-            ->orderBy('supplier_name')
-            ->get();
+        // Get all ingredients from the restaurant's inventory
+        $ingredients = Ingredients::where('restaurant_id', $restaurantId)
+            ->orderBy('ingredient_name')
+            ->get(['ingredient_id', 'ingredient_name', 'base_unit', 'cost_per_unit', 'current_stock']);
 
-        // Get all ingredient offerings (supplier inventory) - only for suppliers of this restaurant
-        $supplierOfferings = IngredientSupplier::with(['ingredient', 'supplier'])
+        // Get all suppliers for the restaurant
+        $suppliers = Supplier::where('restaurant_id', $restaurantId)
             ->where('is_active', true)
-            ->whereHas('supplier', function ($query) use ($restaurantId) {
-                $query->where('restaurant_id', $restaurantId);
-            })
-            ->orderBy('id')
-            ->get()
-            ->groupBy('supplier_id');
+            ->orderBy('supplier_name')
+            ->get(['supplier_id', 'supplier_name']);
 
         return Inertia::render('PurchaseOrders/Create', [
+            'ingredients' => $ingredients,
             'suppliers' => $suppliers,
-            'supplierOfferings' => $supplierOfferings,
         ]);
     }
 
@@ -441,8 +434,6 @@ class PurchaseOrderController extends Controller
         try {
             $validated = $request->validate([
                 'supplier_id' => 'required|exists:suppliers,supplier_id',
-                'notes' => 'nullable|string',
-                'delivery_instructions' => 'nullable|string',
                 'items' => 'required|array|min:1',
                 'items.*.ingredient_id' => 'required|exists:ingredients,ingredient_id',
                 'items.*.ordered_quantity' => [
@@ -450,7 +441,7 @@ class PurchaseOrderController extends Controller
                     'numeric',
                     'min:0.01',
                 ],
-                'items.*.unit_price' => 'required|numeric|min:0.01',
+                'items.*.unit_price' => 'nullable|numeric|min:0', // Price is entered when receiving, not when creating
                 'items.*.unit_of_measure' => 'required|string|max:50',
                 'items.*.notes' => 'nullable|string',
             ]);
@@ -471,7 +462,7 @@ class PurchaseOrderController extends Controller
             DB::beginTransaction();
 
             $subtotal = collect($validated['items'])->sum(function ($item) {
-                return $item['ordered_quantity'] * $item['unit_price'];
+                return $item['ordered_quantity'] * ($item['unit_price'] ?? 0);
             });
 
             $user = auth()->user();
@@ -515,20 +506,21 @@ class PurchaseOrderController extends Controller
                 'shipping_amount' => 0,
                 'discount_amount' => 0,
                 'total_amount' => $subtotal,
-                'notes' => $validated['notes'],
-                'delivery_instructions' => $validated['delivery_instructions'],
+                'notes' => null,
+                'delivery_instructions' => null,
                 'created_by_user_id' => $user->id,
                 'created_by_employee_id' => $createdByEmployeeId,
             ]);
 
             foreach ($validated['items'] as $index => $item) {
-                $totalPrice = $item['ordered_quantity'] * $item['unit_price'];
+                $unitPrice = $item['unit_price'] ?? 0;
+                $totalPrice = $item['ordered_quantity'] * $unitPrice;
 
                 $itemData = [
                     'purchase_order_id' => $purchaseOrder->purchase_order_id,
                     'ingredient_id' => $item['ingredient_id'],
                     'ordered_quantity' => $item['ordered_quantity'],
-                    'unit_price' => $item['unit_price'],
+                    'unit_price' => $unitPrice,
                     'total_price' => $totalPrice,
                     'unit_of_measure' => $item['unit_of_measure'],
                     'notes' => $item['notes'],
@@ -570,7 +562,7 @@ class PurchaseOrderController extends Controller
         $purchaseOrder = PurchaseOrder::with(['items.ingredient', 'supplier'])
             ->findOrFail($id);
 
-        if (! in_array($purchaseOrder->status, ['draft', 'pending'])) {
+        if ($purchaseOrder->status !== 'draft') {
             return redirect()->route('purchase-orders.show', $id)
                 ->with('error', 'Cannot edit purchase order with status: '.$purchaseOrder->status);
         }
@@ -582,28 +574,21 @@ class PurchaseOrderController extends Controller
 
         $restaurantId = $user->restaurantData->id;
 
-        // Get suppliers that have ingredient offerings (only for this restaurant)
-        $suppliers = Supplier::where('is_active', true)
-            ->where('restaurant_id', $restaurantId)
-            ->whereHas('ingredients')
-            ->with(['ingredients'])
-            ->orderBy('supplier_name')
-            ->get();
+        // Get all ingredients from the restaurant's inventory
+        $ingredients = Ingredients::where('restaurant_id', $restaurantId)
+            ->orderBy('ingredient_name')
+            ->get(['ingredient_id', 'ingredient_name', 'base_unit', 'cost_per_unit', 'current_stock']);
 
-        // Get all ingredient offerings (supplier inventory) - only for suppliers of this restaurant
-        $supplierOfferings = IngredientSupplier::with(['ingredient', 'supplier'])
+        // Get all suppliers for the restaurant
+        $suppliers = Supplier::where('restaurant_id', $restaurantId)
             ->where('is_active', true)
-            ->whereHas('supplier', function ($query) use ($restaurantId) {
-                $query->where('restaurant_id', $restaurantId);
-            })
-            ->orderBy('id')
-            ->get()
-            ->groupBy('supplier_id');
+            ->orderBy('supplier_name')
+            ->get(['supplier_id', 'supplier_name']);
 
         return Inertia::render('PurchaseOrders/Edit', [
             'purchaseOrder' => $purchaseOrder,
+            'ingredients' => $ingredients,
             'suppliers' => $suppliers,
-            'supplierOfferings' => $supplierOfferings,
         ]);
     }
 
@@ -611,36 +596,19 @@ class PurchaseOrderController extends Controller
     {
         $purchaseOrder = PurchaseOrder::findOrFail($id);
 
-        if (! in_array($purchaseOrder->status, ['draft', 'pending'])) {
+        if ($purchaseOrder->status !== 'draft') {
             return redirect()->back()
                 ->with('error', 'Cannot update purchase order with status: '.$purchaseOrder->status);
         }
 
         $validated = $request->validate([
             'supplier_id' => 'required|exists:suppliers,supplier_id',
-            'notes' => 'nullable|string',
-            'delivery_instructions' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.ingredient_id' => 'required|exists:ingredients,ingredient_id',
             'items.*.ordered_quantity' => [
                 'required',
                 'numeric',
                 'min:0.01',
-                function ($attribute, $value, $fail) use ($request) {
-                    $itemIndex = explode('.', $attribute)[1];
-                    $ingredientId = $request->input("items.{$itemIndex}.ingredient_id");
-                    $supplierId = $request->input('supplier_id');
-
-                    $ingredientSupplier = IngredientSupplier::where('ingredient_id', $ingredientId)
-                        ->where('supplier_id', $supplierId)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if ($ingredientSupplier && $value > $ingredientSupplier->minimum_order_quantity) {
-                        $ingredientName = Ingredients::find($ingredientId)->ingredient_name ?? 'this ingredient';
-                        $fail("The ordered quantity for {$ingredientName} cannot exceed the supplier's maximum order quantity of {$ingredientSupplier->minimum_order_quantity} {$ingredientSupplier->package_unit}.");
-                    }
-                },
             ],
             'items.*.unit_price' => 'required|numeric|min:0.01',
             'items.*.unit_of_measure' => 'required|string|max:50',
@@ -659,8 +627,8 @@ class PurchaseOrderController extends Controller
                 'expected_delivery_date' => null,
                 'subtotal' => $subtotal,
                 'total_amount' => $subtotal,
-                'notes' => $validated['notes'],
-                'delivery_instructions' => $validated['delivery_instructions'],
+                'notes' => null,
+                'delivery_instructions' => null,
             ]);
 
             $purchaseOrder->items()->delete();
@@ -721,16 +689,16 @@ class PurchaseOrderController extends Controller
 
         if ($purchaseOrder->status !== 'draft') {
             return redirect()->back()
-                ->with('error', 'Can only submit draft purchase orders.');
+                ->with('error', 'Can only create draft purchase orders.');
         }
 
-        $purchaseOrder->update(['status' => 'pending']);
-
-        // Send notification to restaurant owner/managers for approval
-        $this->notifyManagersForApproval($purchaseOrder);
+        // Directly create the PO and set to confirmed status
+        $purchaseOrder->update([
+            'status' => 'confirmed',
+        ]);
 
         return redirect()->back()
-            ->with('success', 'Purchase Order submitted for approval.');
+            ->with('success', 'Purchase Order created successfully.');
     }
 
     public function cancel($id)
@@ -763,31 +731,8 @@ class PurchaseOrderController extends Controller
                 ->with('error', 'This order has already been received and processed.');
         }
 
-        $user = auth()->user();
-
-        // Get employees from the restaurant
-        $employees = \App\Models\Employee::where('user_id', $user->id)
-            ->select('employee_id', 'firstname', 'lastname')
-            ->get()
-            ->map(function ($employee) {
-                return [
-                    'id' => $employee->employee_id,
-                    'name' => $employee->firstname . ' ' . $employee->lastname,
-                ];
-            });
-
-        // Get the restaurant owner
-        $owner = [
-            'id' => $user->id,
-            'name' => $user->name,
-        ];
-
-        // Combine owner and employees
-        $staff = collect([$owner])->concat($employees);
-
         return Inertia::render('PurchaseOrders/Receive', [
             'purchaseOrder' => $purchaseOrder,
-            'staff' => $staff,
         ]);
     }
 
@@ -805,14 +750,8 @@ class PurchaseOrderController extends Controller
             'items' => 'required|array',
             'items.*.purchase_order_item_id' => 'required|exists:purchase_order_items,purchase_order_item_id',
             'items.*.received_quantity' => 'required|numeric|min:0',
-            'items.*.quality_rating' => 'nullable|in:excellent,good,fair,poor',
-            'items.*.condition_notes' => 'nullable|string|max:500',
-            'items.*.has_discrepancy' => 'boolean',
-            'items.*.discrepancy_reason' => 'required_if:items.*.has_discrepancy,true|nullable|string|max:500',
-            'actual_delivery_date' => 'required|date',
-            'delivery_condition' => 'required|in:excellent,good,fair,poor',
+            'items.*.unit_price' => 'required|numeric|min:0',
             'received_by' => 'required|string|max:100',
-            'general_notes' => 'nullable|string|max:1000',
         ]);
 
         try {
@@ -826,12 +765,7 @@ class PurchaseOrderController extends Controller
 
                 $item->update([
                     'received_quantity' => $newReceivedQuantity,
-                    // Decrease supplier_delivered_quantity by what the owner is actually receiving now
-// supplier_delivered_quantity is cumulative total delivered by supplier; do not modify it here
-                    'quality_rating' => $itemData['quality_rating'] ?? null,
-                    'condition_notes' => $itemData['condition_notes'] ?? null,
-                    'has_discrepancy' => $itemData['has_discrepancy'] ?? false,
-                    'discrepancy_reason' => $itemData['discrepancy_reason'] ?? null,
+                    'unit_price' => $itemData['unit_price'],
                 ]);
 
                 if ($newReceivedQuantity < $item->ordered_quantity) {
@@ -842,32 +776,17 @@ class PurchaseOrderController extends Controller
                     $ingredient = Ingredients::find($item->ingredient_id);
                     if ($ingredient) {
                         $oldStock = $ingredient->current_stock;
-                        $oldPackages = $ingredient->packages;
+                        $oldCost = $ingredient->cost_per_unit;
 
-                        // Get the package quantity for this supplier
-                        $packageQuantity = $ingredient->getPackageQuantityForSupplier($purchaseOrder->supplier_id);
+                        // Directly add received quantity to current stock (per-unit system)
+                        $ingredient->current_stock += $itemData['received_quantity'];
 
-                        if ($packageQuantity) {
-                            // Add received quantity to packages
-                            $ingredient->packages += $itemData['received_quantity'];
+                        // Update cost per unit with the price entered during receiving
+                        $ingredient->cost_per_unit = $itemData['unit_price'];
 
-                            // Calculate total stock increase (received packages × package contents)
-                            $stockIncrease = $itemData['received_quantity'] * $packageQuantity;
-                            $ingredient->current_stock += $stockIncrease;
+                        $ingredient->save();
 
-                            // Update cost_per_unit based on the package price
-                            // unit_price is the price per package, packageQuantity is units per package
-                            // Therefore: cost_per_unit = price_per_package / units_per_package
-                            if ($packageQuantity > 0) {
-                                $ingredient->cost_per_unit = $item->unit_price / $packageQuantity;
-                            }
-
-                            $ingredient->save();
-
-                            \Log::info("Stock updated for ingredient {$ingredient->ingredient_name}: Packages: {$oldPackages} -> {$ingredient->packages} (+{$itemData['received_quantity']}), Stock: {$oldStock} -> {$ingredient->current_stock} (+{$stockIncrease}), Cost per unit: {$ingredient->cost_per_unit}");
-                        } else {
-                            \Log::error("Package quantity not found for ingredient {$ingredient->ingredient_name} with supplier {$purchaseOrder->supplier_id}");
-                        }
+                        \Log::info("Stock updated for ingredient {$ingredient->ingredient_name}: Stock: {$oldStock} -> {$ingredient->current_stock} (+{$itemData['received_quantity']} {$ingredient->base_unit}), Cost per unit: {$oldCost} -> {$ingredient->cost_per_unit}");
                     } else {
                         \Log::error('Ingredient not found with ID: '.$item->ingredient_id);
                     }
@@ -878,10 +797,8 @@ class PurchaseOrderController extends Controller
 
             $purchaseOrder->update([
                 'status' => $newStatus,
-                'actual_delivery_date' => $validated['actual_delivery_date'],
-                'delivery_condition' => $validated['delivery_condition'],
+                'actual_delivery_date' => now(),
                 'received_by' => $validated['received_by'],
-                'receiving_notes' => $validated['general_notes'],
             ]);
 
             // 🚀 AUTO-GENERATE BILL when PO is fully delivered
@@ -891,7 +808,7 @@ class PurchaseOrderController extends Controller
                     $billResult = $this->billingService->generateBillFromPurchaseOrder(
                         $purchaseOrder->purchase_order_id,
                         [
-                            'bill_date' => $validated['actual_delivery_date'],
+                            'bill_date' => now()->toDateString(),
                             'auto_calculate_due_date' => true,
                             'notes' => 'Auto-generated from delivered purchase order',
                         ]

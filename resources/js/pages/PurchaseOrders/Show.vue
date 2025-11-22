@@ -80,8 +80,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const submitForm = useForm({});
-const approveForm = useForm({});
-const cancelForm = useForm({});
 
 const getStatusBadge = (order: PurchaseOrder) => {
   const status = order.status;
@@ -121,7 +119,7 @@ const formatCurrency = (amount: number) => {
   return `₱${Number(amount).toLocaleString()}`;
 };
 
-// Extract supplier info from notes for manual receives
+// Extract supplier info
 const supplierInfo = computed(() => {
   if (props.purchaseOrder.supplier) {
     return {
@@ -129,38 +127,19 @@ const supplierInfo = computed(() => {
       contactPerson: props.purchaseOrder.supplier.contact_person,
       phone: props.purchaseOrder.supplier.phone,
       email: props.purchaseOrder.supplier.email,
-      isManual: false,
     };
   }
 
-  // Manual receive - extract from notes
-  const notes = props.purchaseOrder.notes || '';
-  const supplierMatch = notes.match(/Supplier:\s*([^|]+)/);
-  const contactMatch = notes.match(/Contact:\s*([^|]+)/);
-  const refMatch = notes.match(/Ref:\s*([^|]+)/);
-
   return {
-    name: supplierMatch ? supplierMatch[1].trim() : 'Manual Receive - Unknown Supplier',
-    contactPerson: contactMatch ? contactMatch[1].trim() : null,
+    name: 'Unknown Supplier',
+    contactPerson: null,
     phone: null,
     email: null,
-    referenceNumber: refMatch ? refMatch[1].trim() : null,
-    isManual: true,
   };
 });
 
 const submitOrder = () => {
   submitForm.post(`/purchase-orders/${props.purchaseOrder.purchase_order_id}/submit`);
-};
-
-const approveOrder = () => {
-  approveForm.post(`/purchase-orders/${props.purchaseOrder.purchase_order_id}/approve`);
-};
-
-const cancelOrder = () => {
-  if (confirm('Are you sure you want to cancel this purchase order?')) {
-    cancelForm.post(`/purchase-orders/${props.purchaseOrder.purchase_order_id}/cancel`);
-  }
 };
 
 // Determine if the "Receive Delivery" button should be shown
@@ -204,27 +183,19 @@ const canReceiveDelivery = computed(() => {
 
       <!-- Action Buttons -->
       <div class="flex flex-wrap gap-2">
-        <Link 
-          v-if="['draft', 'pending'].includes(purchaseOrder.status)"
+        <Link
+          v-if="purchaseOrder.status === 'draft'"
           :href="`/purchase-orders/${purchaseOrder.purchase_order_id}/edit`"
         >
           <Button variant="outline">Edit Order</Button>
         </Link>
-        
-        <Button 
+
+        <Button
           v-if="purchaseOrder.status === 'draft'"
           @click="submitOrder"
           :disabled="submitForm.processing"
         >
-          Submit for Approval
-        </Button>
-
-        <Button 
-          v-if="purchaseOrder.status === 'pending'"
-          @click="approveOrder"
-          :disabled="approveForm.processing"
-        >
-          Approve & Send
+          Create PO
         </Button>
 
         <Link
@@ -233,69 +204,18 @@ const canReceiveDelivery = computed(() => {
         >
           <Button>Receive Delivery</Button>
         </Link>
-
-        <Button
-          v-if="['draft', 'pending', 'sent'].includes(purchaseOrder.status)"
-          @click="cancelOrder"
-          variant="destructive"
-          :disabled="cancelForm.processing"
-        >
-          Cancel Order
-        </Button>
       </div>
 
       <!-- Order Details -->
-      <div class="grid gap-6 md:grid-cols-2">
-        <!-- Basic Information -->
-        <Card>
-          <CardHeader>
-            <CardTitle>Order Information</CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="text-sm font-medium text-muted-foreground">Order Date</label>
-                <div>{{ formatDate(purchaseOrder.order_date) }}</div>
-              </div>
-              <div>
-                <label class="text-sm font-medium text-muted-foreground">Expected Delivery</label>
-                <div>
-                  <span v-if="purchaseOrder.expected_delivery_date">
-                    {{ formatDate(purchaseOrder.expected_delivery_date) }}
-                  </span>
-                  <span v-else class="text-muted-foreground">Not specified</span>
-                </div>
-              </div>
-            </div>
-            
-            <div v-if="purchaseOrder.actual_delivery_date">
-              <label class="text-sm font-medium text-muted-foreground">Actual Delivery Date</label>
-              <div>{{ formatDate(purchaseOrder.actual_delivery_date) }}</div>
-            </div>
-
-            <!-- Owner Receive Status -->
-            <div v-if="['partially_delivered', 'delivered'].includes(purchaseOrder.status)">
-              <label class="text-sm font-medium text-muted-foreground">Owner Receive Status</label>
-              <div class="text-sm">
-                <template v-if="!purchaseOrder.received_by">
-                  <span class="text-amber-700">
-                    Supplier has marked this order as 
-                    <strong>{{ purchaseOrder.status === 'delivered' ? 'delivered' : 'partially delivered' }}</strong>.
-                    The owner has not recorded receipt yet.
-                  </span>
-                </template>
-                <template v-else>
-                  <span>
-                    Received by <strong>{{ purchaseOrder.received_by }}</strong>
-                    <span v-if="purchaseOrder.actual_delivery_date">
-                      on {{ formatDate(purchaseOrder.actual_delivery_date) }}
-                    </span>
-                    <span v-else>
-                      (date not recorded)
-                    </span>.
-                  </span>
-                </template>
-              </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Order Information</CardTitle>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="grid grid-cols-3 gap-6">
+            <div>
+              <label class="text-sm font-medium text-muted-foreground">Order Date</label>
+              <div>{{ formatDate(purchaseOrder.order_date) }}</div>
             </div>
 
             <div v-if="purchaseOrder.created_by_employee || purchaseOrder.created_by">
@@ -305,74 +225,63 @@ const canReceiveDelivery = computed(() => {
               </div>
             </div>
 
-            <div v-if="purchaseOrder.approved_by">
-              <label class="text-sm font-medium text-muted-foreground">Approved By</label>
-              <div>{{ purchaseOrder.approved_by.name }}</div>
-            </div>
-
-            <div v-if="purchaseOrder.notes">
-              <label class="text-sm font-medium text-muted-foreground">Notes</label>
-              <div class="text-sm">{{ purchaseOrder.notes }}</div>
-            </div>
-
-            <div v-if="purchaseOrder.delivery_instructions">
-              <label class="text-sm font-medium text-muted-foreground">Delivery Instructions</label>
-              <div class="text-sm">{{ purchaseOrder.delivery_instructions }}</div>
-            </div>
-
-            <div v-if="purchaseOrder.delivery_condition">
-              <label class="text-sm font-medium text-muted-foreground">Delivery Condition</label>
-              <div class="capitalize">{{ purchaseOrder.delivery_condition }}</div>
-            </div>
-
-            <div v-if="purchaseOrder.received_by">
-              <label class="text-sm font-medium text-muted-foreground">Received By</label>
-              <div>{{ purchaseOrder.received_by }}</div>
-            </div>
-
-            <div v-if="purchaseOrder.receiving_notes">
-              <label class="text-sm font-medium text-muted-foreground">Receiving Notes</label>
-              <div class="text-sm">{{ purchaseOrder.receiving_notes }}</div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Supplier Information -->
-        <Card>
-          <CardHeader>
-            <CardTitle>Supplier Information</CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4">
             <div>
               <label class="text-sm font-medium text-muted-foreground">Supplier Name</label>
-              <div class="font-medium">
-                {{ supplierInfo.name }}
-                <Badge v-if="supplierInfo.isManual" variant="secondary" class="ml-2">Unregistered</Badge>
-              </div>
+              <div class="font-medium">{{ supplierInfo.name }}</div>
             </div>
+          </div>
 
-            <div v-if="supplierInfo.contactPerson">
-              <label class="text-sm font-medium text-muted-foreground">Contact Person</label>
-              <div>{{ supplierInfo.contactPerson }}</div>
-            </div>
+          <div v-if="purchaseOrder.actual_delivery_date">
+            <label class="text-sm font-medium text-muted-foreground">Actual Delivery Date</label>
+            <div>{{ formatDate(purchaseOrder.actual_delivery_date) }}</div>
+          </div>
 
-            <div v-if="supplierInfo.phone">
-              <label class="text-sm font-medium text-muted-foreground">Phone</label>
-              <div>{{ supplierInfo.phone }}</div>
+          <!-- Owner Receive Status -->
+          <div v-if="['partially_delivered', 'delivered'].includes(purchaseOrder.status)">
+            <label class="text-sm font-medium text-muted-foreground">Owner Receive Status</label>
+            <div class="text-sm">
+              <template v-if="!purchaseOrder.received_by">
+                <span class="text-amber-700">
+                  Supplier has marked this order as
+                  <strong>{{ purchaseOrder.status === 'delivered' ? 'delivered' : 'partially delivered' }}</strong>.
+                  The owner has not recorded receipt yet.
+                </span>
+              </template>
+              <template v-else>
+                <span>
+                  Received by <strong>{{ purchaseOrder.received_by }}</strong>
+                  <span v-if="purchaseOrder.actual_delivery_date">
+                    on {{ formatDate(purchaseOrder.actual_delivery_date) }}
+                  </span>
+                  <span v-else>
+                    (date not recorded)
+                  </span>.
+                </span>
+              </template>
             </div>
+          </div>
 
-            <div v-if="supplierInfo.email">
-              <label class="text-sm font-medium text-muted-foreground">Email</label>
-              <div>{{ supplierInfo.email }}</div>
-            </div>
+          <div v-if="purchaseOrder.delivery_instructions">
+            <label class="text-sm font-medium text-muted-foreground">Delivery Instructions</label>
+            <div class="text-sm">{{ purchaseOrder.delivery_instructions }}</div>
+          </div>
 
-            <div v-if="supplierInfo.isManual && supplierInfo.referenceNumber">
-              <label class="text-sm font-medium text-muted-foreground">Reference Number</label>
-              <div>{{ supplierInfo.referenceNumber }}</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <div v-if="purchaseOrder.delivery_condition">
+            <label class="text-sm font-medium text-muted-foreground">Delivery Condition</label>
+            <div class="capitalize">{{ purchaseOrder.delivery_condition }}</div>
+          </div>
+
+          <div v-if="purchaseOrder.received_by">
+            <label class="text-sm font-medium text-muted-foreground">Received By</label>
+            <div>{{ purchaseOrder.received_by }}</div>
+          </div>
+
+          <div v-if="purchaseOrder.receiving_notes">
+            <label class="text-sm font-medium text-muted-foreground">Receiving Notes</label>
+            <div class="text-sm">{{ purchaseOrder.receiving_notes }}</div>
+          </div>
+        </CardContent>
+      </Card>
 
       <!-- Order Items -->
       <Card>
@@ -383,15 +292,10 @@ const canReceiveDelivery = computed(() => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Ingredient</TableHead>
-                <TableHead>Ordered Qty</TableHead>
-                <TableHead>Received Qty</TableHead>
-                <TableHead>Unit Price</TableHead>
-                <TableHead>Total Price</TableHead>
-                <TableHead>Package Unit</TableHead>
-                <TableHead>Base Unit</TableHead>
-                <TableHead>Quality</TableHead>
-                <TableHead>Notes</TableHead>
+                <TableHead class="min-w-[280px]">Ingredient</TableHead>
+                <TableHead class="min-w-[100px]">Ordered Qty</TableHead>
+                <TableHead class="min-w-[100px]">Received Qty</TableHead>
+                <TableHead class="min-w-[100px]">Base Unit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -406,91 +310,30 @@ const canReceiveDelivery = computed(() => {
                   <div class="flex flex-col space-y-1">
                     <div class="flex items-center space-x-2">
                       <span>
-                        <!-- Prefer actual received quantity; fall back to supplier-delivered quantity for visibility -->
                         {{ item.received_quantity > 0
                           ? item.received_quantity
                           : (item.supplier_delivered_quantity ?? 0)
                         }}
                       </span>
-                      <!-- Owner/restaurant receive status -->
-                      <Badge 
+                      <Badge
                         v-if="item.received_quantity > 0 && item.received_quantity < item.ordered_quantity"
                         variant="secondary"
                         class="text-xs"
                       >
-                        Partial (Owner)
+                        Partial
                       </Badge>
-                      <Badge 
+                      <Badge
                         v-else-if="item.received_quantity >= item.ordered_quantity && item.received_quantity > 0"
                         variant="default"
                         class="text-xs"
                       >
-                        Complete (Owner)
-                      </Badge>
-                    </div>
-                    <!-- Supplier-delivered status, when owner hasn't processed receive yet -->
-                    <div v-if="item.received_quantity === 0 && (item.supplier_delivered_quantity ?? 0) > 0" class="flex items-center space-x-2 text-xs text-muted-foreground">
-                      <span>
-                        Supplier: {{ item.supplier_delivered_quantity }}/{{ item.ordered_quantity }} {{ item.unit_of_measure }}
-                      </span>
-                      <Badge 
-                        v-if="item.supplier_delivered_quantity! < item.ordered_quantity"
-                        variant="secondary"
-                        class="text-xs"
-                      >
-                        Supplier Partial
-                      </Badge>
-                      <Badge 
-                        v-else
-                        variant="default"
-                        class="text-xs"
-                      >
-                        Supplier Complete
+                        Complete
                       </Badge>
                     </div>
                   </div>
-                </TableCell>
-                <TableCell>
-                  {{ formatCurrency(item.unit_price) }}
-                </TableCell>
-                <TableCell class="font-medium">
-                  {{ formatCurrency(item.total_price) }}
-                </TableCell>
-                <TableCell>
-                  {{ item.unit_of_measure }}
                 </TableCell>
                 <TableCell>
                   <span class="text-sm text-muted-foreground">{{ item.ingredient.base_unit }}</span>
-                </TableCell>
-                <TableCell>
-                  <div v-if="item.quality_rating" class="space-y-1">
-                    <Badge 
-                      :variant="item.quality_rating === 'excellent' ? 'default' : 
-                               item.quality_rating === 'good' ? 'secondary' : 
-                               item.quality_rating === 'fair' ? 'warning' : 'destructive'"
-                      class="text-xs capitalize"
-                    >
-                      {{ item.quality_rating }}
-                    </Badge>
-                    <div v-if="item.has_discrepancy" class="flex items-center space-x-1">
-                      <Badge variant="destructive" class="text-xs">
-                        Discrepancy
-                      </Badge>
-                    </div>
-                  </div>
-                  <span v-else class="text-muted-foreground text-sm">Not rated</span>
-                </TableCell>
-                <TableCell>
-                  <div class="space-y-1">
-                    <span v-if="item.notes" class="text-sm text-muted-foreground block">{{ item.notes }}</span>
-                    <span v-if="item.condition_notes" class="text-sm text-muted-foreground block">
-                      <span class="font-medium">Condition:</span> {{ item.condition_notes }}
-                    </span>
-                    <span v-if="item.discrepancy_reason" class="text-sm text-red-600 block">
-                      <span class="font-medium">Issue:</span> {{ item.discrepancy_reason }}
-                    </span>
-                    <span v-if="!item.notes && !item.condition_notes && !item.discrepancy_reason" class="text-muted-foreground">-</span>
-                  </div>
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -498,37 +341,6 @@ const canReceiveDelivery = computed(() => {
         </CardContent>
       </Card>
 
-      <!-- Order Summary -->
-      <Card>
-        <CardHeader>
-          <CardTitle>Order Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="space-y-2">
-            <div class="flex justify-between">
-              <span>Subtotal</span>
-              <span>{{ formatCurrency(purchaseOrder.subtotal) }}</span>
-            </div>
-            <div v-if="purchaseOrder.tax_amount > 0" class="flex justify-between">
-              <span>Tax</span>
-              <span>{{ formatCurrency(purchaseOrder.tax_amount) }}</span>
-            </div>
-            <div v-if="purchaseOrder.shipping_amount > 0" class="flex justify-between">
-              <span>Shipping</span>
-              <span>{{ formatCurrency(purchaseOrder.shipping_amount) }}</span>
-            </div>
-            <div v-if="purchaseOrder.discount_amount > 0" class="flex justify-between text-green-600">
-              <span>Discount</span>
-              <span>-{{ formatCurrency(purchaseOrder.discount_amount) }}</span>
-            </div>
-            <Separator />
-            <div class="flex justify-between text-lg font-semibold">
-              <span>Total Amount</span>
-              <span>{{ formatCurrency(purchaseOrder.total_amount) }}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   </AppLayout>
 </template>

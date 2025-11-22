@@ -16,8 +16,8 @@ return new class extends Migration
             $table->unsignedBigInteger('restaurant_id');
             $table->string('plan_name');
             $table->enum('plan_type', ['daily', 'weekly']);
-            $table->date('start_date');
-            $table->date('end_date');
+            $table->date('start_date')->nullable();
+            $table->date('end_date')->nullable();
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
             $table->boolean('is_default')->default(false);

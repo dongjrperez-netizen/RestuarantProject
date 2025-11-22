@@ -3,6 +3,25 @@ import type { Config } from 'ziggy-js';
 
 export interface Auth {
     user: User;
+    userType?: string;
+    restaurant?: RestaurantData;
+    subscription?: {
+        plan_name: string | null;
+        plan_id: number | null;
+        status: string | null;
+        end_date: string | null;
+    } | null;
+}
+
+export interface RestaurantData {
+    id?: number;
+    user_id?: number;
+    restaurant_name: string;
+    address?: string;
+    contact_number?: string;
+    logo?: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export interface BreadcrumbItem {

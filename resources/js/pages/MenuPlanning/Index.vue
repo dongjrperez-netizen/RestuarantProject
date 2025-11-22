@@ -74,8 +74,11 @@ const getPlanTypeBadgeVariant = (planType: string) => {
   return planType === 'daily' ? 'outline' : 'secondary';
 };
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString();
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString();
 };
 
 const togglePlanStatus = (plan: MenuPlan) => {
@@ -189,9 +192,12 @@ const deletePlan = (plan: MenuPlan) => {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <div class="text-sm">
+                  <div class="text-sm" v-if="plan.start_date && plan.end_date && !plan.is_default">
                     <div>{{ formatDate(plan.start_date) }}</div>
                     <div class="text-muted-foreground">to {{ formatDate(plan.end_date) }}</div>
+                  </div>
+                  <div v-else class="text-sm text-muted-foreground">
+                    Default plan (no date range)
                   </div>
                 </TableCell>
                 <TableCell>

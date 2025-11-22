@@ -12,6 +12,11 @@ Route::middleware('auth:web,employee')->group(function () {
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // Restaurant settings (logo upload) - only for owners
+    Route::post('settings/profile/restaurant', [ProfileController::class, 'updateRestaurantSettings'])
+        ->middleware('auth:web')
+        ->name('profile.restaurant.update');
+
     Route::get('settings/password', [PasswordController::class, 'edit'])->name('password.edit');
 
     Route::put('settings/password', [PasswordController::class, 'update'])

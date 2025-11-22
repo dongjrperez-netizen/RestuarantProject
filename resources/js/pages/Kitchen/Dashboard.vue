@@ -18,7 +18,8 @@ import {
   User,
   DollarSign,
   CalendarClock,
-  AlertTriangle
+  AlertTriangle,
+  Calendar
 } from 'lucide-vue-next';
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
@@ -261,6 +262,10 @@ const onDamageReportSuccess = () => {
             </div>
           </div>
           <div class="flex items-center space-x-4">
+            <Button @click="router.visit('/kitchen/todays-plan')" class="bg-blue-600 hover:bg-blue-700 text-white">
+              <Calendar class="w-4 h-4 mr-2" />
+              Show Today's Plan
+            </Button>
             <Button @click="openDamageModal" class="bg-red-600 hover:bg-red-700 text-white">
               <AlertTriangle class="w-4 h-4 mr-2" />
               Report Damage/Spoilage

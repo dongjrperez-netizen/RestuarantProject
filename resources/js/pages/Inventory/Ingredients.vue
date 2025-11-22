@@ -36,20 +36,13 @@ import {
 
 
 
-interface Supplier {
-  supplier_id: number;
-  supplier_name: string;
-}
-
 interface Ingredient {
   ingredient_id: number;
   ingredient_name: string;
   current_stock: number;
   reorder_level: number;
   base_unit: string;
-  supplier_name: string;
   is_low_stock: boolean;
-  suppliers: Supplier[];
 }
 
 interface Stats {
@@ -187,7 +180,15 @@ const clearFilters = () => {
 
       <!-- Header -->
       <div class="flex items-center justify-between">
-      
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight">Ingredients Inventory</h1>
+          <p class="text-muted-foreground">Manage your ingredient stock levels</p>
+        </div>
+        <div>
+          <Button @click="router.visit('/inventory/ingredients/create')">
+            Add Ingredient
+          </Button>
+        </div>
       </div>
          <!-- Summary Cards -->
       <div class="grid gap-4 md:grid-cols-2">
@@ -250,7 +251,6 @@ const clearFilters = () => {
                 <TableHead>Current Stock</TableHead>
                 <TableHead>Reorder Level</TableHead>
                 <TableHead>Unit</TableHead>
-                <TableHead>Supplier</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead class="text-center">Actions</TableHead>
               </TableRow>
@@ -274,7 +274,6 @@ const clearFilters = () => {
                 </TableCell>
                 <TableCell>{{ formatNumber(ingredient.reorder_level) }}</TableCell>
                 <TableCell>{{ ingredient.base_unit }}</TableCell>
-                <TableCell>{{ ingredient.supplier_name }}</TableCell>
                 <TableCell>
                   <Badge :variant="ingredient.is_low_stock ? 'destructive' : 'default'">
                     {{ ingredient.is_low_stock ? 'Reorder Now' : 'In Stock' }}
@@ -292,7 +291,7 @@ const clearFilters = () => {
               </TableRow>
 
               <TableRow v-if="ingredients.length === 0">
-                <TableCell colspan="7" class="text-center py-8">
+                <TableCell colspan="6" class="text-center py-8">
                   <div class="text-muted-foreground">
                     <div class="text-lg mb-2">No ingredients found</div>
                     <div class="text-sm">Your ingredient inventory is empty.</div>

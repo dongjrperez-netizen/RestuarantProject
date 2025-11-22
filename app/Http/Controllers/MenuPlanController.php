@@ -21,6 +21,11 @@ class MenuPlanController extends Controller
             return redirect()->route('dashboard')->with('error', 'No restaurant data found.');
         }
 
+        // Auto-deactivate any non-default plans that have passed their end date
+        MenuPlan::expiredButActive()
+            ->where('is_default', false)
+            ->update(['is_active' => false]);
+
         $menuPlans = MenuPlan::with(['menuPlanDishes.dish'])
             ->withCount('menuPlanDishes as dishes_count')
             ->forRestaurant($restaurantId)
@@ -51,9 +56,23 @@ class MenuPlanController extends Controller
             ->orderBy('ingredient_name')
             ->get();
 
+        // Existing non-default active plans for this restaurant, used to prevent date overlaps on the frontend
+        $existingPlans = MenuPlan::forRestaurant($restaurantId)
+            ->where('is_active', true)
+            ->where('is_default', false)
+            ->orderBy('start_date')
+            ->get(['menu_plan_id', 'plan_name', 'start_date', 'end_date']);
+
+        // Check if a default plan already exists for this restaurant
+        $hasDefaultPlan = MenuPlan::forRestaurant($restaurantId)
+            ->where('is_default', true)
+            ->exists();
+
         return Inertia::render('MenuPlanning/Create', [
             'dishes' => $dishes,
             'ingredients' => $ingredients,
+            'existingPlans' => $existingPlans,
+            'hasDefaultPlan' => $hasDefaultPlan,
         ]);
     }
 
@@ -75,8 +94,8 @@ class MenuPlanController extends Controller
         $request->validate([
             'plan_name' => 'required|string|max:255',
             'plan_type' => ['required', Rule::in(['daily', 'weekly'])],
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
             'description' => 'nullable|string',
             'is_default' => 'boolean',
             'dishes' => 'array',
@@ -90,6 +109,48 @@ class MenuPlanController extends Controller
 
         // If this plan is being set as default, unset any existing default plans
         $isDefaultValue = $request->is_default ?? false;
+
+        // For non-default plans, enforce that dates are provided
+        if (! $isDefaultValue && (! $request->start_date || ! $request->end_date)) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors([
+                    'start_date' => 'Start and end dates are required for non-default menu plans.',
+                ]);
+        }
+
+        // Prevent overlapping non-default active plans for the same restaurant
+        if (! $isDefaultValue) {
+            $overlappingPlans = MenuPlan::forRestaurant($restaurantId)
+                ->where('is_active', true)
+                ->where('is_default', false)
+                ->where(function ($query) use ($request) {
+                    $start = $request->start_date;
+                    $end = $request->end_date;
+
+                    $query
+                        // existing start within new range
+                        ->whereBetween('start_date', [$start, $end])
+                        // or existing end within new range
+                        ->orWhereBetween('end_date', [$start, $end])
+                        // or existing fully covers new range
+                        ->orWhere(function ($q) use ($start, $end) {
+                            $q->where('start_date', '<=', $start)
+                                ->where('end_date', '>=', $end);
+                        });
+                })
+                ->get();
+
+            if ($overlappingPlans->isNotEmpty()) {
+                $planNames = $overlappingPlans->pluck('plan_name')->join(', ');
+
+                return redirect()->back()
+                    ->withInput()
+                    ->withErrors([
+                        'start_date' => 'The selected date range overlaps with existing menu plan(s): ' . $planNames,
+                    ]);
+            }
+        }
         \Log::info('About to create MenuPlan', [
             'is_default_from_request' => $request->is_default,
             'is_default_final_value' => $isDefaultValue,
@@ -107,8 +168,8 @@ class MenuPlanController extends Controller
             'restaurant_id' => $restaurantId,
             'plan_name' => $request->plan_name,
             'plan_type' => $request->plan_type,
-            'start_date' => $request->start_date,
-            'end_date' => $request->end_date,
+            'start_date' => $isDefaultValue ? null : $request->start_date,
+            'end_date' => $isDefaultValue ? null : $request->end_date,
             'description' => $request->description,
             'is_active' => true,
             'is_default' => $isDefaultValue,
@@ -163,9 +224,16 @@ class MenuPlanController extends Controller
             ->orderBy('dish_name')
             ->get();
 
+        // Determine if there is another default plan (different from this one)
+        $hasOtherDefault = MenuPlan::forRestaurant($restaurantId)
+            ->where('is_default', true)
+            ->where('menu_plan_id', '!=', $menuPlan->menu_plan_id)
+            ->exists();
+
         return Inertia::render('MenuPlanning/Edit', [
             'menuPlan' => $menuPlan,
             'dishes' => $dishes,
+            'hasOtherDefault' => $hasOtherDefault,
         ]);
     }
 
@@ -182,8 +250,8 @@ class MenuPlanController extends Controller
             $request->validate([
                 'plan_name' => 'required|string|max:255',
                 'plan_type' => ['required', Rule::in(['daily', 'weekly'])],
-                'start_date' => 'required|date',
-                'end_date' => 'required|date|after_or_equal:start_date',
+                'start_date' => 'nullable|date',
+                'end_date' => 'nullable|date|after_or_equal:start_date',
                 'description' => 'nullable|string',
                 'is_active' => 'boolean',
                 'is_default' => 'boolean',
@@ -198,6 +266,47 @@ class MenuPlanController extends Controller
 
             \Log::info('MenuPlan validation passed');
 
+            $isDefaultValue = $request->is_default ?? $menuPlan->is_default;
+
+            // For non-default plans, enforce that dates are provided
+            if (! $isDefaultValue && (! $request->start_date || ! $request->end_date)) {
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'Start and end dates are required for non-default menu plans.');
+            }
+
+            // Prevent overlapping non-default active plans when updating (excluding this plan)
+            if (! $isDefaultValue) {
+                $overlappingPlans = MenuPlan::forRestaurant($restaurantId)
+                    ->where('is_active', true)
+                    ->where('is_default', false)
+                    ->where('menu_plan_id', '!=', $menuPlan->menu_plan_id)
+                    ->where(function ($query) use ($request) {
+                        $start = $request->start_date;
+                        $end = $request->end_date;
+
+                        $query
+                            // existing start within new range
+                            ->whereBetween('start_date', [$start, $end])
+                            // or existing end within new range
+                            ->orWhereBetween('end_date', [$start, $end])
+                            // or existing fully covers new range
+                            ->orWhere(function ($q) use ($start, $end) {
+                                $q->where('start_date', '<=', $start)
+                                    ->where('end_date', '>=', $end);
+                            });
+                    })
+                    ->get();
+
+                if ($overlappingPlans->isNotEmpty()) {
+                    $planNames = $overlappingPlans->pluck('plan_name')->join(', ');
+
+                    return redirect()->back()
+                        ->withInput()
+                        ->with('error', 'The selected date range overlaps with existing menu plan(s): ' . $planNames);
+                }
+            }
+
             // If this plan is being set as default, unset any existing default plans
             if ($request->is_default && !$menuPlan->is_default) {
                 MenuPlan::forRestaurant($restaurantId)
@@ -209,8 +318,8 @@ class MenuPlanController extends Controller
         $menuPlan->update([
             'plan_name' => $request->plan_name,
             'plan_type' => $request->plan_type,
-            'start_date' => $request->start_date,
-            'end_date' => $request->end_date,
+            'start_date' => $isDefaultValue ? null : $request->start_date,
+            'end_date' => $isDefaultValue ? null : $request->end_date,
             'description' => $request->description,
             'is_active' => $request->is_active ?? true,
             'is_default' => $request->is_default ?? false,
@@ -266,6 +375,11 @@ class MenuPlanController extends Controller
 
         $date = $request->get('date', now()->format('Y-m-d'));
         $mealType = $request->get('meal_type');
+
+        // Auto-deactivate any non-default plans that have passed their end date
+        MenuPlan::expiredButActive()
+            ->where('is_default', false)
+            ->update(['is_active' => false]);
 
         // First, try to find a specific menu plan for this date
         $activeMenuPlan = MenuPlan::with(['menuPlanDishes.dish'])

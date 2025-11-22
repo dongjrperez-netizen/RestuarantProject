@@ -12,8 +12,8 @@ class Restaurant_Data extends Model
         'user_id',
         'restaurant_name',
         'address',
-
         'contact_number',
+        'logo',
     ];
 
     // Define the relationship with User

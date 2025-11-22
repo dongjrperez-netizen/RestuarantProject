@@ -45,6 +45,7 @@ interface MenuPlan {
 interface Props {
   dishes: Dish[];
   menuPlan: MenuPlan;
+  hasOtherDefault: boolean;
   flash?: {
     success?: string;
     error?: string;
@@ -111,9 +112,11 @@ const selectedDate = ref<string>('');
 const selectedNotes = ref<string>('');
 const selectedFrequency = ref<string>('');
 const selectedDayOfWeek = ref<string>('');
-const selectedMealType = ref<string>('');
 
 // planTypes array removed - now using computed planType
+
+// Flag to differentiate between user-driven date changes and automatic extensions
+const isAutoExtendingRange = ref(false);
 
 // Auto-adjust end date when start date changes (optional behavior)
 watch(() => form.start_date, (newDate) => {
@@ -123,20 +126,62 @@ watch(() => form.start_date, (newDate) => {
   }
 });
 
+// When the user changes the plan start date manually, shift all existing dishes
+// by the same number of days so the pattern moves with the plan.
+watch(
+  () => form.start_date,
+  (newDate, oldDate) => {
+    if (!oldDate || !newDate) return;
+    if (isAutoExtendingRange.value) return; // skip shifts triggered by autoExtendDateRange
+
+    const oldDateObj = new Date(oldDate);
+    const newDateObj = new Date(newDate);
+
+    if (isNaN(oldDateObj.getTime()) || isNaN(newDateObj.getTime())) return;
+
+    const diffDays = Math.round(
+      (newDateObj.getTime() - oldDateObj.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    if (diffDays === 0) return;
+
+    form.dishes = form.dishes.map((dish) => {
+      const originalDate = new Date(dish.planned_date);
+      if (isNaN(originalDate.getTime())) return dish;
+
+      const shiftedDate = new Date(originalDate);
+      shiftedDate.setDate(shiftedDate.getDate() + diffDays);
+      const shiftedDateString = shiftedDate.toISOString().split('T')[0];
+
+      return {
+        ...dish,
+        planned_date: shiftedDateString,
+        day_of_week: shiftedDate.getDay(),
+      };
+    });
+  }
+);
+
 // Auto-extend date range when adding dishes outside current range
 const autoExtendDateRange = (dishDate: string) => {
   const dishDateObj = new Date(dishDate);
   const startDateObj = new Date(form.start_date);
   const endDateObj = new Date(form.end_date);
 
-  // Extend start date if dish date is earlier
-  if (dishDateObj < startDateObj) {
-    form.start_date = dishDate;
-  }
+  isAutoExtendingRange.value = true;
 
-  // Extend end date if dish date is later
-  if (dishDateObj > endDateObj) {
-    form.end_date = dishDate;
+  try {
+    // Extend start date if dish date is earlier
+    if (dishDateObj < startDateObj) {
+      form.start_date = dishDate;
+    }
+
+    // Extend end date if dish date is later
+    if (dishDateObj > endDateObj) {
+      form.end_date = dishDate;
+    }
+  } finally {
+    isAutoExtendingRange.value = false;
   }
 };
 
@@ -187,16 +232,13 @@ const addDishToPlan = () => {
       // Update existing entry
       form.dishes[existingIndex].planned_quantity += selectedQuantity.value;
       form.dishes[existingIndex].notes = selectedNotes.value;
-      if (selectedMealType.value) {
-        form.dishes[existingIndex].meal_type = selectedMealType.value;
-      }
     } else {
-      // Add new entry
+      // Add new entry (no meal type)
       form.dishes.push({
         dish_id: dish.dish_id,
         dish_name: dish.dish_name,
         planned_quantity: selectedQuantity.value,
-        meal_type: selectedMealType.value,
+        meal_type: '',
         planned_date: date,
         day_of_week: new Date(date).getDay(),
         notes: selectedNotes.value,
@@ -211,7 +253,6 @@ const addDishToPlan = () => {
   selectedFrequency.value = '';
   selectedDate.value = '';
   selectedDayOfWeek.value = '';
-  selectedMealType.value = '';
 };
 
 const removeDishFromPlan = (index: number) => {
@@ -221,7 +262,7 @@ const removeDishFromPlan = (index: number) => {
 interface DishGroup {
   dishName: string;
   pattern: string;
-  totalQuantity: number;
+  quantityPerDay: number | string;
   dishes: PlanDish[];
   dates: string[];
 }
@@ -251,7 +292,11 @@ const groupedDishes = computed((): DishGroup[] => {
 
   return Object.entries(groups).map(([dishName, dishes]) => {
     const dates = dishes.map(d => d.planned_date).sort();
-    const totalQuantity = dishes.reduce((sum, d) => sum + d.planned_quantity, 0);
+
+    // Get quantity per day (check if all quantities are the same)
+    const quantities = dishes.map(d => d.planned_quantity);
+    const uniqueQuantities = [...new Set(quantities)];
+    const quantityPerDay = uniqueQuantities.length === 1 ? uniqueQuantities[0] : 'varies';
 
     // Determine pattern
     let pattern = '';
@@ -271,7 +316,7 @@ const groupedDishes = computed((): DishGroup[] => {
     return {
       dishName,
       pattern,
-      totalQuantity,
+      quantityPerDay,
       dishes,
       dates
     };
@@ -435,6 +480,7 @@ const submit = () => {
                 type="checkbox"
                 id="is_default"
                 v-model="form.is_default"
+                :disabled="props.hasOtherDefault && !props.menuPlan.is_default"
                 class="h-4 w-4 text-primary border-input rounded focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               />
               <Label for="is_default" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
@@ -445,6 +491,12 @@ const submit = () => {
               </div>
               <div class="text-xs text-blue-600 ml-2" v-if="form.is_default">
                 ✓ This will be the default plan
+              </div>
+              <div
+                v-if="props.hasOtherDefault && !props.menuPlan.is_default"
+                class="text-xs text-muted-foreground ml-2"
+              >
+                Another default plan already exists. Edit that plan if you want to change the fallback.
               </div>
             </div>
           </CardContent>
@@ -474,21 +526,6 @@ const submit = () => {
                     >
                       {{ dish.dish_name }}
                     </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div class="space-y-2">
-                <Label for="meal_type">Meal Type</Label>
-                <Select v-model="selectedMealType">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose meal" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="breakfast">Breakfast</SelectItem>
-                    <SelectItem value="lunch">Lunch</SelectItem>
-                    <SelectItem value="dinner">Dinner</SelectItem>
-                    <SelectItem value="snack">Snack</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -592,7 +629,7 @@ const submit = () => {
                 <TableRow>
                   <TableHead>Dish</TableHead>
                   <TableHead>Schedule Pattern</TableHead>
-                  <TableHead>Total Quantity</TableHead>
+                  <TableHead>Quantity (per day)</TableHead>
                   <TableHead>Dates Count</TableHead>
                   <TableHead class="w-20">Actions</TableHead>
                 </TableRow>
@@ -602,13 +639,14 @@ const submit = () => {
                   <TableCell class="font-medium">{{ group.dishName }}</TableCell>
                   <TableCell>
                     <div class="text-sm">
-                      {{ group.pattern }}
+                      {{ form.is_default ? '-' : group.pattern }}
                     </div>
                   </TableCell>
-                  <TableCell>{{ group.totalQuantity }}</TableCell>
+                  <TableCell>{{ group.quantityPerDay }}</TableCell>
                   <TableCell>{{ group.dates.length }} days</TableCell>
                   <TableCell>
                     <Button
+                      type="button"
                       variant="ghost"
                       size="sm"
                       @click="removeDishGroup(group)"

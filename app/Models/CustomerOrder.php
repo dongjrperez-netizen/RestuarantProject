@@ -158,16 +158,14 @@ class CustomerOrder extends Model
             return $item->quantity * $item->unit_price;
         });
 
-        $taxRate = 0.12; // 12% tax rate, can be configurable
-        $taxAmount = $subtotal * $taxRate;
-
+        // Tax removed as per requirements
         // Include reservation fee in total if exists
         $reservationFee = $this->reservation_fee ?? 0;
-        $total = $subtotal + $taxAmount + $reservationFee;
+        $total = $subtotal + $reservationFee;
 
         $this->update([
             'subtotal' => $subtotal,
-            'tax_amount' => $taxAmount,
+            'tax_amount' => 0,
             'reservation_fee' => $reservationFee,
             'total_amount' => $total,
         ]);

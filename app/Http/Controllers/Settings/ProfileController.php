@@ -10,6 +10,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -114,5 +115,73 @@ class ProfileController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/');
+    }
+
+    /**
+     * Update the restaurant settings (logo, etc.)
+     */
+    public function updateRestaurantSettings(Request $request): RedirectResponse
+    {
+        // Only restaurant owners can update restaurant settings
+        /** @var \App\Models\User $user */
+        $user = Auth::guard('web')->user();
+
+        if (!$user) {
+            return redirect()->back()->withErrors(['error' => 'Unauthorized access']);
+        }
+
+        // Debug logging
+        $file = $request->file('logo');
+        \Log::info('Upload Request Debug', [
+            'hasFile' => $request->hasFile('logo'),
+            'file' => $request->file('logo'),
+            'fileExists' => $file ? file_exists($file->getPathname()) : null,
+            'filePath' => $file ? $file->getPathname() : null,
+            'fileName' => $file ? $file->getClientOriginalName() : null,
+            'fileSize' => $file ? $file->getSize() : null,
+            'fileMime' => $file ? $file->getMimeType() : null,
+            'fileExtension' => $file ? $file->getClientOriginalExtension() : null,
+            'isValid' => $file ? $file->isValid() : null,
+            'error' => $file ? $file->getError() : null,
+            'allFiles' => $request->allFiles(),
+            'contentType' => $request->header('Content-Type'),
+        ]);
+
+        // Validate the request - accept common image formats including webp
+        $request->validate([
+            'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'], // Max 2MB
+        ]);
+
+        // Get the restaurant data
+        $restaurantData = $user->restaurantData;
+
+        if (!$restaurantData) {
+            return redirect()->back()->withErrors(['error' => 'Restaurant data not found']);
+        }
+
+        // Handle logo upload
+        if ($request->hasFile('logo')) {
+            try {
+                // Delete old logo if exists
+                if ($restaurantData->logo) {
+                    Storage::disk('public')->delete($restaurantData->logo);
+                }
+
+                // Store the uploaded file directly in the public disk
+                // This avoids requiring the GD extension / Intervention Image
+                $logoPath = $request->file('logo')->store('restaurant-logos', 'public');
+
+                $restaurantData->logo = $logoPath;
+
+                // Save the changes
+                $restaurantData->save();
+
+                return redirect()->back()->with('success', 'Logo uploaded successfully!');
+            } catch (\Exception $e) {
+                return redirect()->back()->withErrors(['logo' => 'Failed to upload logo: ' . $e->getMessage()]);
+            }
+        }
+
+        return redirect()->back()->with('success', 'Settings updated successfully!');
     }
 }

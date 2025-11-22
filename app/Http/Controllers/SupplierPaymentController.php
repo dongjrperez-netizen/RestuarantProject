@@ -592,7 +592,9 @@ class SupplierPaymentController extends Controller
     $validated = $request->validate([
         'bill_id' => 'required|exists:supplier_bills,bill_id',
         'payment_amount' => 'required|numeric|min:0.01',
+        'payment_method' => 'required|string|in:cash,gcash,paypal,bank_transfer,check,credit_card,online,other',
         'payment_date' => 'required|date',
+        'transaction_reference' => 'required|string|max:255',
         'notes' => 'nullable|string|max:500',
     ]);
 
@@ -626,15 +628,15 @@ class SupplierPaymentController extends Controller
             $paymentReference .= '-' . strtoupper(Str::random(3));
         }
 
-        // ✅ Create the cash payment
+        // ✅ Create the payment record (offline)
         $payment = SupplierPayment::create([
             'bill_id' => $bill->bill_id,
             'restaurant_id' => $bill->restaurant_id,
             'supplier_id' => $bill->supplier_id,
             'payment_date' => $validated['payment_date'],
             'payment_amount' => $validated['payment_amount'],
-            'payment_method' => 'cash',
-            'transaction_reference' => 'CASH-' . strtoupper(uniqid()),
+            'payment_method' => $validated['payment_method'],
+            'transaction_reference' => $validated['transaction_reference'],
             'payment_reference' => $paymentReference,
             'notes' => $validated['notes'] ?? '',
             'created_by_user_id' => auth()->id(),
@@ -662,20 +664,21 @@ class SupplierPaymentController extends Controller
 
        return response()->json([
             'success' => true,
-            'message' => 'Cash payment recorded successfully!',
+            'message' => 'Payment recorded successfully! Payment Reference: ' . $paymentReference,
             'redirect_url' => route('bills.show', $bill->bill_id),
+            'payment_reference' => $paymentReference,
         ]);
 
     } catch (\Exception $e) {
         DB::rollBack();
 
         if ($request->expectsJson() === false) {
-            return redirect()->back()->with('error', 'Error processing cash payment: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Error recording payment: ' . $e->getMessage());
         }
 
         return response()->json([
             'success' => false,
-            'message' => 'Error processing cash payment: ' . $e->getMessage(),
+            'message' => 'Error recording payment: ' . $e->getMessage(),
         ], 500);
     }
 }

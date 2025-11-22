@@ -8,6 +8,15 @@ Route::middleware(['auth:web', 'verified'])->prefix('inventory')->group(function
     Route::get('/', [InventoryController::class, 'index'])
         ->name('inventory.index');
 
+    Route::get('/ingredients', [InventoryController::class, 'index'])
+        ->name('inventory.ingredients.index');
+
+    Route::get('/ingredients/create', [InventoryController::class, 'create'])
+        ->name('inventory.ingredients.create');
+
+    Route::post('/ingredients', [InventoryController::class, 'store'])
+        ->name('inventory.ingredients.store');
+
     Route::put('/ingredients/{ingredientId}', [InventoryController::class, 'updateIngredient'])
         ->name('inventory.ingredients.update')
         ->where('ingredientId', '[0-9]+');

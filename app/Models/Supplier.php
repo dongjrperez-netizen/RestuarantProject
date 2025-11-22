@@ -22,7 +22,6 @@ class Supplier extends Authenticatable
         'supplier_name',
         'contact_number',
         'email',
-        'password',
         'address',
         'business_registration',
         'tax_id',

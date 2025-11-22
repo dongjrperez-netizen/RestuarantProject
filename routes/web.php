@@ -480,6 +480,7 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
 // Kitchen Staff Routes
 Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->name('kitchen.')->group(function () {
     Route::get('/dashboard', [KitchenController::class, 'dashboard'])->name('dashboard');
+    Route::get('/todays-plan', [KitchenController::class, 'todaysPlan'])->name('todays-plan');
     Route::get('/api/orders', [App\Http\Controllers\OrderPollingController::class, 'kitchenOrders'])->name('api.orders');
     Route::post('/preparation-orders/{id}/start', [KitchenController::class, 'startPreparationOrder'])->name('preparation-orders.start');
     Route::post('/preparation-orders/{orderId}/items/{itemId}/start', [KitchenController::class, 'startPreparationItem'])->name('preparation-items.start');

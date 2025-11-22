@@ -30,10 +30,11 @@ interface MenuPlan {
   menu_plan_id: number;
   plan_name: string;
   plan_type: 'daily' | 'weekly';
-  start_date: string;
-  end_date: string;
+  start_date: string | null;
+  end_date: string | null;
   description?: string;
   is_active: boolean;
+  is_default?: boolean;
   menu_plan_dishes: MenuPlanDish[];
   created_at: string;
   updated_at: string;
@@ -51,18 +52,40 @@ const breadcrumbs: BreadcrumbItem[] = [
   { title: props.menuPlan.plan_name, href: `/menu-planning/${props.menuPlan.menu_plan_id}` },
 ];
 
-const currentViewDate = ref(new Date(props.menuPlan.start_date));
+const isDefaultPlan = computed(() => !!props.menuPlan.is_default);
+
+const getInitialDate = () => {
+  // For default plans or plans without explicit start date, use first dish date (or today)
+  if (isDefaultPlan.value || !props.menuPlan.start_date) {
+    if (props.menuPlan.menu_plan_dishes.length > 0) {
+      const firstDishDate = props.menuPlan.menu_plan_dishes[0].planned_date.split('T')[0];
+      const d = new Date(firstDishDate);
+      if (!isNaN(d.getTime())) {
+        return d;
+      }
+    }
+    return new Date();
+  }
+
+  return new Date(props.menuPlan.start_date);
+};
+
+const currentViewDate = ref<Date>(getInitialDate());
 const viewMode = ref<'day' | 'week'>(props.menuPlan.plan_type === 'daily' ? 'day' : 'week');
 
 // For single-day plans, start from the planned date when viewing weekly
 const isSingleDayPlan = computed(() => {
+  if (!props.menuPlan.start_date || !props.menuPlan.end_date) return false;
   const start = new Date(props.menuPlan.start_date);
   const end = new Date(props.menuPlan.end_date);
   return start.toDateString() === end.toDateString();
 });
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString();
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString();
 };
 
 const formatDateFromObject = (date: Date) => {
@@ -122,58 +145,36 @@ const getWeekDates = computed(() => {
 
 const navigateDate = (direction: 'prev' | 'next') => {
   const newDate = new Date(currentViewDate.value);
+
   if (viewMode.value === 'day') {
     newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
 
-    // For day view, constrain to exact plan date range
-    const startDate = new Date(props.menuPlan.start_date);
-    const endDate = new Date(props.menuPlan.end_date);
-    const newDateStr = newDate.toDateString();
-    const startDateStr = startDate.toDateString();
-    const endDateStr = endDate.toDateString();
-
-    if (newDateStr >= startDateStr && newDateStr <= endDateStr) {
+    if (!props.menuPlan.start_date || !props.menuPlan.end_date || isDefaultPlan.value) {
+      // No explicit range: free navigation
       currentViewDate.value = newDate;
+    } else {
+      // For day view, constrain to exact plan date range
+      const startDate = new Date(props.menuPlan.start_date);
+      const endDate = new Date(props.menuPlan.end_date);
+      const newDateStr = newDate.toDateString();
+      const startDateStr = startDate.toDateString();
+      const endDateStr = endDate.toDateString();
+
+      if (newDateStr >= startDateStr && newDateStr <= endDateStr) {
+        currentViewDate.value = newDate;
+      }
     }
   } else {
-    // For week view, allow navigation if the new week has any overlap with plan range
+    // Week view navigation
     newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
 
-    // Get the week dates for the new date
-    const dayOfWeek = newDate.getDay();
-    const startOfWeek = new Date(newDate);
-    startOfWeek.setDate(newDate.getDate() - dayOfWeek);
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-
-    // Check if this week has any overlap with the plan range
-    const planStart = new Date(props.menuPlan.start_date);
-    const planEnd = new Date(props.menuPlan.end_date);
-
-    const hasOverlap = startOfWeek <= planEnd && endOfWeek >= planStart;
-
-    if (hasOverlap) {
+    if (!props.menuPlan.start_date || !props.menuPlan.end_date || isDefaultPlan.value) {
       currentViewDate.value = newDate;
-    }
-  }
-};
-
-// Check if navigation is possible
-const canNavigate = computed(() => ({
-  prev: (() => {
-    if (viewMode.value === 'day') {
-      const testDate = new Date(currentViewDate.value);
-      testDate.setDate(testDate.getDate() - 1);
-      return testDate.toDateString() >= new Date(props.menuPlan.start_date).toDateString();
     } else {
-      // For week view, check if the previous week would have any overlap with the plan range
-      const testDate = new Date(currentViewDate.value);
-      testDate.setDate(testDate.getDate() - 7);
-
-      // Get the week dates for the test date
-      const dayOfWeek = testDate.getDay();
-      const startOfWeek = new Date(testDate);
-      startOfWeek.setDate(testDate.getDate() - dayOfWeek);
+      // For week view, allow navigation if the new week has any overlap with plan range
+      const dayOfWeek = newDate.getDay();
+      const startOfWeek = new Date(newDate);
+      startOfWeek.setDate(newDate.getDate() - dayOfWeek);
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 6);
 
@@ -181,35 +182,78 @@ const canNavigate = computed(() => ({
       const planStart = new Date(props.menuPlan.start_date);
       const planEnd = new Date(props.menuPlan.end_date);
 
-      return endOfWeek >= planStart;
+      const hasOverlap = startOfWeek <= planEnd && endOfWeek >= planStart;
+
+      if (hasOverlap) {
+        currentViewDate.value = newDate;
+      }
     }
-  })(),
-  next: (() => {
-    if (viewMode.value === 'day') {
-      const testDate = new Date(currentViewDate.value);
-      testDate.setDate(testDate.getDate() + 1);
-      return testDate.toDateString() <= new Date(props.menuPlan.end_date).toDateString();
-    } else {
-      // For week view, check if the next week would have any overlap with the plan range
-      const testDate = new Date(currentViewDate.value);
-      testDate.setDate(testDate.getDate() + 7);
+  }
+};
 
-      // Get the week dates for the test date
-      const dayOfWeek = testDate.getDay();
-      const startOfWeek = new Date(testDate);
-      startOfWeek.setDate(testDate.getDate() - dayOfWeek);
+// Check if navigation is possible
+const canNavigate = computed(() => {
+  // Default or no-range plans: always allow navigation
+  if (!props.menuPlan.start_date || !props.menuPlan.end_date || isDefaultPlan.value) {
+    return { prev: true, next: true };
+  }
 
-      // Check if this week has any overlap with the plan range
-      const planStart = new Date(props.menuPlan.start_date);
-      const planEnd = new Date(props.menuPlan.end_date);
+  return {
+    prev: (() => {
+      if (viewMode.value === 'day') {
+        const testDate = new Date(currentViewDate.value);
+        testDate.setDate(testDate.getDate() - 1);
+        return testDate.toDateString() >= new Date(props.menuPlan.start_date).toDateString();
+      } else {
+        // For week view, check if the previous week would have any overlap with the plan range
+        const testDate = new Date(currentViewDate.value);
+        testDate.setDate(testDate.getDate() - 7);
 
-      return startOfWeek <= planEnd;
-    }
-  })()
-}));
+        // Get the week dates for the test date
+        const dayOfWeek = testDate.getDay();
+        const startOfWeek = new Date(testDate);
+        startOfWeek.setDate(testDate.getDate() - dayOfWeek);
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+        // Check if this week has any overlap with the plan range
+        const planStart = new Date(props.menuPlan.start_date);
+        const planEnd = new Date(props.menuPlan.end_date);
+
+        return endOfWeek >= planStart;
+      }
+    })(),
+    next: (() => {
+      if (viewMode.value === 'day') {
+        const testDate = new Date(currentViewDate.value);
+        testDate.setDate(testDate.getDate() + 1);
+        return testDate.toDateString() <= new Date(props.menuPlan.end_date).toDateString();
+      } else {
+        // For week view, check if the next week would have any overlap with the plan range
+        const testDate = new Date(currentViewDate.value);
+        testDate.setDate(testDate.getDate() + 7);
+
+        // Get the week dates for the test date
+        const dayOfWeek = testDate.getDay();
+        const startOfWeek = new Date(testDate);
+        startOfWeek.setDate(testDate.getDate() - dayOfWeek);
+
+        // Check if this week has any overlap with the plan range
+        const planStart = new Date(props.menuPlan.start_date);
+        const planEnd = new Date(props.menuPlan.end_date);
+
+        return startOfWeek <= planEnd;
+      }
+    })()
+  };
+});
 
 // Check if current date is within plan range
 const isWithinPlanRange = computed(() => {
+  if (!props.menuPlan.start_date || !props.menuPlan.end_date || isDefaultPlan.value) {
+    return true;
+  }
+
   const current = currentViewDate.value.toDateString();
   const start = new Date(props.menuPlan.start_date).toDateString();
   const end = new Date(props.menuPlan.end_date).toDateString();
@@ -241,7 +285,7 @@ const viewDayMenu = (date: Date) => {
 
 // Jump to plan start date
 const jumpToPlanStart = () => {
-  currentViewDate.value = new Date(props.menuPlan.start_date);
+  currentViewDate.value = getInitialDate();
 };
 </script>
 
@@ -265,7 +309,12 @@ const jumpToPlanStart = () => {
               <Badge :variant="menuPlan.is_active ? 'default' : 'secondary'">
                 {{ menuPlan.is_active ? 'Active' : 'Inactive' }}
               </Badge>
-              <span>{{ formatDate(menuPlan.start_date) }} - {{ formatDate(menuPlan.end_date) }}</span>
+              <span v-if="menuPlan.start_date && menuPlan.end_date && !menuPlan.is_default">
+                {{ formatDate(menuPlan.start_date) }} - {{ formatDate(menuPlan.end_date) }}
+              </span>
+              <span v-else>
+                Default plan (no date range)
+              </span>
             </div>
           </div>
         </div>
@@ -317,12 +366,6 @@ const jumpToPlanStart = () => {
           <h2 class="text-xl font-semibold">
             {{ viewMode === 'day' ? formatLongDate(currentViewDate) : `Week of ${formatDateFromObject(getWeekDates[0])}` }}
           </h2>
-          <div v-if="!isWithinPlanRange" class="text-sm text-orange-600 mt-1 space-y-2">
-            <div>⚠️ Outside menu plan range ({{ formatDate(menuPlan.start_date) }} - {{ formatDate(menuPlan.end_date) }})</div>
-            <Button size="sm" variant="outline" @click="jumpToPlanStart">
-              Jump to Plan Start
-            </Button>
-          </div>
         </div>
 
         <Button
@@ -397,7 +440,11 @@ const jumpToPlanStart = () => {
             <div v-if="getDishesForDate(date).length === 0"
                  class="text-center py-8 text-muted-foreground">
               <div class="text-xs">
-                <span v-if="date.toDateString() >= new Date(menuPlan.start_date).toDateString() && date.toDateString() <= new Date(menuPlan.end_date).toDateString()">
+                <span
+                  v-if="!menuPlan.start_date || !menuPlan.end_date || menuPlan.is_default ||
+                    (date.toDateString() >= new Date(menuPlan.start_date).toDateString() &&
+                     date.toDateString() <= new Date(menuPlan.end_date).toDateString())"
+                >
                   No dishes planned
                 </span>
                 <span v-else class="text-orange-600">

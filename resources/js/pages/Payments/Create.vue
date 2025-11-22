@@ -149,132 +149,47 @@ const submit = async () => {
     return;
   }
 
+  // All payment methods are now recorded offline
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-   // Handle Cash payment
-   if (form.payment_method === 'cash') {
-    try {
-      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const response = await fetch(route('payments.cash'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken || '',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        bill_id: selectedBill.value.bill_id,
+        payment_amount: form.payment_amount,
+        payment_method: form.payment_method,
+        payment_date: form.payment_date,
+        transaction_reference: form.transaction_reference,
+        notes: form.notes,
+      }),
+    });
 
-      const response = await fetch(route('payments.cash'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken || '',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          bill_id: selectedBill.value.bill_id,
-          payment_amount: form.payment_amount,
-          payment_date: form.payment_date,
-          notes: form.notes,
-        }),
-      });
+    const data = await response.json();
 
-      const data = await response.json();
+    dataRedirectUrl.value = data.redirect_url
 
-      dataRedirectUrl.value = data.redirect_url
-
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Cash payment failed');
-      }
-
-      // ✅ Show success modal
-      modalTitle.value = 'Payment Successful'
-      modalMessage.value = data.message
-      modalType.value = 'success'
-      showModal.value = true
-
-      // redirect after short delay
-      // setTimeout(() => {
-      //   window.location.href = data.redirect_url
-      // }, 2000)
-    } catch (error) {
-      console.error('Cash payment error:', error)
-      modalTitle.value = 'Payment Failed'
-      modalMessage.value = error instanceof Error ? error.message : 'Unknown error'
-      modalType.value = 'error'
-      showModal.value = true
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || 'Payment recording failed');
     }
-    return;
-}
 
-
-  // Handle PayPal payment
-  if (form.payment_method === 'paypal') {
-    try {
-      const response = await fetch(route('bills.paypal.pay', selectedBill.value.bill_id), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-        },
-        body: JSON.stringify({
-          payment_amount: form.payment_amount,
-          notes: form.notes,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Payment failed');
-      }
-
-      const data = await response.json();
-
-      if (data.success && data.approval_url) {
-        window.location.href = data.approval_url;
-      } else {
-        throw new Error(data.message || 'PayPal payment failed');
-      }
-    } catch (error) {
-      console.error('PayPal payment error:', error);
-      alert('PayPal payment failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    }
-    return;
+    // ✅ Show success modal
+    modalTitle.value = 'Payment Recorded'
+    modalMessage.value = data.message
+    modalType.value = 'success'
+    showModal.value = true
+  } catch (error) {
+    console.error('Payment recording error:', error)
+    modalTitle.value = 'Payment Failed'
+    modalMessage.value = error instanceof Error ? error.message : 'Unknown error'
+    modalType.value = 'error'
+    showModal.value = true
   }
-
-  // Handle GCash payment
-  if (form.payment_method === 'gcash') {
-    try {
-      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-
-      const response = await fetch(route('bills.gcash.checkout'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken || '',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          bill_id: selectedBill.value.bill_id,
-          payment_amount: form.payment_amount,
-          notes: form.notes,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'GCash payment processing failed');
-      }
-
-      const data = await response.json();
-
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url;
-      } else {
-        throw new Error('No checkout URL received');
-      }
-    } catch (error) {
-      console.error('GCash payment error:', error);
-      alert('GCash payment failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    }
-    return;
-  }
-
-  // Handle other payment methods (Cash, Check, etc.)
-  form.post('/billing/payments/record-payment');
 };
 </script>
 
@@ -329,10 +244,9 @@ const submit = async () => {
                     </TableCell>
                     <TableCell>
                       <Button
-                        variant="outline"
+                        :variant="selectedBillId === bill.bill_id ? 'default' : 'outline'"
                         size="sm"
                         @click="onBillSelect(bill.bill_id)"
-                        :class="{ 'bg-primary text-primary-foreground': selectedBillId === bill.bill_id }"
                       >
                         {{ selectedBillId === bill.bill_id ? 'Selected' : 'Select' }}
                       </Button>
@@ -414,10 +328,32 @@ const submit = async () => {
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="gcash">GCash</SelectItem>
                     <SelectItem value="paypal">PayPal</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="online">Online Payment</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
                 <div v-if="form.errors.payment_method" class="text-sm text-red-600 mt-1">
                   {{ form.errors.payment_method }}
+                </div>
+              </div>
+
+              <div>
+                <Label for="transaction_reference">Transaction Reference / Receipt No. *</Label>
+                <Input
+                  id="transaction_reference"
+                  v-model="form.transaction_reference"
+                  type="text"
+                  placeholder="e.g., GCash Ref No., PayPal Transaction ID, Check No."
+                  required
+                />
+                <p class="text-xs text-muted-foreground mt-1">
+                  Enter the reference number from your payment receipt or transaction confirmation
+                </p>
+                <div v-if="form.errors.transaction_reference" class="text-sm text-red-600 mt-1">
+                  {{ form.errors.transaction_reference }}
                 </div>
               </div>
 
@@ -431,18 +367,6 @@ const submit = async () => {
                 />
                 <div v-if="form.errors.payment_date" class="text-sm text-red-600 mt-1">
                   {{ form.errors.payment_date }}
-                </div>
-              </div>
-
-              <div>
-                <Label for="reference">Transaction Reference</Label>
-                <Input
-                  id="reference"
-                  v-model="form.transaction_reference"
-                  placeholder="Optional transaction reference"
-                />
-                <div v-if="form.errors.transaction_reference" class="text-sm text-red-600 mt-1">
-                  {{ form.errors.transaction_reference }}
                 </div>
               </div>
 
@@ -469,12 +393,9 @@ const submit = async () => {
                 </Button>
                 <Button
                   type="submit"
-                  :disabled="form.processing || !selectedBill || !form.payment_amount"
+                  :disabled="form.processing || !selectedBill || !form.payment_amount || !form.transaction_reference"
                 >
-                  {{ form.processing ? 'Processing...' :
-                     form.payment_method === 'paypal' ? 'Pay with PayPal' :
-                     form.payment_method === 'gcash' ? 'Pay with GCash' :
-                     'Record Payment' }}
+                  {{ form.processing ? 'Recording...' : 'Record Payment' }}
                 </Button>
               </div>
             </form>

@@ -33,10 +33,7 @@ interface Supplier {
   contact_number: string | null;
   email: string | null;
   address: string | null;
-  business_registration: string | null;
-  tax_id: string | null;
   payment_terms: string;
-  notes: string | null;
   is_active: boolean;
   ingredients: Array<{
     ingredient_id: number;
@@ -63,10 +60,7 @@ const form = useForm({
   contact_number: props.supplier.contact_number || '',
   email: props.supplier.email || '',
   address: props.supplier.address || '',
-  business_registration: props.supplier.business_registration || '',
-  tax_id: props.supplier.tax_id || '',
   payment_terms: props.supplier.payment_terms,
-  notes: props.supplier.notes || '',
   is_active: !!props.supplier.is_active,
   ingredients: (props.supplier.ingredients || []).map((ingredient) => ({
     ingredient_id: ingredient.ingredient_id,
@@ -198,43 +192,6 @@ const submit = () => {
                   {{ form.errors.address }}
                 </div>
               </div>
-            </div>
-
-            <!-- Business Details -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label for="business_registration">Business Registration</Label>
-                <Input
-                  id="business_registration"
-                  v-model="form.business_registration"
-                  type="text"
-                  :class="{
-                    'border-red-500': form.errors.business_registration,
-                  }"
-                />
-                <div
-                  v-if="form.errors.business_registration"
-                  class="text-red-500 text-sm mt-1"
-                >
-                  {{ form.errors.business_registration }}
-                </div>
-              </div>
-
-              <div>
-                <Label for="tax_id">Tax ID</Label>
-                <Input
-                  id="tax_id"
-                  v-model="form.tax_id"
-                  type="text"
-                  :class="{ 'border-red-500': form.errors.tax_id }"
-                />
-                <div
-                  v-if="form.errors.tax_id"
-                  class="text-red-500 text-sm mt-1"
-                >
-                  {{ form.errors.tax_id }}
-                </div>
-              </div>
 
               <div>
                 <Label for="payment_terms">Payment Terms *</Label>
@@ -259,24 +216,6 @@ const submit = () => {
                 >
                   {{ form.errors.payment_terms }}
                 </div>
-              </div>
-            </div>
-
-            <!-- Notes -->
-            <div>
-              <Label for="notes">Notes</Label>
-              <textarea
-                id="notes"
-                v-model="form.notes"
-                rows="3"
-                class="w-full border rounded-md p-2 focus:ring focus:ring-indigo-200 focus:border-indigo-400"
-                :class="{ 'border-red-500': form.errors.notes }"
-              ></textarea>
-              <div
-                v-if="form.errors.notes"
-                class="text-red-500 text-sm mt-1"
-              >
-                {{ form.errors.notes }}
               </div>
             </div>
 

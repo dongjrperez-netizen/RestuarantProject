@@ -422,19 +422,14 @@ onUnmounted(() => {
                                                 Void
                                             </Button>
 
-                                            <!-- Status indicator for pending orders -->
-                                            <span v-if="order.status === 'pending'" class="text-xs text-muted-foreground">
-                                                Order in kitchen
-                                            </span>
-
                                             <!-- Cannot-void indicator for restricted statuses -->
                                             <div
                                                 v-else-if="['ready', 'completed', 'paid', 'voided'].includes(order.status?.toLowerCase?.() || '')"
                                                 class="flex items-center gap-1 text-[11px] text-muted-foreground"
                                                 :title="getVoidRestrictionReason(order)"
                                             >
-                                                <Info class="w-3 h-3" />
-                                                <span>Cannot void ({{ order.status }})</span>
+                                                <!-- <Info class="w-3 h-3" />
+                                                <span>Cannot void ({{ order.status }})</span> -->
                                             </div>
                                         </div>
                                     </TableCell>

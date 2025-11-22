@@ -137,10 +137,7 @@ class InventoryController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $lowStockIngredients->map(function ($ingredient) use ($restaurantId) {
-                    // Filter suppliers to only show those belonging to this restaurant
-                    $suppliersData = $ingredient->suppliers->where('restaurant_id', $restaurantId);
-
+                'data' => $lowStockIngredients->map(function ($ingredient) {
                     return [
                         'ingredient_id' => $ingredient->ingredient_id,
                         'ingredient_name' => $ingredient->ingredient_name,
@@ -148,18 +145,6 @@ class InventoryController extends Controller
                         'packages' => (float) $ingredient->packages,
                         'reorder_level' => $ingredient->reorder_level,
                         'base_unit' => $ingredient->base_unit,
-                        'suppliers' => $suppliersData->map(function ($supplier) {
-                            return [
-                                'supplier_id' => $supplier->supplier_id,
-                                'name' => $supplier->supplier_name,
-                                'package_unit' => $supplier->pivot->package_unit,
-                                'package_quantity' => $supplier->pivot->package_quantity,
-                                'package_contents_quantity' => $supplier->pivot->package_contents_quantity,
-                                'package_contents_unit' => $supplier->pivot->package_contents_unit,
-                                'package_price' => $supplier->pivot->package_price,
-                                'lead_time_days' => $supplier->pivot->lead_time_days,
-                            ];
-                        }),
                     ];
                 }),
             ]);
@@ -279,11 +264,7 @@ class InventoryController extends Controller
             }
 
             // Build the query base - filter by ingredient's restaurant_id
-            $query = \App\Models\Ingredients::with(['suppliers' => function ($query) use ($restaurantId) {
-                    $query->where('restaurant_id', $restaurantId)
-                        ->wherePivot('is_active', true);
-                }])
-                ->where('restaurant_id', $restaurantId); // Filter by ingredient's restaurant
+            $query = \App\Models\Ingredients::where('restaurant_id', $restaurantId);
 
             // 🔍 Apply search filter (if provided)
             if ($request->filled('search')) {
@@ -303,32 +284,21 @@ class InventoryController extends Controller
             // Get all filtered ingredients
             $ingredients = $query->orderBy('ingredient_name')->get()
                 ->map(function ($ingredient) {
-                    $primarySupplier = $ingredient->suppliers->first();
                     $isLowStock = $ingredient->current_stock <= $ingredient->reorder_level;
 
                     $supplierName = 'No supplier';
 
-                    // If no supplier relationship, check for manual receive in purchase orders
-                    if (!$primarySupplier) {
-                        // Get the most recent purchase order for this ingredient
-                        $recentPO = \App\Models\PurchaseOrderItem::with('purchaseOrder')
-                            ->where('ingredient_id', $ingredient->ingredient_id)
-                            ->whereHas('purchaseOrder', function($query) {
-                                $query->whereNull('supplier_id'); // Manual receives have null supplier_id
-                            })
-                            ->latest('created_at')
-                            ->first();
+                    // Get the most recent purchase order for this ingredient
+                    $recentPO = \App\Models\PurchaseOrderItem::with('purchaseOrder.supplier')
+                        ->where('ingredient_id', $ingredient->ingredient_id)
+                        ->whereHas('purchaseOrder', function($query) {
+                            $query->whereNotNull('supplier_id');
+                        })
+                        ->latest('created_at')
+                        ->first();
 
-                        if ($recentPO && $recentPO->purchaseOrder) {
-                            // Extract supplier name from notes
-                            // Format: "Manual Receive - Supplier: [name] | Contact: ..."
-                            $notes = $recentPO->purchaseOrder->notes;
-                            if (preg_match('/Supplier:\s*([^|]+)/', $notes, $matches)) {
-                                $supplierName = trim($matches[1]) . ' (Manual)';
-                            }
-                        }
-                    } else {
-                        $supplierName = $primarySupplier->supplier_name;
+                    if ($recentPO && $recentPO->purchaseOrder && $recentPO->purchaseOrder->supplier) {
+                        $supplierName = $recentPO->purchaseOrder->supplier->supplier_name;
                     }
 
                     return [
@@ -361,6 +331,148 @@ class InventoryController extends Controller
         }
     }
 
+
+    /**
+     * Show the form for creating a new ingredient
+     *
+     * @return \Inertia\Response
+     */
+    public function create()
+    {
+        try {
+            $user = auth()->user();
+            $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
+
+            if (!$restaurantId) {
+                return back()->withErrors('Restaurant not found for the authenticated user');
+            }
+
+            // Get existing ingredients for lookup/autocomplete
+            $existingIngredients = \App\Models\Ingredients::where('restaurant_id', $restaurantId)
+                ->orderBy('ingredient_name')
+                ->get(['ingredient_name', 'base_unit'])
+                ->map(function ($ingredient) {
+                    return [
+                        'name' => $ingredient->ingredient_name,
+                        'unit' => $ingredient->base_unit,
+                    ];
+                });
+
+            return inertia('Inventory/Create', [
+                'existingIngredients' => $existingIngredients,
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Failed to load ingredient create page: ' . $e->getMessage());
+            return back()->withErrors('Failed to load create ingredient page');
+        }
+    }
+
+    /**
+     * Store newly created ingredients in storage
+     *
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
+
+            if (!$restaurantId) {
+                return back()->withErrors('Restaurant not found for the authenticated user');
+            }
+
+            $validated = $request->validate([
+                'ingredients' => 'required|array|min:1',
+                'ingredients.*.ingredient_name' => [
+                    'required',
+                    'string',
+                    'max:150',
+                    function ($attribute, $value, $fail) use ($restaurantId) {
+                        $exists = \App\Models\Ingredients::where('restaurant_id', $restaurantId)
+                            ->whereRaw('LOWER(ingredient_name) = ?', [strtolower($value)])
+                            ->exists();
+
+                        if ($exists) {
+                            $fail('This ingredient already exists in your inventory.');
+                        }
+                    },
+                ],
+                'ingredients.*.base_unit' => 'required|string|max:50',
+                'ingredients.*.current_stock' => 'nullable|numeric|min:0',
+                'ingredients.*.reorder_level' => 'required|numeric|min:0',
+            ]);
+
+            $createdIngredients = [];
+            $errors = [];
+
+            // Process each ingredient
+            foreach ($validated['ingredients'] as $index => $ingredientData) {
+                try {
+                    // Check for duplicates within the submitted batch
+                    $duplicateInBatch = false;
+                    foreach ($createdIngredients as $created) {
+                        if (strtolower($created->ingredient_name) === strtolower($ingredientData['ingredient_name'])) {
+                            $duplicateInBatch = true;
+                            break;
+                        }
+                    }
+
+                    if ($duplicateInBatch) {
+                        $errors[] = "Row #" . ($index + 1) . ": Duplicate ingredient name in submission.";
+                        continue;
+                    }
+
+                    // Create the ingredient
+                    $ingredient = \App\Models\Ingredients::create([
+                        'restaurant_id' => $restaurantId,
+                        'ingredient_name' => $ingredientData['ingredient_name'],
+                        'base_unit' => $ingredientData['base_unit'],
+                        'current_stock' => $ingredientData['current_stock'] ?? 0,
+                        'reorder_level' => $ingredientData['reorder_level'],
+                        'cost_per_unit' => 0, // Will be updated when receiving purchase orders
+                        'packages' => 0,
+                    ]);
+
+                    $createdIngredients[] = $ingredient;
+
+                } catch (Exception $e) {
+                    $errors[] = "Row #" . ($index + 1) . " ({$ingredientData['ingredient_name']}): " . $e->getMessage();
+                }
+            }
+
+            // Build success message
+            $count = count($createdIngredients);
+            if ($count > 0 && empty($errors)) {
+                $message = $count === 1
+                    ? "Ingredient '{$createdIngredients[0]->ingredient_name}' added successfully!"
+                    : "{$count} ingredients added successfully!";
+                return redirect()->route('inventory.ingredients.index')->with('success', $message);
+            } elseif ($count > 0 && !empty($errors)) {
+                $message = "{$count} ingredient(s) added. " . implode(' ', $errors);
+                return redirect()->route('inventory.ingredients.index')->with('success', $message);
+            } else {
+                return back()->withErrors(implode(' ', $errors))->withInput();
+            }
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Validation failed for ingredient creation', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all(),
+            ]);
+
+            return back()->withErrors($e->errors())->withInput();
+        } catch (Exception $e) {
+            Log::error('Failed to create ingredients', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all(),
+            ]);
+
+            return back()->withErrors('Failed to create ingredients: ' . $e->getMessage())->withInput();
+        }
+    }
 
     /**
      * Update ingredient reorder level

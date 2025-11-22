@@ -12,6 +12,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ArrowLeft, Receipt, Printer, CreditCard, Calendar, User, MapPin, Phone, Percent, X, Trash2, Banknote, Smartphone, Wallet, PlusCircle, Ban } from 'lucide-vue-next';
 import { ref } from 'vue';
 
+// Ensure window is typed correctly for TypeScript
+declare const window: Window & typeof globalThis;
+
 // Props
 const props = defineProps<{
     employee?: any;
@@ -84,14 +87,9 @@ const formatDate = (dateString: string) => {
     });
 };
 
-// Calculate subtotal (before tax)
+// Calculate subtotal
 const calculateSubtotal = (orderItems: any[]) => {
     return orderItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-};
-
-// Calculate tax (assuming 12% VAT)
-const calculateTax = (subtotal: number) => {
-    return subtotal * 0.12;
 };
 
 // Helper function to show result modal
@@ -909,10 +907,6 @@ const getCurrentTotal = () => {
                                 <div class="flex justify-between text-sm">
                                     <span>Subtotal:</span>
                                     <span>{{ formatCurrency(calculateSubtotal(order?.order_items || [])) }}</span>
-                                </div>
-                                <div class="flex justify-between text-sm">
-                                    <span>Tax (12%):</span>
-                                    <span>{{ formatCurrency(calculateTax(calculateSubtotal(order?.order_items || []))) }}</span>
                                 </div>
                                 <div v-if="order?.reservation_fee && order?.reservation_fee > 0" class="flex justify-between text-sm text-blue-600">
                                     <span>Reservation Fee:</span>

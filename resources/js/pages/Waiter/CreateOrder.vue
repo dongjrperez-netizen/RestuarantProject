@@ -270,8 +270,8 @@ const checkDishAvailability = async () => {
 
       if (!data.available || data.max_quantity === 0) {
         availabilityError.value = data.max_quantity === 0
-          ? 'Out of stock - insufficient ingredients'
-          : `This dish can only have maximum of ${data.max_quantity} order${data.max_quantity !== 1 ? 's' : ''}`;
+          ? 'Not available - menu plan limit reached for today'
+          : `Only ${data.max_quantity} available today (${data.planned_quantity} planned, ${data.already_ordered} already ordered)`;
       }
     } else {
       availabilityError.value = data.message || 'Failed to check availability';
@@ -355,9 +355,9 @@ const addDishToOrder = () => {
 
   // Check if quantity exceeds max available
   if (maxAvailableQuantity.value !== null && modalQuantity.value > maxAvailableQuantity.value) {
-    availabilityError.value = `Only ${maxAvailableQuantity.value} available`;
-    if (limitingIngredient.value) {
-      availabilityError.value += ` (limited by ${limitingIngredient.value})`;
+    availabilityError.value = `Only ${maxAvailableQuantity.value} available today`;
+    if (limitingIngredient.value && limitingIngredient.value !== 'Menu plan limit reached') {
+      availabilityError.value += ` (${limitingIngredient.value})`;
     }
     return;
   }
@@ -521,12 +521,14 @@ const increaseCartQuantity = async (dishId: number, variantId?: number) => {
     } else {
       // Show modal with availability message
       const dishName = item.dish.dish_name;
-      availabilityAlertMessage.value = `${dishName} can only have maximum of ${data.max_quantity} order${data.max_quantity !== 1 ? 's' : ''}`;
+      availabilityAlertMessage.value = data.max_quantity === 0
+        ? `${dishName} is not available - menu plan limit reached for today`
+        : `${dishName} can only have maximum of ${data.max_quantity} order${data.max_quantity !== 1 ? 's' : ''} today (${data.planned_quantity} planned, ${data.already_ordered} already ordered)`;
       showAvailabilityAlert.value = true;
     }
   } catch (error) {
     console.error('Error checking availability:', error);
-    availabilityAlertMessage.value = 'Failed to check ingredient availability. Please try again.';
+    availabilityAlertMessage.value = 'Failed to check menu plan availability. Please try again.';
     showAvailabilityAlert.value = true;
   }
 };

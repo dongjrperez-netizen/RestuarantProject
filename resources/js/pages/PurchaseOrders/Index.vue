@@ -129,10 +129,7 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
           <h1 class="text-3xl font-bold tracking-tight">Purchase Orders</h1>
           <p class="text-muted-foreground">Manage your purchase orders and track deliveries</p>
         </div>
-        <div class="flex gap-2">
-          <Link href="/purchase-orders/manual-receive">
-            <Button variant="outline">Manual Receive</Button>
-          </Link>
+        <div>
           <Link href="/purchase-orders/create">
             <Button>Create Purchase Order</Button>
           </Link>
@@ -221,9 +218,7 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                 <TableHead>PO Number</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Order Date</TableHead>
-                <TableHead>Expected Delivery</TableHead>
                 <TableHead>Items</TableHead>
-                <TableHead>Total Amount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
               </TableRow>
@@ -234,25 +229,16 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                   {{ order.po_number }}
                 </TableCell>
                 <TableCell>
-                  {{ order.supplier?.supplier_name || 'Manual Receive' }}
+                  {{ order.supplier?.supplier_name || 'Unknown Supplier' }}
                 </TableCell>
                 <TableCell>
                   {{ formatDate(order.order_date) }}
-                </TableCell>
-                <TableCell>
-                  <span v-if="order.expected_delivery_date">
-                    {{ formatDate(order.expected_delivery_date) }}
-                  </span>
-                  <span v-else class="text-muted-foreground">-</span>
                 </TableCell>
                 <TableCell>
                   <div class="text-sm">
                     <div>{{ order.items.length }} types</div>
                     <div class="text-muted-foreground">{{ getTotalItems(order.items) }} total qty</div>
                   </div>
-                </TableCell>
-                <TableCell class="font-medium">
-                  {{ formatCurrency(order.total_amount) }}
                 </TableCell>
                 <TableCell>
                   <Badge :variant="getStatusBadge(order).variant">
@@ -264,8 +250,8 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                     <Link :href="`/purchase-orders/${order.purchase_order_id}`">
                       <Button variant="outline" size="sm">View</Button>
                     </Link>
-                    <Link 
-                      v-if="['draft', 'pending'].includes(order.status)"
+                    <Link
+                      v-if="order.status === 'draft'"
                       :href="`/purchase-orders/${order.purchase_order_id}/edit`"
                     >
                       <Button variant="outline" size="sm">Edit</Button>
@@ -274,7 +260,7 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                 </TableCell>
               </TableRow>
               <TableRow v-if="purchaseOrders.length === 0">
-                <TableCell colspan="8" class="text-center py-8">
+                <TableCell colspan="6" class="text-center py-8">
                   <div class="text-muted-foreground">
                     <div class="text-lg mb-2">No purchase orders found</div>
                     <div class="text-sm">Create your first purchase order to get started.</div>
