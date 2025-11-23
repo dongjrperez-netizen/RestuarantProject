@@ -96,6 +96,78 @@ class SupplierController extends Controller
         return redirect()->route('suppliers.index')->with('success', 'Supplier created successfully.');
     }
 
+    /**
+     * Quick create supplier from Purchase Order flow (API endpoint)
+     */
+    public function quickCreate(Request $request)
+    {
+        try {
+            // Check subscription limits
+            $limitService = new SubscriptionLimitService();
+            $limitCheck = $limitService->canAddSupplier(auth()->user());
+
+            if (! $limitCheck['allowed']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $limitCheck['message']
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'supplier_name' => 'required|string|max:150',
+                'email' => 'nullable|email|max:255',
+                'phone' => 'nullable|string|max:20',
+                'address' => 'nullable|string|max:255',
+            ]);
+
+            $restaurantId = auth()->user()->restaurantData->id;
+
+            // Check if supplier name already exists for this restaurant
+            $existingSupplier = Supplier::where('restaurant_id', $restaurantId)
+                ->whereRaw('LOWER(supplier_name) = ?', [strtolower($validated['supplier_name'])])
+                ->first();
+
+            if ($existingSupplier) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A supplier with this name already exists.'
+                ], 422);
+            }
+
+            // Create supplier with default payment terms
+            $supplier = Supplier::create([
+                'restaurant_id' => $restaurantId,
+                'supplier_name' => $validated['supplier_name'],
+                'contact_number' => $validated['phone'] ?? null,
+                'email' => $validated['email'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'payment_terms' => 'NET_30', // Default payment terms
+                'is_active' => true,
+            ]);
+
+            \Log::info("Quick created supplier from PO flow: {$supplier->supplier_name} (ID: {$supplier->supplier_id})");
+
+            return response()->json([
+                'success' => true,
+                'supplier' => $supplier,
+                'message' => 'Supplier created successfully!'
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Quick create supplier failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create supplier. Please try again.'
+            ], 500);
+        }
+    }
+
     public function edit($id)
     {
         $supplier = Supplier::with(['ingredients'])->findOrFail($id);

@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus } from 'lucide-vue-next';
+import { Trash2, Plus, UserPlus, X } from 'lucide-vue-next';
 import { type BreadcrumbItem } from '@/types';
+import axios from 'axios';
 
 interface Supplier {
   supplier_id: number;
@@ -31,7 +32,7 @@ interface OrderItem {
   unit_of_measure: string;
   notes: string;
   showDropdown?: boolean;
-  dropdownPosition?: { top: number; left: number; width: number };
+  dropdownPosition?: { top: number; left: number; width: number; showAbove: boolean };
   [key: string]: any;
 }
 
@@ -59,14 +60,47 @@ const orderItems = ref<OrderItem[]>([{
   dropdownPosition: undefined
 }]);
 
-const form = useForm({
-  supplier_id: null as number | null,
+interface PurchaseOrderForm {
+  supplier_id: number | null;
+  supplier_name: string;
+  items: OrderItem[];
+  [key: string]: any; // Index signature for FormDataType compatibility
+}
+
+const form = useForm<PurchaseOrderForm>({
+  supplier_id: null,
   supplier_name: '',
-  items: [] as OrderItem[]
+  items: []
 });
 
 const showSupplierDropdown = ref(false);
-const supplierDropdownPosition = ref<{ top: number; left: number; width: number } | null>(null);
+const supplierDropdownPosition = ref<{ top: number; left: number; width: number; showAbove: boolean } | null>(null);
+
+// New supplier creation
+const showNewSupplierForm = ref(false);
+const creatingSupplier = ref(false);
+const newSupplierData = ref({
+  supplier_name: '',
+  email: '',
+  phone: '',
+  address: ''
+});
+
+// Helper function to calculate smart dropdown position
+const calculateDropdownPosition = (inputElement: HTMLElement) => {
+  const rect = inputElement.getBoundingClientRect();
+  const dropdownMaxHeight = 240; // max-h-60 = 240px
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  const showAbove = spaceBelow < dropdownMaxHeight && spaceAbove > spaceBelow;
+
+  return {
+    top: showAbove ? rect.top + window.scrollY : rect.bottom + window.scrollY,
+    left: rect.left + window.scrollX,
+    width: rect.width,
+    showAbove: showAbove
+  };
+};
 
 const addOrderItem = () => {
   orderItems.value.push({
@@ -105,42 +139,38 @@ const getFilteredSuppliers = computed(() => {
   );
 });
 
+const showCreateNewSupplierOption = computed(() => {
+  return form.supplier_name.length > 0 &&
+         getFilteredSuppliers.value.length === 0 &&
+         !showNewSupplierForm.value;
+});
+
 const removeOrderItem = (index: number) => {
   if (orderItems.value.length > 1) {
     orderItems.value.splice(index, 1);
   }
 };
 
-const onIngredientInput = (itemIndex: number, event?: Event) => {
+const onIngredientInput = (itemIndex: number, event?: Event | InputEvent) => {
   const item = orderItems.value[itemIndex];
   item.showDropdown = item.ingredient_name.length > 0;
   item.ingredient_id = null; // Reset ID when user types
 
-  // Calculate dropdown position
+  // Calculate dropdown position with smart positioning
   if (event && event.target) {
     const input = event.target as HTMLElement;
-    const rect = input.getBoundingClientRect();
-    item.dropdownPosition = {
-      top: rect.bottom + window.scrollY,
-      left: rect.left + window.scrollX,
-      width: rect.width
-    };
+    item.dropdownPosition = calculateDropdownPosition(input);
   }
 };
 
-const onIngredientFocus = (itemIndex: number, event: Event) => {
+const onIngredientFocus = (itemIndex: number, event: Event | FocusEvent) => {
   const item = orderItems.value[itemIndex];
   item.showDropdown = item.ingredient_name.length > 0;
 
-  // Calculate dropdown position
+  // Calculate dropdown position with smart positioning
   if (event && event.target) {
     const input = event.target as HTMLElement;
-    const rect = input.getBoundingClientRect();
-    item.dropdownPosition = {
-      top: rect.bottom + window.scrollY,
-      left: rect.left + window.scrollX,
-      width: rect.width
-    };
+    item.dropdownPosition = calculateDropdownPosition(input);
   }
 };
 
@@ -165,6 +195,60 @@ const formatCurrency = (amount: number) => {
   return `₱${Number(amount).toLocaleString()}`;
 };
 
+const initiateNewSupplier = () => {
+  newSupplierData.value.supplier_name = form.supplier_name;
+  showNewSupplierForm.value = true;
+  showSupplierDropdown.value = false;
+};
+
+const cancelNewSupplier = () => {
+  showNewSupplierForm.value = false;
+  newSupplierData.value = {
+    supplier_name: '',
+    email: '',
+    phone: '',
+    address: ''
+  };
+  form.supplier_name = '';
+  form.supplier_id = null;
+};
+
+const createAndUseSupplier = async () => {
+  creatingSupplier.value = true;
+
+  try {
+    const response = await axios.post('/api/suppliers/quick-create', newSupplierData.value);
+
+    if (response.data.success) {
+      // Set the newly created supplier
+      form.supplier_id = response.data.supplier.supplier_id;
+      form.supplier_name = response.data.supplier.supplier_name;
+
+      // Update the suppliers list
+      props.suppliers.push(response.data.supplier);
+
+      // Close the form
+      showNewSupplierForm.value = false;
+
+      // Reset new supplier data
+      newSupplierData.value = {
+        supplier_name: '',
+        email: '',
+        phone: '',
+        address: ''
+      };
+
+      // Show success message (you can use a toast notification instead)
+      alert('Supplier created successfully!');
+    }
+  } catch (error: any) {
+    console.error('Error creating supplier:', error);
+    const errorMessage = error.response?.data?.message || 'Failed to create supplier. Please try again.';
+    alert(errorMessage);
+  } finally {
+    creatingSupplier.value = false;
+  }
+};
 
 const submit = () => {
   // Filter out empty items and validate
@@ -175,10 +259,13 @@ const submit = () => {
     )
     .map(item => ({
       ingredient_id: item.ingredient_id,
+      ingredient_name: item.ingredient_name,
       ordered_quantity: item.ordered_quantity,
       unit_price: item.unit_price || 0,
       unit_of_measure: item.unit_of_measure,
-      notes: item.notes
+      notes: item.notes,
+      showDropdown: false,
+      dropdownPosition: undefined
     }));
 
   form.items = validItems;
@@ -197,35 +284,25 @@ const closeDropdown = (itemIndex: number) => {
   }, 200); // Delay to allow click event to fire
 };
 
-const onSupplierInput = (event: Event) => {
+const onSupplierInput = (event: Event | InputEvent) => {
   showSupplierDropdown.value = form.supplier_name.length > 0;
   // Reset supplier_id when user types (forces them to select from dropdown)
   form.supplier_id = null;
 
-  // Calculate dropdown position
+  // Calculate dropdown position with smart positioning
   if (event && event.target) {
     const input = event.target as HTMLElement;
-    const rect = input.getBoundingClientRect();
-    supplierDropdownPosition.value = {
-      top: rect.bottom + window.scrollY,
-      left: rect.left + window.scrollX,
-      width: rect.width
-    };
+    supplierDropdownPosition.value = calculateDropdownPosition(input);
   }
 };
 
-const onSupplierFocus = (event: Event) => {
+const onSupplierFocus = (event: Event | FocusEvent) => {
   showSupplierDropdown.value = form.supplier_name.length > 0;
 
-  // Calculate dropdown position
+  // Calculate dropdown position with smart positioning
   if (event && event.target) {
     const input = event.target as HTMLElement;
-    const rect = input.getBoundingClientRect();
-    supplierDropdownPosition.value = {
-      top: rect.bottom + window.scrollY,
-      left: rect.left + window.scrollX,
-      width: rect.width
-    };
+    supplierDropdownPosition.value = calculateDropdownPosition(input);
   }
 };
 
@@ -272,24 +349,132 @@ const closeSupplierDropdown = () => {
           <CardContent class="space-y-6">
             <div class="space-y-2">
               <Label for="supplier">Supplier *</Label>
-              <Input
-                id="supplier"
-                v-model="form.supplier_name"
-                @input="onSupplierInput"
-                @focus="onSupplierFocus"
-                @blur="closeSupplierDropdown"
-                placeholder="Type supplier name..."
-                required
-              />
-              <div v-if="form.errors.supplier_name" class="text-sm text-red-600">
-                {{ form.errors.supplier_name }}
+              <div class="flex gap-2">
+                <Input
+                  id="supplier"
+                  v-model="form.supplier_name"
+                  @input="onSupplierInput"
+                  @focus="onSupplierFocus"
+                  @blur="closeSupplierDropdown"
+                  placeholder="Type supplier name..."
+                  required
+                  :disabled="showNewSupplierForm"
+                  class="flex-1"
+                />
+                <Button
+                  v-if="form.supplier_id"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  @click="() => { form.supplier_id = null; form.supplier_name = ''; }"
+                  class="shrink-0"
+                >
+                  <X class="w-4 h-4 mr-1" />
+                  Clear
+                </Button>
+              </div>
+              <div v-if="(form.errors as any).supplier_name" class="text-sm text-red-600">
+                {{ (form.errors as any).supplier_name }}
+              </div>
+              <div v-if="form.supplier_id" class="text-sm text-green-600 font-medium">
+                ✓ Supplier selected
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- New Supplier Form -->
+        <Card v-if="showNewSupplierForm" class="border-blue-200 bg-blue-50/50">
+          <CardHeader>
+            <div class="flex items-center justify-between">
+              <div>
+                <CardTitle class="text-blue-900">Create New Supplier</CardTitle>
+                <CardDescription class="text-blue-700">
+                  Add supplier details to create and use immediately
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                @click="cancelNewSupplier"
+                :disabled="creatingSupplier"
+              >
+                <X class="w-4 h-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="space-y-2 md:col-span-2">
+                <Label for="new-supplier-name">Supplier Name *</Label>
+                <Input
+                  id="new-supplier-name"
+                  v-model="newSupplierData.supplier_name"
+                  placeholder="Enter supplier name"
+                  required
+                />
+              </div>
+
+              <div class="space-y-2">
+                <Label for="new-email">Email</Label>
+                <Input
+                  id="new-email"
+                  v-model="newSupplierData.email"
+                  type="email"
+                  placeholder="supplier@example.com"
+                />
+              </div>
+
+              <div class="space-y-2">
+                <Label for="new-phone">Phone</Label>
+                <Input
+                  id="new-phone"
+                  v-model="newSupplierData.phone"
+                  placeholder="+63 XXX XXX XXXX"
+                />
+              </div>
+
+              <div class="space-y-2 md:col-span-2">
+                <Label for="new-address">Address</Label>
+                <Input
+                  id="new-address"
+                  v-model="newSupplierData.address"
+                  placeholder="Enter supplier address"
+                />
               </div>
             </div>
 
-            <!-- Order Items -->
+            <div class="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                @click="cancelNewSupplier"
+                :disabled="creatingSupplier"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                @click="createAndUseSupplier"
+                :disabled="!newSupplierData.supplier_name || creatingSupplier"
+                class="bg-blue-600 hover:bg-blue-700"
+              >
+                <UserPlus class="w-4 h-4 mr-2" />
+                {{ creatingSupplier ? 'Creating...' : 'Create & Use Supplier' }}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Order Items Card -->
+        <Card>
+          <CardHeader>
+            <CardTitle>Order Items</CardTitle>
+          </CardHeader>
+          <CardContent>
             <div class="space-y-4">
               <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold">Order Items</h3>
                 <Button
                   type="button"
                   @click="addOrderItem"
@@ -318,17 +503,17 @@ const closeSupplierDropdown = () => {
                         <!-- Autocomplete Input -->
                         <Input
                           v-model="orderItems[index].ingredient_name"
-                          @input="(e) => onIngredientInput(index, e)"
-                          @focus="(e) => onIngredientFocus(index, e)"
+                          @input="(e: Event) => onIngredientInput(index, e)"
+                          @focus="(e: Event) => onIngredientFocus(index, e)"
                           @blur="closeDropdown(index)"
                           placeholder="Type ingredient name..."
                           class="min-w-[250px]"
                         />
                         <div
-                          v-if="form.errors[`items.${index}.ingredient_id`]"
+                          v-if="(form.errors as any)[`items.${index}.ingredient_id`]"
                           class="text-xs text-red-600"
                         >
-                          {{ form.errors[`items.${index}.ingredient_id`] }}
+                          {{ (form.errors as any)[`items.${index}.ingredient_id`] }}
                         </div>
                       </div>
                     </TableCell>
@@ -344,10 +529,10 @@ const closeSupplierDropdown = () => {
                         />
                         <!-- Backend validation error for this row -->
                         <div
-                          v-if="form.errors[`items.${index}.ordered_quantity`]"
+                          v-if="(form.errors as any)[`items.${index}.ordered_quantity`]"
                           class="text-xs text-red-600"
                         >
-                          {{ form.errors[`items.${index}.ordered_quantity`] }}
+                          {{ (form.errors as any)[`items.${index}.ordered_quantity`] }}
                         </div>
                       </div>
                     </TableCell>
@@ -373,8 +558,8 @@ const closeSupplierDropdown = () => {
                 </TableBody>
               </Table>
               
-              <div v-if="form.errors.items" class="text-sm text-red-600">
-                {{ form.errors.items }}
+              <div v-if="(form.errors as any).items" class="text-sm text-red-600">
+                {{ (form.errors as any).items }}
               </div>
             </div>
             </div>
@@ -401,12 +586,13 @@ const closeSupplierDropdown = () => {
     <Teleport to="body">
       <!-- Supplier Dropdown -->
       <div
-        v-show="showSupplierDropdown && getFilteredSuppliers.length > 0 && supplierDropdownPosition"
+        v-show="(showSupplierDropdown && (getFilteredSuppliers.length > 0 || showCreateNewSupplierOption)) && supplierDropdownPosition"
         :style="{
           position: 'fixed',
           top: `${supplierDropdownPosition?.top || 0}px`,
           left: `${supplierDropdownPosition?.left || 0}px`,
           width: `${supplierDropdownPosition?.width || 250}px`,
+          transform: supplierDropdownPosition?.showAbove ? 'translateY(-100%)' : 'none',
           zIndex: 9999
         }"
         class="bg-popover border border-border rounded-md shadow-lg max-h-60 overflow-auto"
@@ -418,6 +604,21 @@ const closeSupplierDropdown = () => {
           class="px-3 py-2 cursor-pointer hover:bg-accent hover:text-accent-foreground text-sm"
         >
           <div class="font-medium text-foreground">{{ supplier.supplier_name }}</div>
+        </div>
+
+        <!-- Create New Supplier Option -->
+        <div
+          v-if="showCreateNewSupplierOption"
+          @mousedown.prevent="initiateNewSupplier"
+          class="px-3 py-2 cursor-pointer hover:bg-blue-50 text-sm border-t border-border bg-blue-50/30"
+        >
+          <div class="flex items-center gap-2 font-medium text-blue-600">
+            <UserPlus class="w-4 h-4" />
+            <span>Create new supplier "{{ form.supplier_name }}"</span>
+          </div>
+          <div class="text-xs text-blue-500 mt-1">
+            Click to add supplier details
+          </div>
         </div>
       </div>
 
@@ -431,6 +632,7 @@ const closeSupplierDropdown = () => {
           top: `${item.dropdownPosition?.top || 0}px`,
           left: `${item.dropdownPosition?.left || 0}px`,
           width: `${item.dropdownPosition?.width || 250}px`,
+          transform: item.dropdownPosition?.showAbove ? 'translateY(-100%)' : 'none',
           zIndex: 9999
         }"
         class="bg-popover border border-border rounded-md shadow-lg max-h-60 overflow-auto"

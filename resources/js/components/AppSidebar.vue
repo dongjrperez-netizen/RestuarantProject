@@ -66,8 +66,13 @@ const restaurantName = computed(() => {
 const restaurantLogoUrl = computed(() => {
   if (!restaurant.value) return null
 
-  // Check for logo field and prepend storage path if it exists
+  // Check for logo field
   if (restaurant.value.logo) {
+    // If it's a full URL (Supabase), use it directly
+    if (restaurant.value.logo.includes('http')) {
+      return restaurant.value.logo
+    }
+    // Otherwise, prepend storage path for local files
     return `/storage/${restaurant.value.logo}`
   }
 

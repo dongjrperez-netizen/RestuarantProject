@@ -54,6 +54,37 @@ class TableController extends Controller
 
     public function store(Request $request)
     {
+        // Check if we're creating multiple tables
+        if ($request->has('tables') && is_array($request->tables)) {
+            // Validate array of tables
+            $validated = $request->validate([
+                'tables' => 'required|array|min:1',
+                'tables.*.table_number' => [
+                    'required',
+                    'string',
+                    'max:10',
+                    Rule::unique('tables', 'table_number')->where(function ($query) {
+                        return $query->where('user_id', Auth::id());
+                    }),
+                ],
+                'tables.*.table_name' => 'required|string|max:255',
+                'tables.*.seats' => 'required|integer|min:1|max:20',
+                'tables.*.status' => 'required|in:available,occupied,reserved,maintenance',
+                'tables.*.description' => 'nullable|string|max:500',
+            ]);
+
+            $createdCount = 0;
+            foreach ($validated['tables'] as $tableData) {
+                $tableData['user_id'] = Auth::id();
+                Table::create($tableData);
+                $createdCount++;
+            }
+
+            return redirect()->route('pos.tables.index')
+                ->with('success', "{$createdCount} table(s) created successfully.");
+        }
+
+        // Original single table creation (for backwards compatibility)
         $validated = $request->validate([
             'table_number' => [
                 'required',
@@ -116,8 +147,6 @@ class TableController extends Controller
             'seats' => 'required|integer|min:1|max:20',
             'status' => 'required|in:available,occupied,reserved,maintenance',
             'description' => 'nullable|string|max:500',
-            'x_position' => 'nullable|numeric',
-            'y_position' => 'nullable|numeric',
         ]);
 
         $table->update($validated);

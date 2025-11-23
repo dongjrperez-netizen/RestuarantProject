@@ -292,7 +292,7 @@ const submitRestaurantSettings = () => {
                                     />
                                     <img
                                         v-else-if="restaurant.logo"
-                                        :src="`/storage/${restaurant.logo}`"
+                                        :src="restaurant.logo.includes('http') ? restaurant.logo : `/storage/${restaurant.logo}`"
                                         alt="Restaurant logo"
                                         class="h-full w-full object-cover"
                                     />

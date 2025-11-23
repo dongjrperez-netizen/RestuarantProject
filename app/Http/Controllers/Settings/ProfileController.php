@@ -11,6 +11,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -132,24 +134,17 @@ class ProfileController extends Controller
 
         // Debug logging
         $file = $request->file('logo');
-        \Log::info('Upload Request Debug', [
+        Log::info('Logo Upload Request Debug', [
             'hasFile' => $request->hasFile('logo'),
-            'file' => $request->file('logo'),
-            'fileExists' => $file ? file_exists($file->getPathname()) : null,
-            'filePath' => $file ? $file->getPathname() : null,
+            'user_id' => $user->id,
             'fileName' => $file ? $file->getClientOriginalName() : null,
             'fileSize' => $file ? $file->getSize() : null,
             'fileMime' => $file ? $file->getMimeType() : null,
-            'fileExtension' => $file ? $file->getClientOriginalExtension() : null,
-            'isValid' => $file ? $file->isValid() : null,
-            'error' => $file ? $file->getError() : null,
-            'allFiles' => $request->allFiles(),
-            'contentType' => $request->header('Content-Type'),
         ]);
 
         // Validate the request - accept common image formats including webp
         $request->validate([
-            'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'], // Max 2MB
+            'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'], // Max 5MB
         ]);
 
         // Get the restaurant data
@@ -162,26 +157,139 @@ class ProfileController extends Controller
         // Handle logo upload
         if ($request->hasFile('logo')) {
             try {
-                // Delete old logo if exists
-                if ($restaurantData->logo) {
-                    Storage::disk('public')->delete($restaurantData->logo);
+                // Upload to Supabase instead of local storage
+                $uploadedFile = $request->file('logo');
+                $publicUrl = $this->uploadLogoToSupabase($uploadedFile, $user->id);
+
+                if (!$publicUrl) {
+                    return redirect()->back()->withErrors(['logo' => 'Failed to upload logo to cloud storage.']);
                 }
 
-                // Store the uploaded file directly in the public disk
-                // This avoids requiring the GD extension / Intervention Image
-                $logoPath = $request->file('logo')->store('restaurant-logos', 'public');
+                // Delete old logo from Supabase if exists
+                if ($restaurantData->logo && str_contains($restaurantData->logo, 'supabase')) {
+                    $this->deleteLogoFromSupabase($restaurantData->logo);
+                }
 
-                $restaurantData->logo = $logoPath;
-
-                // Save the changes
+                // Save the Supabase URL
+                $restaurantData->logo = $publicUrl;
                 $restaurantData->save();
+
+                Log::info('Logo uploaded successfully to Supabase', [
+                    'user_id' => $user->id,
+                    'url' => $publicUrl,
+                ]);
 
                 return redirect()->back()->with('success', 'Logo uploaded successfully!');
             } catch (\Exception $e) {
+                Log::error('Logo upload failed', [
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
                 return redirect()->back()->withErrors(['logo' => 'Failed to upload logo: ' . $e->getMessage()]);
             }
         }
 
         return redirect()->back()->with('success', 'Settings updated successfully!');
+    }
+
+    /**
+     * Upload logo to Supabase Storage
+     */
+    private function uploadLogoToSupabase($file, $userId)
+    {
+        $supabaseUrl = env('SUPABASE_URL');
+        $supabaseKey = env('SUPABASE_SERVICE_ROLE_KEY') ?? env('SUPABASE_KEY');
+        $bucket = env('SUPABASE_BUCKET_DISH'); // Using the same bucket as dishes
+
+        if (!$supabaseUrl || !$supabaseKey || !$bucket || !$file) {
+            Log::error('Supabase configuration missing for logo upload.', [
+                'has_url' => !empty($supabaseUrl),
+                'has_key' => !empty($supabaseKey),
+                'has_bucket' => !empty($bucket),
+                'has_file' => !empty($file),
+            ]);
+            return null;
+        }
+
+        try {
+            $fileName = 'logo_' . $userId . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $filePath = "images/restaurant-logos/{$fileName}";
+
+            Log::info('Uploading logo to Supabase', [
+                'bucket' => $bucket,
+                'file_path' => $filePath,
+                'user_id' => $userId,
+            ]);
+
+            // Upload to Supabase Storage
+            $response = Http::withHeaders([
+                'apikey' => $supabaseKey,
+                'Authorization' => 'Bearer ' . $supabaseKey,
+                'Content-Type' => $file->getMimeType(),
+                'x-upsert' => 'true',
+            ])->withBody(
+                file_get_contents($file->getRealPath()),
+                $file->getMimeType()
+            )->post("{$supabaseUrl}/storage/v1/object/{$bucket}/{$filePath}");
+
+            if ($response->successful()) {
+                Log::info('Logo uploaded successfully to Supabase.', [
+                    'user_id' => $userId,
+                    'path' => $filePath,
+                ]);
+
+                // Construct and return the public URL
+                $url = rtrim($supabaseUrl, '/');
+                return "{$url}/storage/v1/object/public/{$bucket}/{$filePath}";
+            } else {
+                Log::error('Supabase logo upload failed.', [
+                    'user_id' => $userId,
+                    'status' => $response->status(),
+                    'response_body' => $response->body(),
+                ]);
+                return null;
+            }
+        } catch (\Exception $e) {
+            Log::error('Supabase logo upload exception.', [
+                'user_id' => $userId,
+                'message' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Delete logo from Supabase Storage
+     */
+    private function deleteLogoFromSupabase($logoUrl)
+    {
+        try {
+            $supabaseUrl = env('SUPABASE_URL');
+            $supabaseKey = env('SUPABASE_SERVICE_ROLE_KEY') ?? env('SUPABASE_KEY');
+            $bucket = env('SUPABASE_BUCKET_DISH');
+
+            if (!$supabaseUrl || !$supabaseKey || !$bucket) {
+                return;
+            }
+
+            // Extract the file path from the URL
+            // URL format: https://[project].supabase.co/storage/v1/object/public/[bucket]/[path]
+            $pattern = "/\/storage\/v1\/object\/public\/{$bucket}\/(.*)/";
+            if (preg_match($pattern, $logoUrl, $matches)) {
+                $filePath = $matches[1];
+
+                Http::withHeaders([
+                    'apikey' => $supabaseKey,
+                    'Authorization' => 'Bearer ' . $supabaseKey,
+                ])->delete("{$supabaseUrl}/storage/v1/object/{$bucket}/{$filePath}");
+
+                Log::info('Old logo deleted from Supabase', ['path' => $filePath]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to delete old logo from Supabase', [
+                'error' => $e->getMessage(),
+            ]);
+            // Don't fail the upload if delete fails
+        }
     }
 }

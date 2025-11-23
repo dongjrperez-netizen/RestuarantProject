@@ -601,6 +601,9 @@ Route::middleware(['auth', 'verified', 'check.subscription'])->group(function ()
     Route::get('/suppliers/{id}/details', [SupplierController::class, 'getSupplierDetails'])->name('suppliers.details');
     Route::post('/suppliers/{id}/toggle-status', [SupplierController::class, 'toggleStatus'])->name('suppliers.toggle-status');
     Route::post('/suppliers/{id}/send-invitation', [SupplierController::class, 'sendInvitation'])->name('suppliers.send-invitation');
+
+    // Quick create supplier from PO flow
+    Route::post('/api/suppliers/quick-create', [SupplierController::class, 'quickCreate'])->name('suppliers.quick-create');
 });
 
 // Purchase Order Management Routes

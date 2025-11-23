@@ -476,10 +476,9 @@ const getReceivedItems = (order: PurchaseOrder) => {
                   <th class="text-left p-3 font-semibold">Order #</th>
                   <th class="text-left p-3 font-semibold">Supplier</th>
                   <th class="text-left p-3 font-semibold">Date</th>
-                  <th class="text-left p-3 font-semibold">Created / Approved</th>
+                  <th class="text-left p-3 font-semibold">Created</th>
                   <th class="text-left p-3 font-semibold">Status</th>
                   <th class="text-left p-3 font-semibold">Amount</th>
-                  <th class="text-left p-3 font-semibold">Expected Delivery</th>
                   <th class="text-left p-3 font-semibold">Received Items</th>
                 </tr>
               </thead>
@@ -492,15 +491,8 @@ const getReceivedItems = (order: PurchaseOrder) => {
                   <td class="p-3 font-medium text-xs">{{ order.order_number }}</td>
                   <td class="p-3 text-xs">{{ getSupplierName(order) }}</td>
                   <td class="p-3 text-xs">{{ formatDate(order.created_at) }}</td>
-                  <td class="p-3 text-[11px] leading-tight">
-                    <div>
-                      <span class="font-semibold">Created:</span>
-                      {{ order.created_by_employee?.full_name ?? order.created_by?.name ?? 'N/A' }}
-                    </div>
-                    <div v-if="order.approved_by">
-                      <span class="font-semibold">Approved:</span>
-                      {{ order.approved_by.name }}
-                    </div>
+                  <td class="p-3 text-xs">
+                    {{ order.created_by_employee?.full_name ?? order.created_by?.name ?? 'N/A' }}
                   </td>
                   <td class="p-3 text-xs">
                     <Badge :variant="getStatusBadgeVariant(order.status)">
@@ -508,9 +500,6 @@ const getReceivedItems = (order: PurchaseOrder) => {
                     </Badge>
                   </td>
                   <td class="p-3 text-xs">{{ formatCurrency(order.total_amount) }}</td>
-                  <td class="p-3 text-xs">
-                    {{ order.expected_delivery_date ? formatDate(order.expected_delivery_date) : 'Not set' }}
-                  </td>
                   <td class="p-3 text-[11px] text-muted-foreground">
                     {{ getReceivedItems(order) }}
                   </td>
@@ -535,10 +524,9 @@ const getReceivedItems = (order: PurchaseOrder) => {
                   <th class="text-left p-3 font-semibold">Order #</th>
                   <th class="text-left p-3 font-semibold">Supplier</th>
                   <th class="text-left p-3 font-semibold">Date</th>
-                  <th class="text-left p-3 font-semibold">Created / Approved</th>
+                  <th class="text-left p-3 font-semibold">Created</th>
                   <th class="text-left p-3 font-semibold">Status</th>
                   <th class="text-left p-3 font-semibold">Amount</th>
-                  <th class="text-left p-3 font-semibold">Expected Delivery</th>
                   <th class="text-left p-3 font-semibold">Received Items</th>
                 </tr>
               </thead>
@@ -551,15 +539,8 @@ const getReceivedItems = (order: PurchaseOrder) => {
                   <td class="p-3 font-medium text-xs">{{ order.order_number }}</td>
                   <td class="p-3 text-xs">{{ getSupplierName(order) }}</td>
                   <td class="p-3 text-xs">{{ formatDate(order.created_at) }}</td>
-                  <td class="p-3 text-[11px] leading-tight">
-                    <div>
-                      <span class="font-semibold">Created:</span>
-                      {{ order.created_by_employee?.full_name ?? order.created_by?.name ?? 'N/A' }}
-                    </div>
-                    <div v-if="order.approved_by">
-                      <span class="font-semibold">Approved:</span>
-                      {{ order.approved_by.name }}
-                    </div>
+                  <td class="p-3 text-xs">
+                    {{ order.created_by_employee?.full_name ?? order.created_by?.name ?? 'N/A' }}
                   </td>
                   <td class="p-3 text-xs">
                     <Badge :variant="getStatusBadgeVariant(order.status)">
@@ -567,9 +548,6 @@ const getReceivedItems = (order: PurchaseOrder) => {
                     </Badge>
                   </td>
                   <td class="p-3 text-xs">{{ formatCurrency(order.total_amount) }}</td>
-                  <td class="p-3 text-xs">
-                    {{ order.expected_delivery_date ? formatDate(order.expected_delivery_date) : 'Not set' }}
-                  </td>
                   <td class="p-3 text-[11px] text-muted-foreground">
                     {{ getReceivedItems(order) }}
                   </td>

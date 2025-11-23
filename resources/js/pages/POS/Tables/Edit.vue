@@ -16,9 +16,6 @@ interface Table {
   table_name: string;
   seats: number;
   status: 'available' | 'occupied' | 'reserved' | 'maintenance';
-  description?: string;
-  x_position?: number;
-  y_position?: number;
 }
 
 interface Props {
@@ -39,9 +36,6 @@ const form = useForm({
   table_name: props.table.table_name,
   seats: props.table.seats,
   status: props.table.status,
-  description: props.table.description || '',
-  x_position: props.table.x_position,
-  y_position: props.table.y_position,
 });
 
 const statusOptions = [
@@ -163,60 +157,6 @@ const submit = () => {
                   {{ form.errors.status }}
                 </p>
               </div>
-            </div>
-
-            <!-- Position (Optional) -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div class="space-y-2">
-                <Label for="x_position">X Position (Optional)</Label>
-                <Input
-                  id="x_position"
-                  v-model="form.x_position"
-                  type="number"
-                  step="0.01"
-                  placeholder="X coordinate for layout"
-                  :class="{ 'border-red-500': form.errors.x_position }"
-                />
-                <p v-if="form.errors.x_position" class="text-sm text-red-500">
-                  {{ form.errors.x_position }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                  For future restaurant layout features
-                </p>
-              </div>
-
-              <div class="space-y-2">
-                <Label for="y_position">Y Position (Optional)</Label>
-                <Input
-                  id="y_position"
-                  v-model="form.y_position"
-                  type="number"
-                  step="0.01"
-                  placeholder="Y coordinate for layout"
-                  :class="{ 'border-red-500': form.errors.y_position }"
-                />
-                <p v-if="form.errors.y_position" class="text-sm text-red-500">
-                  {{ form.errors.y_position }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                  For future restaurant layout features
-                </p>
-              </div>
-            </div>
-
-            <!-- Description -->
-            <div class="space-y-2">
-              <Label for="description">Description (Optional)</Label>
-              <Textarea
-                id="description"
-                v-model="form.description"
-                placeholder="Additional details about this table..."
-                class="min-h-[80px]"
-                :class="{ 'border-red-500': form.errors.description }"
-              />
-              <p v-if="form.errors.description" class="text-sm text-red-500">
-                {{ form.errors.description }}
-              </p>
             </div>
           </CardContent>
         </Card>

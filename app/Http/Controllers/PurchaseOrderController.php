@@ -763,9 +763,13 @@ class PurchaseOrderController extends Controller
                 $item = PurchaseOrderItem::find($itemData['purchase_order_item_id']);
                 $newReceivedQuantity = $item->received_quantity + $itemData['received_quantity'];
 
+                // Calculate total price for this item (received_quantity × unit_price)
+                $itemTotalPrice = $newReceivedQuantity * $itemData['unit_price'];
+
                 $item->update([
                     'received_quantity' => $newReceivedQuantity,
                     'unit_price' => $itemData['unit_price'],
+                    'total_price' => $itemTotalPrice,
                 ]);
 
                 if ($newReceivedQuantity < $item->ordered_quantity) {
@@ -793,12 +797,21 @@ class PurchaseOrderController extends Controller
                 }
             }
 
+            // Calculate total amount from all items (sum of item total_prices)
+            $purchaseOrder->refresh(); // Reload to get updated items
+            $calculatedSubtotal = $purchaseOrder->items->sum('total_price');
+            $calculatedTotalAmount = $calculatedSubtotal; // Can add tax/shipping if needed
+
+            \Log::info("Purchase Order {$purchaseOrder->po_number} total amount calculated: {$calculatedTotalAmount}");
+
             $newStatus = $allItemsFullyReceived ? 'delivered' : 'partially_delivered';
 
             $purchaseOrder->update([
                 'status' => $newStatus,
                 'actual_delivery_date' => now(),
                 'received_by' => $validated['received_by'],
+                'subtotal' => $calculatedSubtotal,
+                'total_amount' => $calculatedTotalAmount,
             ]);
 
             // 🚀 AUTO-GENERATE BILL when PO is fully delivered
