@@ -1054,9 +1054,10 @@ public function storeOrder(Request $request)
             $today = now()->format('Y-m-d');
 
             // Find the active menu plan for today
-            // Eager load menuPlanDishes to reduce queries
+            // Eager load menuPlanDishes filtered by dish_id AND today's date for non-default plans
             $activeMenuPlan = MenuPlan::with(['menuPlanDishes' => function ($query) use ($validated, $today) {
-                    $query->where('dish_id', $validated['dish_id']);
+                    $query->where('dish_id', $validated['dish_id'])
+                          ->whereDate('planned_date', $today);
                 }])
                 ->where('restaurant_id', $restaurantId)
                 ->where('is_active', true)
@@ -1089,8 +1090,9 @@ public function storeOrder(Request $request)
                     // For default plans, get any entry for this dish (already filtered in eager load)
                     $menuPlanDish = $menuPlanDishes->first();
                 } else {
-                    // For specific plans, filter by today's date from the eager-loaded collection
-                    $menuPlanDish = $menuPlanDishes->where('planned_date', $today)->first();
+                    // For specific plans, the date filter is already applied in eager load
+                    // Just get the first (and should be only) result
+                    $menuPlanDish = $menuPlanDishes->first();
                 }
 
                 if ($menuPlanDish) {
