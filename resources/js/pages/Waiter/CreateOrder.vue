@@ -239,7 +239,9 @@ const checkDishAvailability = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        'X-Requested-With': 'XMLHttpRequest',
       },
       body: JSON.stringify({
         dish_id: selectedDish.value.dish_id,
@@ -376,7 +378,9 @@ const addDishToOrder = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        'X-Requested-With': 'XMLHttpRequest',
       },
       body: JSON.stringify({
         dish_id: selectedDish.value.dish_id,
@@ -563,7 +567,9 @@ const increaseCartQuantity = async (dishId: number, variantId?: number) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        'X-Requested-With': 'XMLHttpRequest',
       },
       body: JSON.stringify({
         dish_id: dishId,
@@ -625,7 +631,9 @@ const submitOrder = async () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+          'X-Requested-With': 'XMLHttpRequest',
         },
         body: JSON.stringify({
           dish_id: item.dish_id,

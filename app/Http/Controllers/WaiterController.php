@@ -993,27 +993,57 @@ public function storeOrder(Request $request)
 
     public function checkDishAvailability(Request $request)
     {
+        // Ensure we always return JSON
+        $request->headers->set('Accept', 'application/json');
+
         $employee = Auth::guard('waiter')->user();
 
-        if (!$employee || strtolower($employee->role->role_name) !== 'waiter') {
-            return response()->json(['error' => 'Access denied. Waiters only.'], 403);
+        if (!$employee) {
+            \Log::error('Check availability failed: No authenticated waiter', [
+                'guards' => array_keys(config('auth.guards')),
+                'current_guard' => Auth::getDefaultDriver(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'error' => 'Authentication required. Please log in as a waiter.',
+            ], 401);
+        }
+
+        if (strtolower($employee->role->role_name ?? '') !== 'waiter') {
+            return response()->json([
+                'success' => false,
+                'error' => 'Access denied. Waiters only.',
+            ], 403);
         }
 
         // Use the employee's user_id as restaurant ID (owner's user_id)
         // This saves a database query to Restaurant_Data table
         $restaurantId = $employee->user_id;
 
-        $validated = $request->validate([
-            'dish_id' => 'required|exists:dishes,dish_id',
-            'variant_id' => 'nullable|exists:dish_variants,variant_id',
-            'requested_quantity' => 'required|integer|min:1',
-            'cart_items' => 'nullable|array',
-            'cart_items.*.dish_id' => 'required|exists:dishes,dish_id',
-            'cart_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
-            'cart_items.*.quantity' => 'required|integer|min:1',
-            'cart_items.*.excluded_ingredients' => 'nullable|array',
-            'cart_items.*.excluded_ingredients.*' => 'exists:ingredients,ingredient_id',
+        \Log::info('Checking dish availability', [
+            'waiter_id' => $employee->employee_id,
+            'restaurant_id' => $restaurantId,
         ]);
+
+        try {
+            $validated = $request->validate([
+                'dish_id' => 'required|exists:dishes,dish_id',
+                'variant_id' => 'nullable|exists:dish_variants,variant_id',
+                'requested_quantity' => 'required|integer|min:1',
+                'cart_items' => 'nullable|array',
+                'cart_items.*.dish_id' => 'required|exists:dishes,dish_id',
+                'cart_items.*.variant_id' => 'nullable|exists:dish_variants,variant_id',
+                'cart_items.*.quantity' => 'required|integer|min:1',
+                'cart_items.*.excluded_ingredients' => 'nullable|array',
+                'cart_items.*.excluded_ingredients.*' => 'exists:ingredients,ingredient_id',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        }
 
         try {
             // Get the dish, scoped to the waiter's restaurant
