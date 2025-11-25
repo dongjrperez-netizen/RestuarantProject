@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type BreadcrumbItem } from '@/types';
 import { Calendar, CalendarDays, Eye, Edit2, Trash2, Play, Pause, Plus } from 'lucide-vue-next';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 interface MenuPlan {
   menu_plan_id: number;
@@ -172,7 +171,6 @@ const deletePlan = (plan: MenuPlan) => {
                 <TableHead>Type</TableHead>
                 <TableHead>Date Range</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Dishes</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -205,55 +203,60 @@ const deletePlan = (plan: MenuPlan) => {
                     {{ getStatusText(plan) }}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  <span class="text-sm font-medium">{{ plan.dishes_count || 0 }} dishes</span>
-                </TableCell>
                 <TableCell class="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger as-child>
-                      <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
-                        <span class="sr-only">Open menu</span>
-                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zM12 13a1 1 0 110-2 1 1 0 010 2zM12 20a1 1 0 110-2 1 1 0 010 2z" />
-                        </svg>
+                  <div class="flex items-center justify-end gap-1">
+                    <!-- View Button -->
+                    <Link :href="`/menu-planning/${plan.menu_plan_id}`">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        title="View Plan"
+                      >
+                        <Eye class="w-4 h-4" />
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem as-child>
-                        <Link :href="`/menu-planning/${plan.menu_plan_id}`" class="flex items-center">
-                          <Eye class="mr-2 h-4 w-4" />
-                          View Plan
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem as-child>
-                        <Link :href="`/menu-planning/${plan.menu_plan_id}/edit`" class="flex items-center">
-                          <Edit2 class="mr-2 h-4 w-4" />
-                          Edit Plan
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        @click="togglePlanStatus(plan)"
-                        class="flex items-center"
+                    </Link>
+
+                    <!-- Edit Button -->
+                    <Link :href="`/menu-planning/${plan.menu_plan_id}/edit`">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-8 w-8 p-0 text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                        title="Edit Plan"
                       >
-                        <Play v-if="!plan.is_active" class="mr-2 h-4 w-4" />
-                        <Pause v-else class="mr-2 h-4 w-4" />
-                        {{ plan.is_active ? 'Deactivate' : 'Activate' }}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        @click="deletePlan(plan)"
-                        class="flex items-center text-destructive focus:text-destructive"
-                      >
-                        <Trash2 class="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <Edit2 class="w-4 h-4" />
+                      </Button>
+                    </Link>
+
+                    <!-- Toggle Active/Inactive Button -->
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      @click="togglePlanStatus(plan)"
+                      class="h-8 w-8 p-0 hover:bg-green-50"
+                      :class="plan.is_active ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'"
+                      :title="plan.is_active ? 'Deactivate' : 'Activate'"
+                    >
+                      <Play v-if="!plan.is_active" class="w-4 h-4" />
+                      <Pause v-else class="w-4 h-4" />
+                    </Button>
+
+                    <!-- Delete Button -->
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      @click="deletePlan(plan)"
+                      class="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      title="Delete Plan"
+                    >
+                      <Trash2 class="w-4 h-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
               <TableRow v-if="!menuPlans.data || menuPlans.data.length === 0">
-                <TableCell colspan="6" class="text-center py-8">
+                <TableCell colspan="5" class="text-center py-8">
                   <div class="text-muted-foreground">
                     <Calendar class="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                     <div class="text-lg mb-2">No menu plans found</div>

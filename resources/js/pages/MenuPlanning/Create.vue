@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type BreadcrumbItem } from '@/types';
 import { ref, computed, watch } from 'vue';
-import { Plus, Trash2, Calendar, CalendarDays, Clock } from 'lucide-vue-next';
+import { Plus, Trash2, Calendar, CalendarDays, Clock, Eye } from 'lucide-vue-next';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface DishIngredient {
   ingredient_id: number;
@@ -127,6 +128,20 @@ const selectedNotes = ref<string>('');
 const selectedFrequency = ref<string>('');
 const selectedDayOfWeek = ref<string>('');
 
+// Modal for viewing varying quantities
+const showQuantityModal = ref(false);
+const selectedGroupForModal = ref<DishGroup | null>(null);
+
+const openQuantityModal = (group: DishGroup) => {
+  selectedGroupForModal.value = group;
+  showQuantityModal.value = true;
+};
+
+const closeQuantityModal = () => {
+  showQuantityModal.value = false;
+  selectedGroupForModal.value = null;
+};
+
 
 // planTypes array removed - now using computed planType
 
@@ -222,7 +237,6 @@ const addDishToPlan = () => {
   }
 
   // Validate specific requirements
-  if (selectedFrequency.value === 'specific' && !selectedDate.value) return;
   if (selectedFrequency.value === 'weekly' && !selectedDayOfWeek.value) return;
 
   // Generate dates based on frequency
@@ -230,9 +244,7 @@ const addDishToPlan = () => {
   const startDate = new Date(form.start_date);
   const endDate = new Date(form.end_date);
 
-  if (selectedFrequency.value === 'specific') {
-    datesToAdd.push(selectedDate.value);
-  } else if (selectedFrequency.value === 'daily') {
+  if (selectedFrequency.value === 'daily') {
     // Add for every day in the range
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       datesToAdd.push(d.toISOString().split('T')[0]);
@@ -291,6 +303,7 @@ interface DishGroup {
   dishName: string;
   pattern: string;
   quantityPerDay: number | string;
+  hasVaryingQuantities: boolean;
   dishes: PlanDish[];
   dates: string[];
 }
@@ -390,6 +403,7 @@ const groupedDishes = computed((): DishGroup[] => {
     const quantities = dishes.map(d => d.planned_quantity);
     const uniqueQuantities = [...new Set(quantities)];
     const quantityPerDay = uniqueQuantities.length === 1 ? uniqueQuantities[0] : 'varies';
+    const hasVaryingQuantities = uniqueQuantities.length > 1;
 
     // Determine pattern
     let pattern = '';
@@ -410,6 +424,7 @@ const groupedDishes = computed((): DishGroup[] => {
       dishName,
       pattern,
       quantityPerDay,
+      hasVaryingQuantities,
       dishes,
       dates
     };
@@ -588,7 +603,8 @@ const submit = () => {
               </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Date Range - Hidden for Default Plans -->
+            <div v-if="!form.is_default" class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div class="space-y-2">
                 <Label for="start_date">Start Date *</Label>
                 <Input
@@ -620,8 +636,13 @@ const submit = () => {
             </div>
 
             <!-- Range conflict warning -->
-            <div v-if="hasRangeConflict" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
+            <div v-if="!form.is_default && hasRangeConflict" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
               {{ rangeConflictMessage }}
+            </div>
+
+            <!-- Info message for default plans -->
+            <div v-if="form.is_default" class="text-sm text-muted-foreground bg-muted/50 border border-muted rounded-md p-3">
+              <strong>Default Plan:</strong> No date range needed. This plan applies as a fallback for any date without a specific menu plan.
             </div>
 
             <div class="space-y-2">
@@ -706,8 +727,7 @@ const submit = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="daily">Daily (Every day)</SelectItem>
-                    <SelectItem value="weekly">Weekly (Once per week)</SelectItem>
-                    <SelectItem value="specific">Specific Date</SelectItem>
+                    <SelectItem value="weekly">Select specific day</SelectItem>
                   </SelectContent>
                 </Select>
                 <p v-if="form.is_default" class="text-xs text-muted-foreground">
@@ -729,18 +749,7 @@ const submit = () => {
               </div>
             </div>
 
-            <!-- Conditional inputs based on frequency -->
-            <div v-if="selectedFrequency === 'specific'" class="space-y-2">
-              <Label for="specific_date">Select Date</Label>
-              <Input
-                id="specific_date"
-                v-model="selectedDate"
-                type="date"
-                :min="form.start_date"
-                :max="form.end_date"
-              />
-            </div>
-
+            <!-- Conditional input for weekly frequency -->
             <div v-if="selectedFrequency === 'weekly'" class="space-y-2">
               <Label for="day_of_week">Day of Week</Label>
               <Select v-model="selectedDayOfWeek">
@@ -802,7 +811,22 @@ const submit = () => {
                       {{ form.is_default ? '-' : group.pattern }}
                     </div>
                   </TableCell>
-                  <TableCell>{{ group.quantityPerDay }}</TableCell>
+                  <TableCell>
+                    <div class="flex items-center gap-2">
+                      <span>{{ group.quantityPerDay }}</span>
+                      <Button
+                        v-if="group.hasVaryingQuantities"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        @click="openQuantityModal(group)"
+                        class="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        title="View quantity details"
+                      >
+                        <Eye class="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </TableCell>
                   <TableCell>{{ group.dates.length }} days</TableCell>
                   <TableCell>
                     <Button
@@ -845,6 +869,36 @@ const submit = () => {
           </Button>
         </div>
       </form>
+
+      <!-- Quantity Details Modal -->
+      <Dialog :open="showQuantityModal" @update:open="closeQuantityModal">
+        <DialogContent class="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Quantity Details - {{ selectedGroupForModal?.dishName }}</DialogTitle>
+          </DialogHeader>
+          <div v-if="selectedGroupForModal" class="space-y-2 max-h-96 overflow-y-auto">
+            <div
+              v-for="(dish, index) in selectedGroupForModal.dishes.sort((a, b) =>
+                new Date(a.planned_date).getTime() - new Date(b.planned_date).getTime()
+              )"
+              :key="index"
+              class="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-md"
+            >
+              <div class="flex items-center gap-2">
+                <Calendar class="w-4 h-4 text-muted-foreground" />
+                <span class="text-sm font-medium">
+                  {{ new Date(dish.planned_date).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                  }) }}
+                </span>
+              </div>
+              <span class="text-sm font-bold">{{ dish.planned_quantity }}</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   </AppLayout>
 </template>
