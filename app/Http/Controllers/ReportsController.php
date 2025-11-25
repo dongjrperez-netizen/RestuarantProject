@@ -409,6 +409,7 @@ class ReportsController extends Controller
 
             return [
                 'date_received' => $po->actual_delivery_date,
+                'date_received_timestamp' => $po->updated_at, // Full timestamp for accurate sorting
                 'ingredient_id' => $ingredient->ingredient_id,
                 'ingredient_name' => $ingredient->ingredient_name,
                 'supplier_name' => $supplierName,
@@ -424,7 +425,7 @@ class ReportsController extends Controller
                 'quality_rating' => $item->quality_rating,
                 'condition_notes' => $item->condition_notes,
             ];
-        })->sortByDesc('date_received')->values();
+        })->sortByDesc('date_received_timestamp')->values();
 
         // Calculate summary stats
         $summary = [
@@ -503,7 +504,7 @@ class ReportsController extends Controller
             $query->where('supplier_id', $supplierId);
         }
 
-        $bills = $query->orderBy('bill_date', 'desc')->get();
+        $bills = $query->orderBy('created_at', 'desc')->get();
 
         // Get suppliers for filter
         $suppliers = DB::table('supplier_bills')

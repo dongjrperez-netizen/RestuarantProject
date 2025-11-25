@@ -60,6 +60,7 @@ interface InventoryData {
 
 interface StockInRecord {
   date_received: string;
+  date_received_timestamp: string;
   ingredient_id: number;
   ingredient_name: string;
   supplier_name: string;
@@ -186,6 +187,16 @@ const formatDate = (dateString: string) => {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
+  });
+};
+
+const formatDateTime = (dateString: string) => {
+  return new Date(dateString).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
   });
 };
 
@@ -496,7 +507,7 @@ const getQualityBadgeVariant = (rating?: string) => {
                 <History class="h-5 w-5" />
                 Stock-In History
               </CardTitle>
-              <CardDescription>Track all ingredient receipts from purchase orders</CardDescription>
+              <CardDescription>Track all ingredient receipts from purchase orders (sorted by newest first)</CardDescription>
             </div>
             <div class="flex gap-2">
               <Button variant="outline" size="sm" @click="showHistoryFilters = !showHistoryFilters">
@@ -595,7 +606,7 @@ const getQualityBadgeVariant = (rating?: string) => {
                   <td class="p-3">
                     <div class="flex items-center gap-1.5">
                       <Calendar class="h-3 w-3 text-muted-foreground" />
-                      <span class="text-xs">{{ formatDate(record.date_received) }}</span>
+                      <span class="text-xs">{{ formatDate(record.date_received_timestamp) }}</span>
                     </div>
                   </td>
                   <td class="p-3">

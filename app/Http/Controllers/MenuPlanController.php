@@ -102,7 +102,7 @@ class MenuPlanController extends Controller
             'dishes.*.dish_id' => 'required|exists:dishes,dish_id',
             'dishes.*.planned_quantity' => 'required|integer|min:1',
             'dishes.*.meal_type' => ['nullable', Rule::in(['breakfast', 'lunch', 'dinner', 'snack'])],
-            'dishes.*.planned_date' => 'required|date',
+            'dishes.*.planned_date' => 'nullable|date', // Nullable for default plans
             'dishes.*.day_of_week' => 'nullable|integer|min:0|max:6',
             'dishes.*.notes' => 'nullable|string',
         ]);
@@ -186,7 +186,7 @@ class MenuPlanController extends Controller
                     'dish_id' => $dishData['dish_id'],
                     'planned_quantity' => $dishData['planned_quantity'],
                     'meal_type' => $dishData['meal_type'] ?? null,
-                    'planned_date' => $dishData['planned_date'],
+                    'planned_date' => !empty($dishData['planned_date']) ? $dishData['planned_date'] : null,
                     'day_of_week' => $dishData['day_of_week'] ?? null,
                     'notes' => $dishData['notes'] ?? null,
                 ]);
@@ -259,7 +259,7 @@ class MenuPlanController extends Controller
                 'dishes.*.dish_id' => 'required|exists:dishes,dish_id',
                 'dishes.*.planned_quantity' => 'required|integer|min:1',
                 'dishes.*.meal_type' => ['nullable', Rule::in(['breakfast', 'lunch', 'dinner', 'snack'])],
-                'dishes.*.planned_date' => 'required|date',
+                'dishes.*.planned_date' => 'nullable|date', // Nullable for default plans
                 'dishes.*.day_of_week' => 'nullable|integer|min:0|max:6',
                 'dishes.*.notes' => 'nullable|string',
             ]);
@@ -335,7 +335,7 @@ class MenuPlanController extends Controller
                     'dish_id' => $dishData['dish_id'],
                     'planned_quantity' => $dishData['planned_quantity'],
                     'meal_type' => $dishData['meal_type'] ?? null,
-                    'planned_date' => $dishData['planned_date'],
+                    'planned_date' => !empty($dishData['planned_date']) ? $dishData['planned_date'] : null,
                     'day_of_week' => $dishData['day_of_week'] ?? null,
                     'notes' => $dishData['notes'] ?? null,
                 ]);

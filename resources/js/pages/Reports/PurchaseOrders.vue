@@ -112,6 +112,16 @@ const formatDate = (dateString: string) => {
   });
 };
 
+const formatDateTime = (dateString: string) => {
+  return new Date(dateString).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
 const getSupplierName = (order: PurchaseOrder) => {
   if (order.supplier) {
     return order.supplier.supplier_name;
@@ -466,7 +476,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
       <Card>
         <CardHeader>
           <CardTitle>Recent Purchase Orders</CardTitle>
-          <CardDescription>Latest purchase orders activity</CardDescription>
+          <CardDescription>Latest 10 purchase orders (sorted by newest first)</CardDescription>
         </CardHeader>
         <CardContent>
           <div class="overflow-x-auto">
@@ -476,7 +486,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
                   <th class="text-left p-3 font-semibold">Order #</th>
                   <th class="text-left p-3 font-semibold">Supplier</th>
                   <th class="text-left p-3 font-semibold">Date</th>
-                  <th class="text-left p-3 font-semibold">Created</th>
+                  <th class="text-left p-3 font-semibold">Created By</th>
                   <th class="text-left p-3 font-semibold">Status</th>
                   <th class="text-left p-3 font-semibold">Amount</th>
                   <th class="text-left p-3 font-semibold">Received Items</th>
@@ -514,7 +524,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
       <Card>
         <CardHeader>
           <CardTitle>All Purchase Orders</CardTitle>
-          <CardDescription>Complete list of purchase orders</CardDescription>
+          <CardDescription>Complete list of purchase orders (sorted by newest first)</CardDescription>
         </CardHeader>
         <CardContent>
           <div class="overflow-x-auto">
@@ -524,7 +534,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
                   <th class="text-left p-3 font-semibold">Order #</th>
                   <th class="text-left p-3 font-semibold">Supplier</th>
                   <th class="text-left p-3 font-semibold">Date</th>
-                  <th class="text-left p-3 font-semibold">Created</th>
+                  <th class="text-left p-3 font-semibold">Created By</th>
                   <th class="text-left p-3 font-semibold">Status</th>
                   <th class="text-left p-3 font-semibold">Amount</th>
                   <th class="text-left p-3 font-semibold">Received Items</th>

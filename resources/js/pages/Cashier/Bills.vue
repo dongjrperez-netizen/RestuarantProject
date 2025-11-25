@@ -410,7 +410,7 @@ onUnmounted(() => {
                                                 Pay
                                             </Button>
 
-                                            <!-- Void Button (only for pending / in_progress orders) -->
+                                            <!-- Cancel Button (only for pending / in_progress orders) -->
                                             <Button
                                                 v-if="canVoidOrder(order)"
                                                 variant="outline"
@@ -419,7 +419,7 @@ onUnmounted(() => {
                                                 @click="openVoidModal(order)"
                                             >
                                                 <Ban class="w-4 h-4 mr-1" />
-                                                Void
+                                                Cancel
                                             </Button>
 
                                             <!-- Cannot-void indicator for restricted statuses -->
@@ -470,18 +470,18 @@ onUnmounted(() => {
 
         </div>
 
-        <!-- Void Order Modal -->
+        <!-- Cancel Order Modal -->
         <Dialog v-model:open="isVoidModalOpen">
             <DialogContent class="max-w-md">
                 <DialogHeader>
                     <DialogTitle class="flex items-center gap-2">
                         <Ban class="w-5 h-5 text-red-600" />
-                        <span>Void Order / Dishes</span>
+                        <span>Cancel Order / Dishes</span>
                     </DialogTitle>
                     <DialogDescription v-if="voidTargetOrder">
-                        You are about to void one or more dishes for order
+                        You are about to cancel one or more dishes for order
                         <span class="font-semibold">{{ voidTargetOrder.order_number }}</span>.
-                        Select the dishes to void below. This action is restricted and requires a
+                        Select the dishes to cancel below. This action is restricted and requires a
                         valid manager access code.
                     </DialogDescription>
                 </DialogHeader>
@@ -504,7 +504,7 @@ onUnmounted(() => {
 
                     <!-- Dish selection -->
                     <div class="space-y-2">
-                        <p class="text-sm font-medium">Select dishes to void</p>
+                        <p class="text-sm font-medium">Select dishes to cancel</p>
                         <div
                             v-if="voidTargetOrder.order_items && voidTargetOrder.order_items.length"
                             class="max-h-48 overflow-auto border rounded-md divide-y bg-background"
@@ -535,7 +535,7 @@ onUnmounted(() => {
                                         </p>
                                     </div>
                                     <div class="flex items-center gap-2 text-xs">
-                                        <span class="text-muted-foreground">Void qty:</span>
+                                        <span class="text-muted-foreground">Cancel qty:</span>
                                         <input
                                             type="number"
                                             class="w-16 border rounded px-1 py-0.5 text-right text-xs"
@@ -561,7 +561,7 @@ onUnmounted(() => {
                             No dishes found for this order.
                         </p>
                         <p class="text-[11px] text-muted-foreground">
-                            Tip: To void the entire order, keep all dishes selected.
+                            Tip: To cancel the entire order, keep all dishes selected.
                         </p>
                     </div>
 
@@ -577,17 +577,17 @@ onUnmounted(() => {
                             placeholder="Enter 6-digit manager code"
                         />
                         <p class="text-[11px] text-muted-foreground">
-                            The manager or restaurant owner must provide this code to authorize the void.
+                            The manager or restaurant owner must provide this code to authorize the cancellation.
                         </p>
                     </div>
 
                     <div class="space-y-2">
-                        <label for="void-reason" class="text-sm font-medium">Reason for Voiding (optional)</label>
+                        <label for="void-reason" class="text-sm font-medium">Reason for Cancellation (optional)</label>
                         <textarea
                             id="void-reason"
                             v-model="voidReason"
                             class="w-full text-sm border rounded-md p-2 min-h-[70px] resize-y"
-                            placeholder="Describe why this order is being voided..."
+                            placeholder="Describe why this order is being cancelled..."
                         />
                     </div>
 
@@ -605,8 +605,8 @@ onUnmounted(() => {
                             @click="submitVoidOrder"
                             :disabled="!managerAccessCode || managerAccessCode.length !== 6 || voidProcessing"
                         >
-                            <span v-if="voidProcessing">Voiding...</span>
-                            <span v-else>Confirm Void</span>
+                            <span v-if="voidProcessing">Cancelling...</span>
+                            <span v-else>Confirm Cancellation</span>
                         </Button>
                     </div>
                 </div>

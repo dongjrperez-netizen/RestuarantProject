@@ -999,15 +999,9 @@ public function storeOrder(Request $request)
             return response()->json(['error' => 'Access denied. Waiters only.'], 403);
         }
 
-        // Resolve the restaurant this waiter belongs to via Restaurant_Data
-        $restaurantData = \App\Models\Restaurant_Data::where('user_id', $employee->user_id)->first();
-        if (!$restaurantData) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Restaurant data not found for this waiter.',
-            ], 404);
-        }
-        $restaurantId = $restaurantData->id;
+        // Use the employee's user_id as restaurant ID (owner's user_id)
+        // This saves a database query to Restaurant_Data table
+        $restaurantId = $employee->user_id;
 
         $validated = $request->validate([
             'dish_id' => 'required|exists:dishes,dish_id',
@@ -1030,7 +1024,11 @@ public function storeOrder(Request $request)
             $today = now()->format('Y-m-d');
 
             // Find the active menu plan for today
-            $activeMenuPlan = MenuPlan::where('restaurant_id', $restaurantId)
+            // Eager load menuPlanDishes to reduce queries
+            $activeMenuPlan = MenuPlan::with(['menuPlanDishes' => function ($query) use ($validated, $today) {
+                    $query->where('dish_id', $validated['dish_id']);
+                }])
+                ->where('restaurant_id', $restaurantId)
                 ->where('is_active', true)
                 ->where('start_date', '<=', $today)
                 ->where('end_date', '>=', $today)
@@ -1042,8 +1040,11 @@ public function storeOrder(Request $request)
             $plannedQuantity = 0;
 
             if (!$activeMenuPlan) {
-                // Fall back to the default plan
-                $activeMenuPlan = MenuPlan::where('restaurant_id', $restaurantId)
+                // Fall back to the default plan with eager loading
+                $activeMenuPlan = MenuPlan::with(['menuPlanDishes' => function ($query) use ($validated) {
+                        $query->where('dish_id', $validated['dish_id']);
+                    }])
+                    ->where('restaurant_id', $restaurantId)
                     ->where('is_default', true)
                     ->where('is_active', true)
                     ->first();
@@ -1051,18 +1052,15 @@ public function storeOrder(Request $request)
             }
 
             if ($activeMenuPlan) {
-                // Get the planned quantity for this dish today
+                // Use eager-loaded menuPlanDishes to avoid additional query
+                $menuPlanDishes = $activeMenuPlan->menuPlanDishes;
+
                 if ($isDefaultPlan) {
-                    // For default plans, get any entry for this dish (ignore date)
-                    $menuPlanDish = $activeMenuPlan->menuPlanDishes()
-                        ->where('dish_id', $validated['dish_id'])
-                        ->first();
+                    // For default plans, get any entry for this dish (already filtered in eager load)
+                    $menuPlanDish = $menuPlanDishes->first();
                 } else {
-                    // For specific plans, filter by today's date
-                    $menuPlanDish = $activeMenuPlan->menuPlanDishes()
-                        ->where('dish_id', $validated['dish_id'])
-                        ->where('planned_date', $today)
-                        ->first();
+                    // For specific plans, filter by today's date from the eager-loaded collection
+                    $menuPlanDish = $menuPlanDishes->where('planned_date', $today)->first();
                 }
 
                 if ($menuPlanDish) {
@@ -1085,13 +1083,13 @@ public function storeOrder(Request $request)
             }
 
             // Calculate how many of this dish have already been ordered today
-            $alreadyOrdered = CustomerOrderItem::whereHas('customerOrder', function ($query) use ($employee, $today) {
-                    $query->where('restaurant_id', $employee->user_id)
-                          ->whereDate('ordered_at', $today)
-                          ->whereNotIn('status', ['cancelled', 'voided']); // Exclude cancelled and voided orders
-                })
-                ->where('dish_id', $validated['dish_id'])
-                ->sum('quantity');
+            // Using JOIN instead of whereHas for better performance
+            $alreadyOrdered = CustomerOrderItem::join('customer_orders', 'customer_order_items.order_id', '=', 'customer_orders.order_id')
+                ->where('customer_orders.restaurant_id', $employee->user_id)
+                ->whereDate('customer_orders.ordered_at', $today)
+                ->whereNotIn('customer_orders.status', ['cancelled', 'voided'])
+                ->where('customer_order_items.dish_id', $validated['dish_id'])
+                ->sum('customer_order_items.quantity');
 
             // Calculate quantity in current cart
             $cartQuantity = 0;

@@ -20,7 +20,7 @@ interface MenuPlanDish {
   dish_id: number;
   planned_quantity: number;
   meal_type: string;
-  planned_date: string;
+  planned_date: string | null; // Null for default plan dishes
   day_of_week?: number;
   notes?: string;
   dish: Dish;
@@ -55,13 +55,21 @@ const breadcrumbs: BreadcrumbItem[] = [
 const isDefaultPlan = computed(() => !!props.menuPlan.is_default);
 
 const getInitialDate = () => {
-  // For default plans or plans without explicit start date, use first dish date (or today)
-  if (isDefaultPlan.value || !props.menuPlan.start_date) {
+  // For default plans, use today's date (no specific dates)
+  if (isDefaultPlan.value) {
+    return new Date();
+  }
+
+  // For weekly plans without explicit start date, use first dish date (or today)
+  if (!props.menuPlan.start_date) {
     if (props.menuPlan.menu_plan_dishes.length > 0) {
-      const firstDishDate = props.menuPlan.menu_plan_dishes[0].planned_date.split('T')[0];
-      const d = new Date(firstDishDate);
-      if (!isNaN(d.getTime())) {
-        return d;
+      const firstDish = props.menuPlan.menu_plan_dishes.find(d => d.planned_date);
+      if (firstDish && firstDish.planned_date) {
+        const firstDishDate = firstDish.planned_date.split('T')[0];
+        const d = new Date(firstDishDate);
+        if (!isNaN(d.getTime())) {
+          return d;
+        }
       }
     }
     return new Date();
@@ -106,6 +114,9 @@ const getDishesForDate = (date: Date) => {
   const dateString = date.toISOString().split('T')[0];
 
   return props.menuPlan.menu_plan_dishes.filter(dish => {
+    // Skip dishes without dates (default plan dishes)
+    if (!dish.planned_date) return false;
+
     // Handle ISO timestamp format: "2025-09-20T00:00:00.0000000Z"
     let dishDate = dish.planned_date;
 
@@ -319,8 +330,8 @@ const jumpToPlanStart = () => {
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <!-- View Mode Toggle -->
-          <div class="flex items-center bg-muted rounded-lg p-1">
+          <!-- View Mode Toggle (only for weekly plans) -->
+          <div v-if="!isDefaultPlan" class="flex items-center bg-muted rounded-lg p-1">
             <Button
               variant="ghost"
               size="sm"
@@ -351,35 +362,65 @@ const jumpToPlanStart = () => {
       </div>
 
 
-      <!-- Navigation -->
-      <div class="flex items-center justify-between">
-        <Button
-          variant="outline"
-          @click="navigateDate('prev')"
-          :disabled="!canNavigate.prev"
-        >
-          <ChevronLeft class="w-4 h-4 mr-2" />
-          Previous {{ viewMode === 'day' ? 'Day' : 'Week' }}
-        </Button>
-
-        <div class="text-center">
-          <h2 class="text-xl font-semibold">
-            {{ viewMode === 'day' ? formatLongDate(currentViewDate) : `Week of ${formatDateFromObject(getWeekDates[0])}` }}
-          </h2>
-        </div>
-
-        <Button
-          variant="outline"
-          @click="navigateDate('next')"
-          :disabled="!canNavigate.next"
-        >
-          Next {{ viewMode === 'day' ? 'Day' : 'Week' }}
-          <ChevronRight class="w-4 h-4 ml-2" />
-        </Button>
+      <!-- Default Plan View (No Date Navigation) -->
+      <div v-if="isDefaultPlan" class="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <ChefHat class="w-5 h-5" />
+              Default Menu (Applies Every Day)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div v-if="menuPlan.menu_plan_dishes.length > 0" class="space-y-3">
+              <div v-for="dish in menuPlan.menu_plan_dishes" :key="dish.id" class="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <div class="font-medium">{{ dish.dish.dish_name }}</div>
+                  <div v-if="dish.notes" class="text-sm text-muted-foreground">{{ dish.notes }}</div>
+                </div>
+                <div class="text-right">
+                  <div class="font-semibold">Qty: {{ dish.planned_quantity }}</div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="text-center py-8 text-muted-foreground">
+              No dishes added yet. Click "Edit Plan" to add dishes.
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <!-- Day View -->
-      <div v-if="viewMode === 'day'" class="space-y-6">
+      <!-- Weekly Plan View (With Date Navigation) -->
+      <div v-else>
+        <!-- Navigation -->
+        <div class="flex items-center justify-between">
+          <Button
+            variant="outline"
+            @click="navigateDate('prev')"
+            :disabled="!canNavigate.prev"
+          >
+            <ChevronLeft class="w-4 h-4 mr-2" />
+            Previous {{ viewMode === 'day' ? 'Day' : 'Week' }}
+          </Button>
+
+          <div class="text-center">
+            <h2 class="text-xl font-semibold">
+              {{ viewMode === 'day' ? formatLongDate(currentViewDate) : `Week of ${formatDateFromObject(getWeekDates[0])}` }}
+            </h2>
+          </div>
+
+          <Button
+            variant="outline"
+            @click="navigateDate('next')"
+            :disabled="!canNavigate.next"
+          >
+            Next {{ viewMode === 'day' ? 'Day' : 'Week' }}
+            <ChevronRight class="w-4 h-4 ml-2" />
+          </Button>
+        </div>
+
+        <!-- Day View -->
+        <div v-if="viewMode === 'day'" class="space-y-6">
         <div class="text-center">
           <!-- View Plan Button or No Dishes Message -->
           <div v-if="getDishesForDate(currentViewDate).length > 0" class="space-y-4">
@@ -455,6 +496,7 @@ const jumpToPlanStart = () => {
           </div>
         </div>
       </div>
+      </div> <!-- Close Weekly Plan View -->
 
     </div>
   </AppLayout>

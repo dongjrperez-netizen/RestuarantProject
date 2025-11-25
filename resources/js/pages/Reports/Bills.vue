@@ -29,6 +29,7 @@ interface Bill {
   bill_number: string;
   bill_date: string;
   due_date: string;
+  created_at: string;
   status: string;
   total_amount: number;
   paid_amount: number;
@@ -132,6 +133,16 @@ const formatDate = (dateString: string) => {
     year: 'numeric',
     month: 'short',
     day: 'numeric'
+  });
+};
+
+const formatDateTime = (dateString: string) => {
+  return new Date(dateString).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
   });
 };
 
@@ -420,7 +431,7 @@ const paymentProgress = (bill: Bill) => {
       <Card>
         <CardHeader>
           <CardTitle>Bills ({{ billsData.bills.length }})</CardTitle>
-          <CardDescription>Detailed list of all bills in the selected period</CardDescription>
+          <CardDescription>Detailed list of all bills in the selected period (sorted by newest first)</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -428,7 +439,7 @@ const paymentProgress = (bill: Bill) => {
               <TableRow>
                 <TableHead>Bill Number</TableHead>
                 <TableHead>Supplier</TableHead>
-                <TableHead>Bill Date</TableHead>
+                <TableHead>Created Date</TableHead>
                 <TableHead>Due Date</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead>Paid</TableHead>
@@ -450,7 +461,7 @@ const paymentProgress = (bill: Bill) => {
                   </div>
                 </TableCell>
                 <TableCell>{{ getSupplierName(bill) }}</TableCell>
-                <TableCell>{{ formatDate(bill.bill_date) }}</TableCell>
+                <TableCell>{{ formatDate(bill.created_at) }}</TableCell>
                 <TableCell>{{ formatDate(bill.due_date) }}</TableCell>
                 <TableCell>{{ formatCurrency(bill.total_amount) }}</TableCell>
                 <TableCell class="text-green-600 dark:text-green-400">{{ formatCurrency(bill.paid_amount) }}</TableCell>

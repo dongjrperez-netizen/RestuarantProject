@@ -34,8 +34,8 @@ interface MenuPlan {
   menu_plan_id: number;
   plan_name: string;
   plan_type: 'daily' | 'weekly';
-  start_date: string;
-  end_date: string;
+  start_date: string | null;
+  end_date: string | null;
   description?: string;
   is_active: boolean;
   is_default?: boolean;
@@ -78,13 +78,14 @@ const existingDishes: PlanDish[] = props.menuPlan.menu_plan_dishes.map(mpd => ({
   dish_name: mpd.dish.dish_name,
   planned_quantity: mpd.planned_quantity,
   meal_type: mpd.meal_type || '',
-  planned_date: mpd.planned_date.split('T')[0], // Extract date part
+  planned_date: mpd.planned_date ? mpd.planned_date.split('T')[0] : '', // Empty for default plans
   day_of_week: mpd.day_of_week || undefined,
   notes: mpd.notes || '',
 }));
 
 // Format dates properly for form inputs
-const formatDateForInput = (dateString: string) => {
+const formatDateForInput = (dateString: string | null | undefined) => {
+  if (!dateString) return ''; // Return empty string if null/undefined
   return dateString.split('T')[0]; // Extract YYYY-MM-DD format
 };
 
@@ -186,28 +187,60 @@ const autoExtendDateRange = (dishDate: string) => {
 };
 
 const addDishToPlan = () => {
-  if (!selectedDishId.value || !selectedFrequency.value) return;
+  if (!selectedDishId.value) return;
 
   const dish = props.dishes.find(d => d.dish_id.toString() === selectedDishId.value);
   if (!dish) return;
 
-  // Validate specific requirements
+  // For default plans: add dish without date (applies to all days)
+  if (form.is_default) {
+    // Check if dish already exists in default plan
+    const existingIndex = form.dishes.findIndex(d => d.dish_id === dish.dish_id);
+
+    if (existingIndex >= 0) {
+      // Update existing entry
+      form.dishes[existingIndex].planned_quantity = selectedQuantity.value;
+      form.dishes[existingIndex].notes = selectedNotes.value;
+    } else {
+      // Add new entry (no planned_date for default plans)
+      form.dishes.push({
+        dish_id: dish.dish_id,
+        dish_name: dish.dish_name,
+        planned_quantity: selectedQuantity.value,
+        meal_type: '',
+        planned_date: '', // Empty for default plans
+        day_of_week: undefined,
+        notes: selectedNotes.value,
+      });
+    }
+
+    // Reset form
+    selectedDishId.value = '';
+    selectedQuantity.value = 1;
+    selectedNotes.value = '';
+    return;
+  }
+
+  // For weekly plans: require frequency
+  if (!selectedFrequency.value) return;
+
+  // Validate specific requirements for weekly plans
   if (selectedFrequency.value === 'specific' && !selectedDate.value) return;
   if (selectedFrequency.value === 'weekly' && !selectedDayOfWeek.value) return;
 
   // Generate dates based on frequency
   const datesToAdd: string[] = [];
-  const startDate = new Date(form.start_date);
-  const endDate = new Date(form.end_date);
+  const startDate = form.start_date ? new Date(form.start_date) : null;
+  const endDate = form.end_date ? new Date(form.end_date) : null;
 
   if (selectedFrequency.value === 'specific') {
     datesToAdd.push(selectedDate.value);
-  } else if (selectedFrequency.value === 'daily') {
+  } else if (selectedFrequency.value === 'daily' && startDate && endDate) {
     // Add for every day in the range
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       datesToAdd.push(d.toISOString().split('T')[0]);
     }
-  } else if (selectedFrequency.value === 'weekly') {
+  } else if (selectedFrequency.value === 'weekly' && startDate && endDate) {
     // Add for specific day of week in the range
     const targetDayOfWeek = parseInt(selectedDayOfWeek.value);
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
@@ -233,7 +266,7 @@ const addDishToPlan = () => {
       form.dishes[existingIndex].planned_quantity += selectedQuantity.value;
       form.dishes[existingIndex].notes = selectedNotes.value;
     } else {
-      // Add new entry (no meal type)
+      // Add new entry
       form.dishes.push({
         dish_id: dish.dish_id,
         dish_name: dish.dish_name,
@@ -326,10 +359,22 @@ const groupedDishes = computed((): DishGroup[] => {
 const submit = () => {
   console.log('Submit function called');
 
+  // Validate that non-default plans have dates
+  if (!form.is_default && (!form.start_date || !form.end_date)) {
+    alert('Start and end dates are required for non-default menu plans.');
+    return;
+  }
+
+  // Validate that start date is not after end date
+  if (form.start_date && form.end_date && new Date(form.start_date) > new Date(form.end_date)) {
+    alert('Start date must be before or equal to end date.');
+    return;
+  }
+
   // Fix day_of_week values to ensure they're within 0-6 range (JavaScript standard)
   const cleanedDishes = form.dishes.map(dish => ({
     ...dish,
-    day_of_week: new Date(dish.planned_date).getDay() // Recalculate to ensure accuracy
+    day_of_week: dish.planned_date ? new Date(dish.planned_date).getDay() : null // Null for default plans
   }));
 
   // Add the computed plan_type to the cleaned data
@@ -355,6 +400,11 @@ const submit = () => {
     onError: (errors) => {
       console.error('Update failed:', errors);
       console.log('Form errors:', form.errors);
+
+      // Show error message if it's a date conflict
+      if (errors.error) {
+        alert(errors.error);
+      }
     },
     onStart: () => {
       console.log('Form submission started');
@@ -475,15 +525,15 @@ const submit = () => {
                 class="min-h-[80px]"
               />
             </div>
-            <div class="flex items-center space-x-2">
+            <!-- Only show default checkbox if there's no other default plan, or if this plan IS the default -->
+            <div v-if="!props.hasOtherDefault || props.menuPlan.is_default" class="flex items-center space-x-2">
               <input
                 type="checkbox"
                 id="is_default"
                 v-model="form.is_default"
-                :disabled="props.hasOtherDefault && !props.menuPlan.is_default"
-                class="h-4 w-4 text-primary border-input rounded focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                class="h-4 w-4 text-primary border-input rounded focus:ring-2 focus:ring-ring focus:ring-offset-2"
               />
-              <Label for="is_default" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              <Label for="is_default" class="text-sm font-medium leading-none">
                 Set as Default Plan
               </Label>
               <div class="text-xs text-muted-foreground ml-2">
@@ -492,12 +542,14 @@ const submit = () => {
               <div class="text-xs text-blue-600 ml-2" v-if="form.is_default">
                 ✓ This will be the default plan
               </div>
-              <div
-                v-if="props.hasOtherDefault && !props.menuPlan.is_default"
-                class="text-xs text-muted-foreground ml-2"
-              >
-                Another default plan already exists. Edit that plan if you want to change the fallback.
-              </div>
+            </div>
+
+            <!-- Show message when there's another default plan -->
+            <div
+              v-if="props.hasOtherDefault && !props.menuPlan.is_default"
+              class="text-sm text-muted-foreground p-3 bg-muted/50 rounded-md"
+            >
+              Another default plan already exists. To make this plan the default, you must first edit the existing default plan and uncheck its default status.
             </div>
           </CardContent>
         </Card>
@@ -511,101 +563,167 @@ const submit = () => {
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div class="space-y-2">
-                <Label for="dish_select">Select Dish</Label>
-                <Select v-model="selectedDishId">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose dish" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="dish in dishes"
-                      :key="dish.dish_id"
-                      :value="dish.dish_id.toString()"
-                    >
-                      {{ dish.dish_name }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+            <!-- For Default Plans - Simplified Layout (No Date Picker) -->
+            <div v-if="form.is_default" class="space-y-4">
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-2">
+                  <Label for="dish_select">Select Dish</Label>
+                  <Select v-model="selectedDishId">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose dish" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="dish in props.dishes"
+                        :key="dish.dish_id"
+                        :value="dish.dish_id.toString()"
+                      >
+                        {{ dish.dish_name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="quantity">Quantity</Label>
+                  <Input
+                    id="quantity"
+                    v-model.number="selectedQuantity"
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                  />
+                </div>
+
+                <div class="space-y-2">
+                  <Label>&nbsp;</Label>
+                  <Button
+                    type="button"
+                    @click="addDishToPlan"
+                    :disabled="!selectedDishId"
+                    class="w-full"
+                  >
+                    <Plus class="w-4 h-4 mr-2" />
+                    Add
+                  </Button>
+                </div>
               </div>
 
               <div class="space-y-2">
-                <Label for="quantity">Quantity</Label>
+                <Label for="notes">Notes (Optional)</Label>
                 <Input
-                  id="quantity"
-                  v-model="selectedQuantity"
-                  type="number"
-                  min="1"
-                  placeholder="1"
+                  id="notes"
+                  v-model="selectedNotes"
+                  placeholder="Special preparation notes..."
                 />
               </div>
 
-              <div class="space-y-2">
-                <Label for="frequency">Frequency</Label>
-                <Select v-model="selectedFrequency">
+              <p class="text-xs text-muted-foreground">
+                Default plan dishes apply every day as a fallback when no weekly plan exists.
+              </p>
+            </div>
+
+            <!-- For Weekly Plans - Full Layout with Frequency Options -->
+            <div v-else>
+              <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div class="space-y-2">
+                  <Label for="dish_select">Select Dish</Label>
+                  <Select v-model="selectedDishId">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose dish" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="dish in props.dishes"
+                        :key="dish.dish_id"
+                        :value="dish.dish_id.toString()"
+                      >
+                        {{ dish.dish_name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="quantity">Quantity</Label>
+                  <Input
+                    id="quantity"
+                    v-model.number="selectedQuantity"
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                  />
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="frequency">Frequency</Label>
+                  <Select v-model="selectedFrequency">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily (Every day)</SelectItem>
+                      <SelectItem value="weekly">Weekly (Once per week)</SelectItem>
+                      <SelectItem value="specific">Specific Date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div class="space-y-2">
+                  <Label>&nbsp;</Label>
+                  <Button
+                    type="button"
+                    @click="addDishToPlan"
+                    :disabled="!selectedDishId || !selectedFrequency"
+                    class="w-full"
+                  >
+                    <Plus class="w-4 h-4 mr-2" />
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              <!-- Conditional inputs based on frequency -->
+              <div v-if="selectedFrequency === 'specific'" class="space-y-2 mt-4">
+                <Label for="specific_date">Select Date</Label>
+                <Input
+                  id="specific_date"
+                  v-model="selectedDate"
+                  type="date"
+                  :min="form.start_date"
+                  :max="form.end_date"
+                />
+                <p class="text-xs text-muted-foreground">
+                  Date must be within the plan's date range ({{ form.start_date }} to {{ form.end_date }})
+                </p>
+              </div>
+
+              <div v-if="selectedFrequency === 'weekly'" class="space-y-2 mt-4">
+                <Label for="day_of_week">Day of Week</Label>
+                <Select v-model="selectedDayOfWeek">
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose frequency" />
+                    <SelectValue placeholder="Choose day" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="daily">Daily (Every day)</SelectItem>
-                    <SelectItem value="weekly">Weekly (Once per week)</SelectItem>
-                    <SelectItem value="specific">Specific Date</SelectItem>
+                    <SelectItem value="0">Sunday</SelectItem>
+                    <SelectItem value="1">Monday</SelectItem>
+                    <SelectItem value="2">Tuesday</SelectItem>
+                    <SelectItem value="3">Wednesday</SelectItem>
+                    <SelectItem value="4">Thursday</SelectItem>
+                    <SelectItem value="5">Friday</SelectItem>
+                    <SelectItem value="6">Saturday</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div class="space-y-2">
-                <Label>&nbsp;</Label>
-                <Button
-                  type="button"
-                  @click="addDishToPlan"
-                  :disabled="!selectedDishId || !selectedFrequency"
-                  class="w-full"
-                >
-                  <Plus class="w-4 h-4 mr-2" />
-                  Add
-                </Button>
+              <div class="space-y-2 mt-4">
+                <Label for="notes">Notes (Optional)</Label>
+                <Input
+                  id="notes"
+                  v-model="selectedNotes"
+                  placeholder="Special preparation notes..."
+                />
               </div>
-            </div>
-
-            <!-- Conditional inputs based on frequency -->
-            <div v-if="selectedFrequency === 'specific'" class="space-y-2">
-              <Label for="specific_date">Select Date</Label>
-              <Input
-                id="specific_date"
-                v-model="selectedDate"
-                type="date"
-                :min="form.start_date"
-                :max="form.end_date"
-              />
-            </div>
-
-            <div v-if="selectedFrequency === 'weekly'" class="space-y-2">
-              <Label for="day_of_week">Day of Week</Label>
-              <Select v-model="selectedDayOfWeek">
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose day" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">Sunday</SelectItem>
-                  <SelectItem value="1">Monday</SelectItem>
-                  <SelectItem value="2">Tuesday</SelectItem>
-                  <SelectItem value="3">Wednesday</SelectItem>
-                  <SelectItem value="4">Thursday</SelectItem>
-                  <SelectItem value="5">Friday</SelectItem>
-                  <SelectItem value="6">Saturday</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div class="space-y-2">
-              <Label for="notes">Notes (Optional)</Label>
-              <Input
-                id="notes"
-                v-model="selectedNotes"
-                placeholder="Special preparation notes..."
-              />
             </div>
           </CardContent>
         </Card>

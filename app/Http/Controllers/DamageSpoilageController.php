@@ -106,8 +106,6 @@ class DamageSpoilageController extends Controller
 
         $validated = $request->validate([
             'type' => ['required', Rule::in(['damage', 'spoilage'])],
-            'reason' => ['nullable', 'string', 'max:500'],
-            'notes' => ['nullable', 'string', 'max:1000'],
             'incident_date' => ['required', 'date', 'before_or_equal:today'],
             'ingredients' => ['required', 'array', 'min:1'],
             'ingredients.*.ingredient_id' => [
@@ -126,7 +124,7 @@ class DamageSpoilageController extends Controller
             ],
             'ingredients.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'ingredients.*.unit' => ['required', 'string', 'max:50'],
-            'ingredients.*.estimated_cost' => ['nullable', 'numeric', 'min:0'],
+            'ingredients.*.reason' => ['nullable', 'string', 'max:500'],
         ]);
 
         $successCount = 0;
@@ -144,9 +142,9 @@ class DamageSpoilageController extends Controller
                     continue;
                 }
 
-                // Auto-calculate estimated cost if not provided
-                $estimatedCost = $ingredientData['estimated_cost'] ?? null;
-                if (empty($estimatedCost) && $ingredient->cost_per_unit > 0) {
+                // Auto-calculate estimated cost based on ingredient's cost per unit
+                $estimatedCost = null;
+                if ($ingredient->cost_per_unit > 0) {
                     $estimatedCost = $ingredientData['quantity'] * $ingredient->cost_per_unit;
                 }
 
@@ -158,8 +156,8 @@ class DamageSpoilageController extends Controller
                     'type' => $validated['type'],
                     'quantity' => $ingredientData['quantity'],
                     'unit' => $ingredientData['unit'],
-                    'reason' => $validated['reason'],
-                    'notes' => $validated['notes'],
+                    'reason' => $ingredientData['reason'] ?? null,
+                    'notes' => null,
                     'incident_date' => $validated['incident_date'],
                     'estimated_cost' => $estimatedCost,
                 ]);

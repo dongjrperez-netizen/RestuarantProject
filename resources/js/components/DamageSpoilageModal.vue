@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
-import { AlertTriangle, Package, Save, X, Plus, Trash2 } from 'lucide-vue-next';
+import { AlertTriangle, Package, Save, X, Plus, Trash2, Calendar } from 'lucide-vue-next';
 
 interface Ingredient {
   ingredient_id: number;
@@ -34,37 +34,31 @@ interface IngredientEntry {
   ingredient_id: string;
   quantity: string;
   unit: string;
-  estimated_cost: string;
+  reason: string;
 }
 
 const selectedType = ref('');
-const selectedReason = ref('');
-const selectedNotes = ref('');
 const selectedDate = ref(new Date().toISOString().split('T')[0]);
 const ingredientEntries = ref<IngredientEntry[]>([
   {
     ingredient_id: '',
     quantity: '',
     unit: '',
-    estimated_cost: '',
+    reason: '',
   },
 ]);
 
 const form = useForm<{
   type: string;
-  reason: string;
-  notes: string;
   incident_date: string;
   ingredients: Array<{
     ingredient_id: string;
     quantity: string;
     unit: string;
-    estimated_cost: string;
+    reason: string;
   }>;
 }>({
   type: '',
-  reason: '',
-  notes: '',
   incident_date: '',
   ingredients: [],
 });
@@ -74,7 +68,7 @@ const addIngredientEntry = () => {
     ingredient_id: '',
     quantity: '',
     unit: '',
-    estimated_cost: '',
+    reason: '',
   });
 };
 
@@ -97,15 +91,13 @@ const removeIngredientEntry = (index: number) => {
 
 const resetForm = () => {
   selectedType.value = '';
-  selectedReason.value = '';
-  selectedNotes.value = '';
   selectedDate.value = new Date().toISOString().split('T')[0];
   ingredientEntries.value = [
     {
       ingredient_id: '',
       quantity: '',
       unit: '',
-      estimated_cost: '',
+      reason: '',
     },
   ];
   form.reset();
@@ -114,8 +106,6 @@ const resetForm = () => {
 const submit = async () => {
   // Prepare form data
   form.type = selectedType.value;
-  form.reason = selectedReason.value;
-  form.notes = selectedNotes.value;
   form.incident_date = selectedDate.value;
   form.ingredients = ingredientEntries.value.filter(entry => entry.ingredient_id && entry.quantity);
 
@@ -208,16 +198,16 @@ const commonReasons = {
             </p>
           </div>
 
-          <!-- Incident Date -->
+          <!-- Incident Date (Auto - Today) -->
           <div class="space-y-2">
-            <Label for="incident_date">Incident Date *</Label>
-            <Input
-              id="incident_date"
-              v-model="selectedDate"
-              type="date"
-              :max="new Date().toISOString().split('T')[0]"
-              :class="{ 'border-red-500': form.errors.incident_date }"
-            />
+            <Label for="incident_date">Incident Date</Label>
+            <div class="flex items-center gap-2 px-3 py-2 bg-muted rounded-md border">
+              <Calendar class="w-4 h-4 text-muted-foreground" />
+              <span class="text-sm font-medium">
+                {{ new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
+              </span>
+              <span class="ml-auto text-xs text-muted-foreground">(Today)</span>
+            </div>
             <p v-if="form.errors.incident_date" class="text-sm text-red-500">
               {{ form.errors.incident_date }}
             </p>
@@ -306,21 +296,37 @@ const commonReasons = {
                         class="bg-gray-100 cursor-not-allowed"
                       />
                     </div>
+                  </div>
 
-                    <!-- Estimated Cost -->
+                  <!-- Individual Reason -->
+                  <div class="grid grid-cols-1 gap-4 mt-4">
                     <div class="space-y-2 md:col-span-4">
-                      <Label>Estimated Cost (Optional)</Label>
-                      <Input
-                        v-model="entry.estimated_cost"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        class="max-w-xs"
-                      />
-                      <p class="text-xs text-muted-foreground">
-                        Leave blank to auto-calculate based on ingredient cost
-                      </p>
+                      <Label>Reason (Optional)</Label>
+                      <div class="space-y-2">
+                        <Textarea
+                          v-model="entry.reason"
+                          placeholder="Describe the cause of damage/spoilage for this ingredient..."
+                          rows="2"
+                        />
+
+                        <!-- Quick Reason Selection -->
+                        <div v-if="selectedType && commonReasons[selectedType as keyof typeof commonReasons]" class="space-y-2">
+                          <p class="text-xs text-muted-foreground">Quick select:</p>
+                          <div class="flex flex-wrap gap-1">
+                            <Button
+                              v-for="reason in commonReasons[selectedType as keyof typeof commonReasons]"
+                              :key="reason"
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              @click="entry.reason = reason"
+                              class="text-xs h-7"
+                            >
+                              {{ reason }}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -328,58 +334,22 @@ const commonReasons = {
             </Card>
           </div>
 
+          <!-- Bottom Add Ingredient Button -->
+          <div class="flex justify-start pt-2">
+            <Button
+              type="button"
+              @click="addIngredientEntry"
+              size="sm"
+              variant="outline"
+              class="gap-2"
+            >
+              <Plus class="w-4 h-4" />
+              Add Another Ingredient
+            </Button>
+          </div>
+
           <p v-if="form.errors.ingredients" class="text-sm text-red-500">
             {{ form.errors.ingredients }}
-          </p>
-        </div>
-
-        <!-- Reason -->
-        <div class="space-y-2">
-          <Label for="reason">Reason (Optional)</Label>
-          <div class="space-y-2">
-            <Textarea
-              id="reason"
-              v-model="selectedReason"
-              placeholder="Describe the cause of damage/spoilage..."
-              rows="3"
-              :class="{ 'border-red-500': form.errors.reason }"
-            />
-
-            <!-- Quick Reason Selection -->
-            <div v-if="selectedType && commonReasons[selectedType as keyof typeof commonReasons]" class="space-y-2">
-              <p class="text-sm text-muted-foreground">Quick select common reasons:</p>
-              <div class="flex flex-wrap gap-2">
-                <Button
-                  v-for="reason in commonReasons[selectedType as keyof typeof commonReasons]"
-                  :key="reason"
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  @click="selectedReason = reason"
-                  class="text-xs"
-                >
-                  {{ reason }}
-                </Button>
-              </div>
-            </div>
-          </div>
-          <p v-if="form.errors.reason" class="text-sm text-red-500">
-            {{ form.errors.reason }}
-          </p>
-        </div>
-
-        <!-- Additional Notes -->
-        <div class="space-y-2">
-          <Label for="notes">Additional Notes (Optional)</Label>
-          <Textarea
-            id="notes"
-            v-model="selectedNotes"
-            placeholder="Any additional details, prevention measures, or observations..."
-            rows="2"
-            :class="{ 'border-red-500': form.errors.notes }"
-          />
-          <p v-if="form.errors.notes" class="text-sm text-red-500">
-            {{ form.errors.notes }}
           </p>
         </div>
 

@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { type BreadcrumbItem } from '@/types';
-import { AlertTriangle, Package, ArrowLeft, Save } from 'lucide-vue-next';
+import { AlertTriangle, Package, ArrowLeft, Save, Calendar } from 'lucide-vue-next';
 
 interface Ingredient {
   ingredient_id: number;
@@ -51,9 +51,7 @@ const form = useForm({
   quantity: '',
   unit: '',
   reason: '',
-  notes: '',
   incident_date: new Date().toISOString().split('T')[0], // Today's date
-  estimated_cost: '',
 });
 
 // Handle ingredient change (unit is entered manually by user)
@@ -202,40 +200,21 @@ const commonReasons = {
                 </p>
               </div>
 
-              <!-- Incident Date -->
+              <!-- Incident Date (Auto - Today) -->
               <div class="space-y-2">
-                <Label for="incident_date">Incident Date *</Label>
-                <Input
-                  id="incident_date"
-                  v-model="form.incident_date"
-                  type="date"
-                  :max="new Date().toISOString().split('T')[0]"
-                  :class="{ 'border-red-500': form.errors.incident_date }"
-                />
+                <Label for="incident_date">Incident Date</Label>
+                <div class="flex items-center gap-2 px-3 py-2 bg-muted rounded-md border">
+                  <Calendar class="w-4 h-4 text-muted-foreground" />
+                  <span class="text-sm font-medium">
+                    {{ new Date(form.incident_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
+                  </span>
+                  <span class="ml-auto text-xs text-muted-foreground">(Today)</span>
+                </div>
                 <p v-if="form.errors.incident_date" class="text-sm text-red-500">
                   {{ form.errors.incident_date }}
                 </p>
               </div>
 
-              <!-- Estimated Cost -->
-              <div class="space-y-2">
-                <Label for="estimated_cost">Estimated Cost (Optional)</Label>
-                <Input
-                  id="estimated_cost"
-                  v-model="form.estimated_cost"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  :class="{ 'border-red-500': form.errors.estimated_cost }"
-                />
-                <p v-if="form.errors.estimated_cost" class="text-sm text-red-500">
-                  {{ form.errors.estimated_cost }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                  Enter the monetary value of the lost ingredient (optional)
-                </p>
-              </div>
             </div>
 
             <!-- Reason -->
@@ -273,20 +252,6 @@ const commonReasons = {
               </p>
             </div>
 
-            <!-- Additional Notes -->
-            <div class="space-y-2">
-              <Label for="notes">Additional Notes (Optional)</Label>
-              <Textarea
-                id="notes"
-                v-model="form.notes"
-                placeholder="Any additional details, prevention measures, or observations..."
-                rows="3"
-                :class="{ 'border-red-500': form.errors.notes }"
-              />
-              <p v-if="form.errors.notes" class="text-sm text-red-500">
-                {{ form.errors.notes }}
-              </p>
-            </div>
           </CardContent>
         </Card>
 

@@ -243,6 +243,11 @@
                 return $item->quantity * $item->unit_price;
             });
 
+            // VAT Calculation (12%)
+            $vatableAmount = $subtotal / 1.12; // Base price without VAT
+            $vatAmount = $vatableAmount * 0.12; // 12% VAT
+            $totalWithVat = $vatableAmount + $vatAmount; // Should equal $subtotal
+
             // Check for temporary discount first, then stored discount
             $discountAmount = 0;
             $discountReason = '';
@@ -269,8 +274,15 @@
 
         <div class="totals-row">
             <span>Subtotal</span>
-            <span>₱{{ number_format($subtotal, 2) }}</span>
+            <span>₱{{ number_format($vatableAmount, 2) }}</span>
         </div>
+        <div class="totals-row">
+            <span>VAT (12%)</span>
+            <span>₱{{ number_format($vatAmount, 2) }}</span>
+        </div>
+
+        <div class="divider"></div>
+
         @if($order->reservation_fee && $order->reservation_fee > 0)
         <div class="totals-row">
             <span>Reservation Fee</span>
@@ -291,7 +303,7 @@
         @endif
 
         <div class="totals-row total-final">
-            <span class="bold">Total</span>
+            <span class="bold">TOTAL</span>
             <span class="bold">₱{{ number_format($finalTotal, 2) }}</span>
         </div>
 

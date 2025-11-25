@@ -147,16 +147,21 @@ class EmployeeController extends Controller
             'gender' => 'required|in:male,female,other',
             'role_id' => 'required|exists:roles,id',
             'status' => 'required|in:active,inactive',
+            'password' => 'nullable|string|min:8|confirmed',
             'manager_access_code' => ['nullable', 'digits:6'],
         ], [
             'manager_access_code.digits' => 'Manager access code must be exactly 6 digits.',
         ]);
 
-        if ($request->filled('password')) {
-            $request->validate([
-                'password' => 'required|string|min:8|confirmed',
-            ]);
-            $validated['password'] = Hash::make($request->password);
+        // Remove password_confirmation as it's not a database field
+        unset($validated['password_confirmation']);
+
+        // Remove password from validated if it's empty
+        if (empty($validated['password'])) {
+            unset($validated['password']);
+        } else {
+            // Hash the password if it was provided
+            $validated['password'] = Hash::make($validated['password']);
         }
 
         $employee->update($validated);

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { watchDebounced } from '@vueuse/core';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import WaiterLayout from '@/layouts/WaiterLayout.vue';
 import Button from '@/components/ui/button/Button.vue';
@@ -287,11 +288,16 @@ const checkDishAvailability = async () => {
 };
 
 // Watch for changes in modalQuantity and selectedVariant to re-check availability
-watch([modalQuantity, selectedVariant], () => {
-  if (showQuantityModal.value && selectedDish.value) {
-    checkDishAvailability();
-  }
-});
+// Debounced to avoid excessive API calls while user is typing
+watchDebounced(
+  [modalQuantity, selectedVariant],
+  () => {
+    if (showQuantityModal.value && selectedDish.value) {
+      checkDishAvailability();
+    }
+  },
+  { debounce: 500, maxWait: 1000 }
+);
 
 const openQuantityModal = (dish: Dish, existingVariantId?: number) => {
   selectedDish.value = dish;
@@ -350,17 +356,85 @@ const openQuantityModal = (dish: Dish, existingVariantId?: number) => {
   checkDishAvailability();
 };
 
-const addDishToOrder = () => {
+const addDishToOrder = async () => {
   if (!selectedDish.value || modalQuantity.value < 1) return;
 
-  // Check if quantity exceeds max available
-  if (maxAvailableQuantity.value !== null && modalQuantity.value > maxAvailableQuantity.value) {
-    availabilityError.value = `Only ${maxAvailableQuantity.value} available today`;
-    if (limitingIngredient.value && limitingIngredient.value !== 'Menu plan limit reached') {
-      availabilityError.value += ` (${limitingIngredient.value})`;
+  console.log('Adding dish to order:', {
+    dish_name: selectedDish.value.dish_name,
+    requested_quantity: modalQuantity.value,
+    max_available: maxAvailableQuantity.value,
+    limiting_ingredient: limitingIngredient.value
+  });
+
+  // ALWAYS perform a final availability check before adding (don't rely on debounced check)
+  // This ensures we catch cases where user clicks Add before debounce completes
+  console.log('Performing final availability check before adding to cart...');
+  availabilityCheckInProgress.value = true;
+
+  try {
+    const response = await fetch(route('waiter.dishes.check-availability'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+      },
+      body: JSON.stringify({
+        dish_id: selectedDish.value.dish_id,
+        variant_id: selectedVariant.value?.variant_id,
+        requested_quantity: modalQuantity.value,
+        cart_items: orderItems.value.map(item => ({
+          dish_id: item.dish_id,
+          variant_id: item.variant_id,
+          quantity: item.quantity,
+          excluded_ingredients: item.excluded_ingredients || [],
+        })),
+      }),
+    });
+
+    const data = await response.json();
+
+    console.log('Final availability check result:', data);
+
+    if (!data.success || !data.available) {
+      // Show prominent alert dialog
+      const dishName = selectedDish.value.dish_name;
+      console.log('Cannot add - exceeds available quantity. Showing alert.');
+
+      if (data.max_quantity === 0) {
+        availabilityAlertMessage.value = `"${dishName}" is not available today.\n\n${data.limiting_ingredient || 'Not in menu plan for today.'}`;
+      } else {
+        availabilityAlertMessage.value = `Cannot add "${dishName}" to order!\n\nRequested: ${modalQuantity.value}\nAvailable: ${data.max_quantity}\n\nPlease reduce the quantity.`;
+        if (data.limiting_ingredient && data.limiting_ingredient !== 'Menu plan limit reached') {
+          availabilityAlertMessage.value += `\n\nReason: ${data.limiting_ingredient}`;
+        }
+      }
+
+      showAvailabilityAlert.value = true;
+
+      // Also set inline error for visibility in modal
+      availabilityError.value = `Only ${data.max_quantity} available today`;
+      if (data.limiting_ingredient && data.limiting_ingredient !== 'Menu plan limit reached') {
+        availabilityError.value += ` (${data.limiting_ingredient})`;
+      }
+
+      availabilityCheckInProgress.value = false;
+      return;
     }
+
+    // Update the maxAvailableQuantity with the latest check
+    maxAvailableQuantity.value = data.max_quantity;
+    limitingIngredient.value = data.limiting_ingredient;
+
+  } catch (error) {
+    console.error('Error checking availability before adding:', error);
+    availabilityAlertMessage.value = 'Failed to check availability. Please try again.';
+    showAvailabilityAlert.value = true;
+    availabilityCheckInProgress.value = false;
     return;
   }
+
+  availabilityCheckInProgress.value = false;
+  console.log('Quantity check passed, adding to cart...');
 
   // Find existing item with same dish_id AND variant_id (size)
   // Use undefined to match the OrderItem interface type
@@ -521,9 +595,11 @@ const increaseCartQuantity = async (dishId: number, variantId?: number) => {
     } else {
       // Show modal with availability message
       const dishName = item.dish.dish_name;
-      availabilityAlertMessage.value = data.max_quantity === 0
-        ? `${dishName} is not available - menu plan limit reached for today`
-        : `${dishName} can only have maximum of ${data.max_quantity} order${data.max_quantity !== 1 ? 's' : ''} today (${data.planned_quantity} planned, ${data.already_ordered} already ordered)`;
+      if (data.max_quantity === 0) {
+        availabilityAlertMessage.value = `"${dishName}" is not available today.\n\nMenu plan limit reached for today.`;
+      } else {
+        availabilityAlertMessage.value = `"${dishName}" cannot be increased further!\n\nCurrent in cart: ${item.quantity}\nMaximum available: ${data.max_quantity}\n\nPlanned for today: ${data.planned_quantity}\nAlready ordered: ${data.already_ordered}`;
+      }
       showAvailabilityAlert.value = true;
     }
   } catch (error) {
@@ -533,7 +609,78 @@ const increaseCartQuantity = async (dishId: number, variantId?: number) => {
   }
 };
 
-const submitOrder = () => {
+const submitOrder = async () => {
+  console.log('Submit order - validating cart items before submission...');
+
+  // Validate all items in cart before submitting
+  for (const item of orderItems.value) {
+    try {
+      console.log('Validating item:', {
+        dish_name: item.dish.dish_name,
+        dish_id: item.dish_id,
+        quantity: item.quantity
+      });
+
+      const response = await fetch(route('waiter.dishes.check-availability'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+        body: JSON.stringify({
+          dish_id: item.dish_id,
+          variant_id: item.variant_id,
+          requested_quantity: item.quantity,
+          cart_items: orderItems.value
+            .filter(cartItem =>
+              // Exclude current item from cart to avoid double-counting
+              !(cartItem.dish_id === item.dish_id &&
+                (cartItem.variant_id ?? undefined) === (item.variant_id ?? undefined))
+            )
+            .map(cartItem => ({
+              dish_id: cartItem.dish_id,
+              variant_id: cartItem.variant_id,
+              quantity: cartItem.quantity,
+              excluded_ingredients: cartItem.excluded_ingredients || [],
+            })),
+        }),
+      });
+
+      const data = await response.json();
+
+      console.log('Validation result:', {
+        dish_name: item.dish.dish_name,
+        success: data.success,
+        available: data.available,
+        max_quantity: data.max_quantity,
+        requested: item.quantity
+      });
+
+      if (!data.success || !data.available) {
+        // Show alert for exceeded quantity
+        const dishName = item.dish.dish_name;
+        console.log('Order blocked - showing alert for:', dishName);
+
+        if (data.max_quantity === 0) {
+          availabilityAlertMessage.value = `"${dishName}" is not available today and cannot be ordered.\n\nPlease remove it from your cart before submitting.`;
+        } else {
+          availabilityAlertMessage.value = `"${dishName}" exceeds available quantity!\n\nRequested: ${item.quantity}\nAvailable: ${data.max_quantity}\n\nPlease adjust the quantity in your cart before submitting.`;
+        }
+        showAvailabilityAlert.value = true;
+        console.log('Alert shown, submission stopped');
+        return; // Stop submission
+      }
+    } catch (error) {
+      console.error('Error validating cart item:', error);
+      availabilityAlertMessage.value = 'Failed to validate order availability. Please try again.';
+      showAvailabilityAlert.value = true;
+      return; // Stop submission
+    }
+  }
+
+  console.log('All items validated successfully, proceeding with submission...');
+
+  // All items validated, proceed with submission
   // Transform order items to form-compatible format
   orderForm.order_items = orderItems.value.map(item => ({
     dish_id: item.dish_id,
@@ -1180,7 +1327,7 @@ const getAllergenBadgeColor = (allergen: string) => {
           </DialogTitle>
         </DialogHeader>
         <div class="py-4">
-          <p class="text-sm text-muted-foreground">{{ availabilityAlertMessage }}</p>
+          <p class="text-sm text-muted-foreground whitespace-pre-line">{{ availabilityAlertMessage }}</p>
         </div>
         <DialogFooter>
           <Button @click="showAvailabilityAlert = false" class="w-full">
