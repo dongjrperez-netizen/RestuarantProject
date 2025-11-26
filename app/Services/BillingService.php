@@ -366,8 +366,11 @@ class BillingService
         $taxRate = $options['tax_rate'] ?? 12; // Default VAT in Philippines
 
         $subtotalAfterDiscount = $subtotal - $discountAmount;
+        // Calculate tax (VAT) but do NOT add it to the supplier payable amount.
+        // VAT is reported separately in `tax_amount` but supplier `total_amount`
+        // represents the amount payable to the supplier (subtotal after discounts).
         $taxAmount = ($subtotalAfterDiscount * $taxRate) / 100;
-        $totalAmount = $subtotalAfterDiscount + $taxAmount;
+        $totalAmount = $subtotalAfterDiscount;
 
         return [
             'subtotal' => $subtotal,

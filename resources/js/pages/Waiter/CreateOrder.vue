@@ -264,26 +264,24 @@ const checkDishAvailability = async () => {
       maxAvailableQuantity.value = data.max_quantity;
       limitingIngredient.value = data.limiting_ingredient;
 
-      // Auto-adjust quantity if it exceeds max available
+      // Check if quantity exceeds limit - NO AUTO-ADJUST
       if (modalQuantity.value > data.max_quantity) {
-        if (data.max_quantity > 0) {
-          modalQuantity.value = data.max_quantity;
+        availabilityError.value = `Maximum available: ${data.max_quantity}`;
+        if (data.limiting_ingredient && data.limiting_ingredient !== 'Menu plan limit reached') {
+          availabilityError.value += ` (${data.limiting_ingredient})`;
         }
-      }
-
-      if (!data.available || data.max_quantity === 0) {
-        availabilityError.value = data.max_quantity === 0
-          ? 'Not available - menu plan limit reached for today'
-          : `Only ${data.max_quantity} available today (${data.planned_quantity} planned, ${data.already_ordered} already ordered)`;
+      } else {
+        // Clear error if quantity is OK
+        availabilityError.value = null;
       }
     } else {
       availabilityError.value = data.message || 'Failed to check availability';
-      maxAvailableQuantity.value = 0; // Prevent ordering when check fails
+      maxAvailableQuantity.value = 0;
     }
   } catch (error) {
     console.error('Error checking availability:', error);
     availabilityError.value = 'Failed to check availability - please try again';
-    maxAvailableQuantity.value = 0; // Prevent ordering when check fails
+    maxAvailableQuantity.value = 0;
   } finally {
     availabilityCheckInProgress.value = false;
   }
@@ -1139,7 +1137,7 @@ const getAllergenBadgeColor = (allergen: string) => {
           </Button>
           <Button
             @click="addDishToOrder"
-            :disabled="availabilityCheckInProgress || (maxAvailableQuantity !== null && maxAvailableQuantity === 0)"
+            :disabled="availabilityCheckInProgress || availabilityError !== null"
           >
             {{ availabilityCheckInProgress ? 'Checking...' : 'Add to Order' }}
           </Button>

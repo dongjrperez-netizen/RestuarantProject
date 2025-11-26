@@ -61,12 +61,12 @@ class PurchaseOrderController extends Controller
         // Apply status filter
         if ($statusFilter && $statusFilter !== 'all') {
             if ($statusFilter === 'default') {
-                // Default: show early workflow states (draft/pending/sent/confirmed)
+                // Default: show early workflow states plus partial deliveries
                 // plus any supplier-delivered orders awaiting owner receive
                 $query->where(function ($q) {
-                    $q->whereIn('status', ['draft', 'pending', 'sent', 'confirmed'])
+                    $q->whereIn('status', ['draft', 'pending', 'sent', 'confirmed', 'partially_delivered'])
                         ->orWhere(function ($q2) {
-                            $q2->whereIn('status', ['partially_delivered', 'delivered'])
+                            $q2->whereIn('status', ['delivered'])
                                 ->whereNull('received_by');
                         });
                 });
@@ -763,13 +763,26 @@ class PurchaseOrderController extends Controller
                 $item = PurchaseOrderItem::find($itemData['purchase_order_item_id']);
                 $newReceivedQuantity = $item->received_quantity + $itemData['received_quantity'];
 
-                // Calculate total price for this item (received_quantity × unit_price)
-                $itemTotalPrice = $newReceivedQuantity * $itemData['unit_price'];
+                // Calculate new total price representing value of items RECEIVED so far.
+                // We treat the stored `total_price` as the cumulative received value only when
+                // `received_quantity` is already > 0. If no quantity has been received yet,
+                // we must NOT treat the existing `total_price` (which was the ordered total)
+                // as already-received value.
+                $existingReceivedQty = $item->received_quantity;
+                $existingReceivedValue = $existingReceivedQty > 0 ? ($item->total_price ?? 0) : 0;
+
+                $addedValue = ($itemData['received_quantity'] > 0) ? ($itemData['received_quantity'] * $itemData['unit_price']) : 0;
+
+                $newItemTotalPrice = $existingReceivedValue + $addedValue;
+
+                // For bookkeeping, keep `unit_price` as the latest batch price when receiving new qty,
+                // otherwise preserve existing unit_price.
+                $unitPriceToUse = $itemData['received_quantity'] > 0 ? $itemData['unit_price'] : $item->unit_price;
 
                 $item->update([
                     'received_quantity' => $newReceivedQuantity,
-                    'unit_price' => $itemData['unit_price'],
-                    'total_price' => $itemTotalPrice,
+                    'unit_price' => $unitPriceToUse,
+                    'total_price' => $newItemTotalPrice,
                 ]);
 
                 if ($newReceivedQuantity < $item->ordered_quantity) {

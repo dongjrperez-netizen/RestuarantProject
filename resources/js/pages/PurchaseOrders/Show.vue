@@ -52,16 +52,13 @@ interface PurchaseOrder {
     name: string;
   } | null;
   supplier?: {
-    phone?: string;
-    email?: string;
+    supplier_id?: number;
+    supplier_name?: string;
+    contact_person?: string | null;
+    phone?: string | null;
+    email?: string | null;
   } | null;
   items: PurchaseOrderItem[];
-  created_by?: {
-    name: string;
-  };
-  approved_by?: {
-    name: string;
-  };
   bill?: {
     payments: any[];
   };
@@ -295,6 +292,7 @@ const canReceiveDelivery = computed(() => {
                 <TableHead class="min-w-[280px]">Ingredient</TableHead>
                 <TableHead class="min-w-[100px]">Ordered Qty</TableHead>
                 <TableHead class="min-w-[100px]">Received Qty</TableHead>
+                <TableHead class="min-w-[120px]">Unit Price</TableHead>
                 <TableHead class="min-w-[100px]">Base Unit</TableHead>
               </TableRow>
             </TableHeader>
@@ -312,7 +310,7 @@ const canReceiveDelivery = computed(() => {
                       <span>
                         {{ item.received_quantity > 0
                           ? item.received_quantity
-                          : (item.supplier_delivered_quantity ?? 0)
+                          : '0'
                         }}
                       </span>
                       <Badge
@@ -332,6 +330,10 @@ const canReceiveDelivery = computed(() => {
                     </div>
                   </div>
                 </TableCell>
+                <TableCell>
+                  {{ formatCurrency(item.unit_price) }}
+                </TableCell>
+
                 <TableCell>
                   <span class="text-sm text-muted-foreground">{{ item.ingredient.base_unit }}</span>
                 </TableCell>

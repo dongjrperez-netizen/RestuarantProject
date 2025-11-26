@@ -69,37 +69,17 @@ const handleSearch = () => {
 
 const getStatusBadge = (order: PurchaseOrder): { variant: BadgeVariant; label: string } => {
   const status = order.status;
-  const receivedBy = order.received_by;
-
-  // Derived statuses for supplier vs owner actions
-  if (status === 'partially_delivered') {
-    if (!receivedBy) {
-      return { variant: 'warning' as BadgeVariant, label: 'Supplier Partial  Awaiting Receive' };
-    }
-    return { variant: 'default' as BadgeVariant, label: 'Partially Received (Owner)' };
-  }
-
-  if (status === 'delivered') {
-    if (!receivedBy) {
-      return { variant: 'warning' as BadgeVariant, label: 'Supplier Delivered  Awaiting Receive' };
-    }
-    return { variant: 'success' as BadgeVariant, label: 'Completed (Owner)' };
-  }
 
   const statusConfig: Record<string, { variant: BadgeVariant; label: string }> = {
     draft: { variant: 'secondary', label: 'Draft' },
     pending: { variant: 'default', label: 'Pending' },
-    sent: { variant: 'default', label: 'Sent' },
     confirmed: { variant: 'default', label: 'Confirmed' },
+    partially_delivered: { variant: 'warning', label: 'Partially Delivered' },
+    delivered: { variant: 'success', label: 'Delivered' },
     cancelled: { variant: 'destructive', label: 'Cancelled' },
   };
 
-  return (
-    statusConfig[status] ?? {
-      variant: 'secondary' as BadgeVariant,
-      label: status,
-    }
-  );
+  return statusConfig[status] ?? { variant: 'secondary', label: status };
 };
 
 const formatDate = (dateString: string) => {
@@ -149,7 +129,7 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
           <CardContent class="p-4">
             <div class="text-sm font-medium text-muted-foreground mb-1">Pending</div>
             <div class="text-2xl font-bold text-orange-600">
-              {{ purchaseOrders.filter(po => ['draft', 'pending', 'sent'].includes(po.status)).length }}
+              {{ purchaseOrders.filter(po => ['draft', 'pending'].includes(po.status)).length }}
             </div>
           </CardContent>
         </Card>
@@ -197,9 +177,8 @@ const getTotalItems = (items: PurchaseOrderItem[]) => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="default">Default (Pending, Draft, Sent, Confirmed, Awaiting Receive)</SelectItem>
+                  <SelectItem value="default">Default (Pending, Draft, Confirmed)</SelectItem>
                   <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="sent">Sent</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="confirmed">Confirmed</SelectItem>
                   <SelectItem value="partially_delivered">Partially Delivered</SelectItem>

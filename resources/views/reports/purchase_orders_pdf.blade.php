@@ -165,7 +165,7 @@
         </div>
         <div class="summary-row">
             <div class="summary-label">Total Amount</div>
-            <div class="summary-value">₱{{ number_format($data['summary']['total_amount'], 2) }}</div>
+            <div class="summary-value">PHP {{ number_format($data['summary']['total_amount'], 2) }}</div>
         </div>
         <div class="summary-row">
             <div class="summary-label">Pending Orders</div>
@@ -245,7 +245,7 @@
                     <td>
                         <span class="badge badge-{{ $order->status }}">{{ ucfirst($order->status) }}</span>
                     </td>
-                    <td class="text-right">₱{{ number_format($order->total_amount, 2) }}</td>
+                    <td class="text-right">PHP {{ number_format($order->total_amount, 2) }}</td>
                     <td>{{ $order->expected_delivery_date ? date('M d, Y', strtotime($order->expected_delivery_date)) : 'N/A' }}</td>
                 </tr>
                 @if($order->items && $order->items->filter(fn($item) => $item->received_quantity > 0)->count() > 0)
@@ -298,7 +298,7 @@
                     <td>{{ $order->order_number }}</td>
                     <td>{{ $pendingSupplierName }}</td>
                     <td>{{ $order->created_at->format('M d, Y') }}</td>
-                    <td class="text-right">₱{{ number_format($order->total_amount, 2) }}</td>
+                    <td class="text-right">PHP {{ number_format($order->total_amount, 2) }}</td>
                     <td class="text-center">{{ $order->created_at->diffInDays(now()) }} days</td>
                 </tr>
                 @endforeach

@@ -92,13 +92,23 @@ const calculateDropdownPosition = (inputElement: HTMLElement) => {
   const dropdownMaxHeight = 240; // max-h-60 = 240px
   const spaceBelow = window.innerHeight - rect.bottom;
   const spaceAbove = rect.top;
+
+  // If there's not enough space below but there is above, show above.
+  // We keep coordinates relative to the viewport because dropdowns are rendered
+  // with `position: fixed` via Teleport. Do NOT add scroll offsets here.
   const showAbove = spaceBelow < dropdownMaxHeight && spaceAbove > spaceBelow;
 
+  // Use rect.bottom for the dropdown top when showing below, and rect.top when
+  // showing above. The template applies `translateY(-100%)` when `showAbove`
+  // is true so we don't need to subtract dropdown height here.
+  const top = showAbove ? rect.top : rect.bottom;
+  const left = Math.max(0, rect.left);
+
   return {
-    top: showAbove ? rect.top + window.scrollY : rect.bottom + window.scrollY,
-    left: rect.left + window.scrollX,
+    top,
+    left,
     width: rect.width,
-    showAbove: showAbove
+    showAbove
   };
 };
 
@@ -183,6 +193,21 @@ const selectIngredient = (itemIndex: number, ingredient: Ingredient) => {
   item.showDropdown = false;
 };
 
+// Add ingredient to the last row (used by the right-side lookup table)
+const addIngredientToLast = (ingredient: Ingredient) => {
+  const items = orderItems.value;
+  const last = items[items.length - 1];
+  if (last && last.ingredient_id) {
+    addOrderItem();
+  }
+
+  const idx = orderItems.value.length - 1;
+  orderItems.value[idx].ingredient_id = ingredient.ingredient_id;
+  orderItems.value[idx].ingredient_name = ingredient.ingredient_name;
+  orderItems.value[idx].unit_of_measure = ingredient.base_unit;
+  orderItems.value[idx].unit_price = ingredient.cost_per_unit;
+};
+
 const getSelectedIngredient = (itemIndex: number) => {
   const item = orderItems.value[itemIndex];
   if (!item.ingredient_id) return null;
@@ -194,6 +219,18 @@ const getSelectedIngredient = (itemIndex: number) => {
 const formatCurrency = (amount: number) => {
   return `₱${Number(amount).toLocaleString()}`;
 };
+
+// Ingredients lookup scrolling
+const ingredientsListRef = ref<HTMLElement | null>(null);
+
+const scrollIngredients = (amount: number) => {
+  const el = ingredientsListRef.value;
+  if (!el) return;
+  el.scrollBy({ top: amount, behavior: 'smooth' });
+};
+
+const scrollUpIngredients = () => scrollIngredients(-120);
+const scrollDownIngredients = () => scrollIngredients(120);
 
 const initiateNewSupplier = () => {
   newSupplierData.value.supplier_name = form.supplier_name;
@@ -343,9 +380,6 @@ const closeSupplierDropdown = () => {
 
         <!-- Basic Information -->
         <Card>
-          <CardHeader>
-            <CardTitle>Order Information</CardTitle>
-          </CardHeader>
           <CardContent class="space-y-6">
             <div class="space-y-2">
               <Label for="supplier">Supplier *</Label>
@@ -467,104 +501,155 @@ const closeSupplierDropdown = () => {
           </CardContent>
         </Card>
 
-        <!-- Order Items Card -->
-        <Card>
-          <CardHeader>
-            <CardTitle>Order Items</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="space-y-4">
-              <div class="flex items-center justify-between">
-                <Button
-                  type="button"
-                  @click="addOrderItem"
-                  variant="outline"
-                  size="sm"
-                >
-                  <Plus class="w-4 h-4 mr-2" />
-                  Add Item
-                </Button>
-              </div>
+        <!-- Order Items Card with Ingredients Lookup -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Left: Order Items (2 columns) -->
+          <Card class="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Order Items</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <Button
+                    type="button"
+                    @click="addOrderItem"
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Plus class="w-4 h-4 mr-2" />
+                    Add Item
+                  </Button>
+                </div>
 
-              <div class="overflow-x-auto">
-                <Table>
+                <div class="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead class="min-w-[280px]">Ingredient</TableHead>
+                        <TableHead class="min-w-[100px]">Quantity</TableHead>
+                        <TableHead class="min-w-[100px]">Base Unit</TableHead>
+                        <TableHead class="w-12"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                  <TableBody>
+                    <TableRow v-for="(item, index) in orderItems" :key="index">
+                      <TableCell>
+                        <div class="space-y-1">
+                          <!-- Autocomplete Input -->
+                          <Input
+                            v-model="orderItems[index].ingredient_name"
+                            @input="(e: Event) => onIngredientInput(index, e)"
+                            @focus="(e: Event) => onIngredientFocus(index, e)"
+                            @blur="closeDropdown(index)"
+                            placeholder="Type ingredient name..."
+                            class="min-w-[250px]"
+                          />
+                          <div
+                            v-if="(form.errors as any)[`items.${index}.ingredient_id`]"
+                            class="text-xs text-red-600"
+                          >
+                            {{ (form.errors as any)[`items.${index}.ingredient_id`] }}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div class="space-y-1">
+                          <Input
+                            v-model.number="item.ordered_quantity"
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            placeholder="0"
+                            class="min-w-[90px]"
+                          />
+                          <!-- Backend validation error for this row -->
+                          <div
+                            v-if="(form.errors as any)[`items.${index}.ordered_quantity`]"
+                            class="text-xs text-red-600"
+                          >
+                            {{ (form.errors as any)[`items.${index}.ordered_quantity`] }}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span v-if="getSelectedIngredient(index)" class="text-sm text-muted-foreground">
+                          {{ getSelectedIngredient(index)?.base_unit || '-' }}
+                        </span>
+                        <span v-else class="text-sm text-muted-foreground">-</span>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          type="button"
+                          @click="removeOrderItem(index)"
+                          variant="ghost"
+                          size="sm"
+                          :disabled="orderItems.length === 1"
+                          class="h-8 w-8 p-0"
+                        >
+                          <Trash2 class="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+                
+                <div v-if="(form.errors as any).items" class="text-sm text-red-600">
+                  {{ (form.errors as any).items }}
+                </div>
+              </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <!-- Right: Ingredients Lookup Table -->
+          <Card class="lg:col-span-1">
+            <CardHeader>
+                <div class="flex items-center justify-between w-full">
+                  <CardTitle class="text-base">Available Ingredients</CardTitle>
+                  <div class="flex items-center space-x-2">
+                    <Button type="button" size="sm" variant="outline" @click="scrollUpIngredients" aria-label="Scroll up">
+                      ▲
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" @click="scrollDownIngredients" aria-label="Scroll down">
+                      ▼
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div ref="ingredientsListRef" class="overflow-auto max-h-96">
+                <Table class="text-xs">
                   <TableHeader>
                     <TableRow>
-                      <TableHead class="min-w-[280px]">Ingredient</TableHead>
-                      <TableHead class="min-w-[100px]">Quantity</TableHead>
-                      <TableHead class="min-w-[100px]">Base Unit</TableHead>
-                      <TableHead class="w-12"></TableHead>
+                      <TableHead class="text-xs">Ingredient</TableHead>
+                      <TableHead class="text-xs text-right">Stock</TableHead>
                     </TableRow>
                   </TableHeader>
-                <TableBody>
-                  <TableRow v-for="(item, index) in orderItems" :key="index">
-                    <TableCell>
-                      <div class="space-y-1">
-                        <!-- Autocomplete Input -->
-                        <Input
-                          v-model="orderItems[index].ingredient_name"
-                          @input="(e: Event) => onIngredientInput(index, e)"
-                          @focus="(e: Event) => onIngredientFocus(index, e)"
-                          @blur="closeDropdown(index)"
-                          placeholder="Type ingredient name..."
-                          class="min-w-[250px]"
-                        />
-                        <div
-                          v-if="(form.errors as any)[`items.${index}.ingredient_id`]"
-                          class="text-xs text-red-600"
+                  <TableBody>
+                    <TableRow v-for="ingredient in props.ingredients" :key="ingredient.ingredient_id">
+                      <TableCell class="text-xs py-2">
+                        <button
+                          type="button"
+                          @click="addIngredientToLast(ingredient)"
+                          class="hover:text-blue-600 cursor-pointer truncate text-left w-full"
+                          :title="ingredient.ingredient_name"
                         >
-                          {{ (form.errors as any)[`items.${index}.ingredient_id`] }}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div class="space-y-1">
-                        <Input
-                          v-model.number="item.ordered_quantity"
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          placeholder="0"
-                          class="min-w-[90px]"
-                        />
-                        <!-- Backend validation error for this row -->
-                        <div
-                          v-if="(form.errors as any)[`items.${index}.ordered_quantity`]"
-                          class="text-xs text-red-600"
-                        >
-                          {{ (form.errors as any)[`items.${index}.ordered_quantity`] }}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span v-if="getSelectedIngredient(index)" class="text-sm text-muted-foreground">
-                        {{ getSelectedIngredient(index)?.base_unit || '-' }}
-                      </span>
-                      <span v-else class="text-sm text-muted-foreground">-</span>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        @click="removeOrderItem(index)"
-                        variant="ghost"
-                        size="sm"
-                        :disabled="orderItems.length === 1"
-                        class="h-8 w-8 p-0"
-                      >
-                        <Trash2 class="w-4 h-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              
-              <div v-if="(form.errors as any).items" class="text-sm text-red-600">
-                {{ (form.errors as any).items }}
+                          {{ ingredient.ingredient_name }}
+                        </button>
+                      </TableCell>
+                      <TableCell class="text-xs py-2 text-right">
+                        <span :class="ingredient.current_stock > 0 ? 'text-green-600' : 'text-red-600'">
+                          {{ ingredient.current_stock }}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
-            </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
 
         <!-- Action Buttons -->
         <div class="flex space-x-4">

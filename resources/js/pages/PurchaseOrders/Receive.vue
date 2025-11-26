@@ -65,9 +65,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 const receiveItems = ref<ReceiveItem[]>(
   props.purchaseOrder.items.map(item => ({
     purchase_order_item_id: item.purchase_order_item_id,
-    // Pre-fill with supplier-delivered quantity minus already received, so owner can confirm
-    received_quantity: Math.max((item.supplier_delivered_quantity ?? 0) - item.received_quantity, 0),
-    unit_price: 0 // Default to 0, user must enter price
+    // Start with 0 - let user decide how much to receive
+    received_quantity: 0,
+    // Auto-fill with previous price if this is a partial receive, otherwise 0
+    unit_price: item.received_quantity > 0 ? item.unit_price : 0
   }))
 );
 
@@ -107,7 +108,8 @@ const setFullQuantity = (index: number) => {
 
 const setAllFullQuantities = () => {
   props.purchaseOrder.items.forEach((item, index) => {
-    receiveItems.value[index].received_quantity = getRemainingQuantity(item);
+    // Receive full remaining quantity to complete the order, not just supplier's delivered amount
+    receiveItems.value[index].received_quantity = item.ordered_quantity - item.received_quantity;
   });
 };
 
@@ -128,13 +130,16 @@ const getTotalReceiving = () => {
 };
 
 const getReceiveStatus = (item: PurchaseOrderItem, receiveQuantity: number): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' } => {
-  const totalAfterReceive = item.received_quantity + receiveQuantity;
-  const ordered = item.ordered_quantity;
+  const totalAfterReceive = Number(item.received_quantity) + Number(receiveQuantity);
+  const ordered = Number(item.ordered_quantity);
+  const tolerance = 0.01; // Allow small floating-point differences
 
+  // Show status based on what WILL BE received after this action
   if (totalAfterReceive === 0) return { label: 'Not Received', variant: 'secondary' };
-  if (totalAfterReceive < ordered) return { label: 'Partial', variant: 'warning' };
-  if (totalAfterReceive === ordered) return { label: 'Complete', variant: 'success' };
-  return { label: 'Over Received', variant: 'destructive' };
+  if (Math.abs(totalAfterReceive - ordered) < tolerance) return { label: 'Will be Complete', variant: 'success' };
+  if (totalAfterReceive > 0 && totalAfterReceive < ordered) return { label: 'Will be Partial', variant: 'warning' };
+  if (totalAfterReceive > ordered) return { label: 'Over Received', variant: 'destructive' };
+  return { label: 'Not Received', variant: 'secondary' };
 };
 
 const calculateItemTotal = (index: number): number => {
@@ -146,12 +151,14 @@ const validationError = ref<string>('');
 
 const submit = () => {
   // Validate that all items with quantity > 0 have price > 0
-  const itemsWithoutPrice = receiveItems.value.filter(
-    (item, index) => item.received_quantity > 0 && item.unit_price <= 0
-  );
+  const itemsWithoutPrice = receiveItems.value.filter((item, index) => {
+    const poItem = props.purchaseOrder.items[index];
+    // Allow if: item has price OR item is partial receive with existing price
+    return item.received_quantity > 0 && item.unit_price <= 0 && poItem.received_quantity === 0;
+  });
 
   if (itemsWithoutPrice.length > 0) {
-    validationError.value = 'Please enter a price for all items being received. Price must be greater than 0.';
+    validationError.value = 'Please enter a price for all new items being received. Price must be greater than 0.';
     // Scroll to top to show error
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
@@ -272,9 +279,17 @@ const submit = () => {
                       step="0.01"
                       min="0.01"
                       placeholder="0"
-                      :class="{ 'border-red-500': receiveItems[index].received_quantity > 0 && receiveItems[index].unit_price <= 0 }"
+                      :disabled="item.received_quantity > 0"
+                      :class="{
+                        'border-red-500': receiveItems[index].received_quantity > 0 && receiveItems[index].unit_price <= 0 && item.received_quantity === 0,
+                        'opacity-60 cursor-not-allowed': item.received_quantity > 0
+                      }"
+                      :title="item.received_quantity > 0 ? 'Price locked from previous receive' : ''"
                     />
-                    <p v-if="receiveItems[index].received_quantity > 0 && receiveItems[index].unit_price <= 0" class="text-xs text-red-600">
+                    <p v-if="item.received_quantity > 0 && receiveItems[index].unit_price > 0" class="text-xs text-green-600">
+                      ✓ Using previous price
+                    </p>
+                    <p v-else-if="receiveItems[index].received_quantity > 0 && receiveItems[index].unit_price <= 0 && item.received_quantity === 0" class="text-xs text-red-600">
                       Price is required and must be greater than 0
                     </p>
                   </div>

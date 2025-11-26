@@ -471,12 +471,24 @@ class ReportsController extends Controller
             if ($order->status === 'delivered') {
                 $order->status = 'received';
             }
+
+            // Recalculate a reliable report total from the items' total_price.
+            // This ensures partial receives and differing unit prices are accurately reflected.
+            $itemsTotal = 0;
+            if ($order->relationLoaded('items') && $order->items) {
+                $itemsTotal = $order->items->sum('total_price');
+            }
+
+            // Fallback to stored total_amount if items total is zero (e.g., not yet received)
+            $order->report_total_amount = $itemsTotal > 0 ? $itemsTotal : ($order->total_amount ?? 0);
+
             return $order;
         });
 
         $summary = [
             'total_orders' => $orders->count(),
-            'total_amount' => $orders->sum('total_amount'),
+            // Use the recalculated report_total_amount for accurate totals
+            'total_amount' => $orders->sum(function($o) { return $o->report_total_amount ?? 0; }),
             'pending_orders' => $orders->where('status', 'pending')->count(),
             'completed_orders' => $orders->whereIn('status', ['received', 'delivered'])->count(),
         ];

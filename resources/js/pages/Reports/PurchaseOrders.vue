@@ -38,6 +38,8 @@ interface PurchaseOrder {
   order_number: string;
   status: 'pending' | 'approved' | 'ordered' | 'received' | 'cancelled';
   total_amount: number;
+  // report_total_amount is calculated on the server to reflect items' total_price (partial receives)
+  report_total_amount?: number;
   created_at: string;
   expected_delivery_date?: string;
   supplier?: {
@@ -162,6 +164,11 @@ const exportReport = (format: string | number | bigint | null) => {
   window.open(`/reports/purchase-orders?${params.toString()}`);
 };
 
+// Wrapper to adapt the Select's emitted value to the expected types for exportReport
+const handleExportSelect = (value: any) => {
+  exportReport(value as string | number | bigint | null);
+};
+
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'pending':
@@ -274,7 +281,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
             <Filter class="w-4 h-4 mr-2" />
             Filters
           </Button>
-          <Select @update:model-value="(value: string | number | bigint | null) => exportReport(value)">
+          <Select @update:model-value="handleExportSelect">
             <SelectTrigger class="w-32">
               <SelectValue placeholder="Export" />
             </SelectTrigger>
@@ -462,7 +469,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
                 </p>
               </div>
               <div class="text-right">
-                <p class="font-medium">{{ formatCurrency(order.total_amount) }}</p>
+                <p class="font-medium">{{ formatCurrency(order.report_total_amount ?? order.total_amount) }}</p>
                 <Badge variant="secondary" class="bg-yellow-100 text-yellow-800">
                   {{ Math.floor((new Date().getTime() - new Date(order.created_at).getTime()) / (1000 * 60 * 60 * 24)) }} days
                 </Badge>
@@ -509,7 +516,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
                       {{ order.status }}
                     </Badge>
                   </td>
-                  <td class="p-3 text-xs">{{ formatCurrency(order.total_amount) }}</td>
+                  <td class="p-3 text-xs">{{ formatCurrency(order.report_total_amount ?? order.total_amount) }}</td>
                   <td class="p-3 text-[11px] text-muted-foreground">
                     {{ getReceivedItems(order) }}
                   </td>
@@ -557,7 +564,7 @@ const getReceivedItems = (order: PurchaseOrder) => {
                       {{ order.status }}
                     </Badge>
                   </td>
-                  <td class="p-3 text-xs">{{ formatCurrency(order.total_amount) }}</td>
+                  <td class="p-3 text-xs">{{ formatCurrency(order.report_total_amount ?? order.total_amount) }}</td>
                   <td class="p-3 text-[11px] text-muted-foreground">
                     {{ getReceivedItems(order) }}
                   </td>

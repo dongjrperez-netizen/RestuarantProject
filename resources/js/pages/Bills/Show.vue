@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { type BreadcrumbItem } from '@/types';
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed } from 'vue';
 
 
 interface Payment {
@@ -120,6 +120,16 @@ const formatDate = (dateString: string) => {
     day: 'numeric',
   });
 };
+
+// Display subtotal as total_amount minus tax_amount so the breakdown reads:
+// Subtotal (base) + Tax = Total (supplier payable)
+const displaySubtotal = computed(() => {
+  const total = Number(bill.total_amount ?? 0);
+  const tax = Number(bill.tax_amount ?? 0);
+  // Prevent negative values and round to 2 decimals
+  const base = Math.max(0, total - tax);
+  return Math.round((base + Number.EPSILON) * 100) / 100;
+});
 
 const formatStatus = (status: string) => {
   return status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -672,7 +682,7 @@ const payFullAmountPaypal = () => {
           <div class="space-y-3">
             <div class="flex justify-between">
               <span>Subtotal</span>
-              <span>{{ formatCurrency(bill.subtotal) }}</span>
+              <span>{{ formatCurrency(displaySubtotal) }}</span>
             </div>
             <div v-if="bill.discount_amount > 0" class="flex justify-between text-green-600">
               <span>Discount</span>
