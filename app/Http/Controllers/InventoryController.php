@@ -482,16 +482,32 @@ class InventoryController extends Controller
     public function updateIngredient(Request $request, $ingredientId)
     {
         try {
+            // Get user and restaurant context first so we can validate uniqueness per restaurant
+            $user = auth()->user();
+            $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
+
             $request->validate([
+                'ingredient_name' => [
+                    'required',
+                    'string',
+                    'max:150',
+                    function ($attribute, $value, $fail) use ($restaurantId, $ingredientId) {
+                        if (! $restaurantId) return;
+                        $exists = \App\Models\Ingredients::where('restaurant_id', $restaurantId)
+                            ->whereRaw('LOWER(ingredient_name) = ?', [strtolower($value)])
+                            ->where('ingredient_id', '!=', $ingredientId)
+                            ->exists();
+
+                        if ($exists) {
+                            $fail('This ingredient name is already used in your inventory.');
+                        }
+                    },
+                ],
                 'reorder_level' => 'required|numeric|min:0',
                 'base_unit' => 'required|string|max:20',
             ]);
 
             $ingredient = \App\Models\Ingredients::findOrFail($ingredientId);
-
-            // Check if ingredient belongs to user's restaurant
-            $user = auth()->user();
-            $restaurantId = $user->restaurantData ? $user->restaurantData->id : null;
 
             // Restaurant authorization check
             // For now, we'll allow editing if user has no restaurant_id (likely admin/development)
@@ -506,9 +522,11 @@ class InventoryController extends Controller
                 return back()->withErrors('You can only edit ingredients from your restaurant.');
             }
 
+            $oldName = $ingredient->ingredient_name;
             $oldReorderLevel = $ingredient->reorder_level;
             $oldBaseUnit = $ingredient->base_unit;
 
+            $ingredient->ingredient_name = $request->ingredient_name;
             $ingredient->reorder_level = $request->reorder_level;
             $ingredient->base_unit = $request->base_unit;
             $ingredient->save();
@@ -519,6 +537,9 @@ class InventoryController extends Controller
             }
             if ($oldBaseUnit != $ingredient->base_unit) {
                 $message .= " - Unit: {$oldBaseUnit} → {$ingredient->base_unit}";
+            }
+            if ($oldName !== $ingredient->ingredient_name) {
+                $message = "'{$oldName}' renamed to '{$ingredient->ingredient_name}' successfully" . (isset($message) ? ' - ' . trim(str_replace("'{$ingredient->ingredient_name}' updated successfully", '', $message)) : '');
             }
 
             return back()->with('success', $message);

@@ -111,6 +111,7 @@ const errorMessage = computed(() => (page.props as any).flash?.error);
 const showEditModal = ref(false);
 const currentIngredient = ref<Ingredient | null>(null);
 const editForm = useForm({
+  ingredient_name: '',
   reorder_level: 0,
   base_unit: '',
 });
@@ -118,6 +119,7 @@ const editForm = useForm({
 const startEdit = (ingredient: Ingredient) => {
   currentIngredient.value = ingredient;
   editForm.reorder_level = ingredient.reorder_level;
+  editForm.ingredient_name = ingredient.ingredient_name;
   editForm.base_unit = ingredient.base_unit;
   showEditModal.value = true;
 };
@@ -359,6 +361,23 @@ const clearFilters = () => {
             </Label>
             <div class="col-span-3 text-sm">
               {{ formatNumber(currentIngredient?.current_stock || 0) }} {{ currentIngredient?.base_unit }}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 items-center gap-4">
+            <Label for="ingredient-name" class="text-right">Ingredient Name</Label>
+            <div class="col-span-3">
+              <Input
+                id="ingredient-name"
+                v-model="editForm.ingredient_name"
+                type="text"
+                placeholder="Enter ingredient name"
+                :class="{ 'border-red-500': editForm.errors.ingredient_name }"
+                required
+              />
+              <p v-if="editForm.errors.ingredient_name" class="text-red-500 text-xs mt-1">
+                {{ editForm.errors.ingredient_name }}
+              </p>
             </div>
           </div>
 

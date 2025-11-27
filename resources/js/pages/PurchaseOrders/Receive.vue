@@ -67,8 +67,8 @@ const receiveItems = ref<ReceiveItem[]>(
     purchase_order_item_id: item.purchase_order_item_id,
     // Start with 0 - let user decide how much to receive
     received_quantity: 0,
-    // Auto-fill with previous price if this is a partial receive, otherwise 0
-    unit_price: item.received_quantity > 0 ? item.unit_price : 0
+    // Pre-fill unit price from the PO item if available (so create -> receive preserves price)
+    unit_price: (item.unit_price ?? 0)
   }))
 );
 

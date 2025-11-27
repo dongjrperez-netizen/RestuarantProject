@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
@@ -189,7 +189,7 @@ const selectIngredient = (itemIndex: number, ingredient: Ingredient) => {
   item.ingredient_id = ingredient.ingredient_id;
   item.ingredient_name = ingredient.ingredient_name;
   item.unit_of_measure = ingredient.base_unit;
-  item.unit_price = ingredient.cost_per_unit;
+  item.unit_price = Math.round((ingredient.cost_per_unit ?? 0) * 100) / 100;
   item.showDropdown = false;
 };
 
@@ -205,7 +205,14 @@ const addIngredientToLast = (ingredient: Ingredient) => {
   orderItems.value[idx].ingredient_id = ingredient.ingredient_id;
   orderItems.value[idx].ingredient_name = ingredient.ingredient_name;
   orderItems.value[idx].unit_of_measure = ingredient.base_unit;
-  orderItems.value[idx].unit_price = ingredient.cost_per_unit;
+  orderItems.value[idx].unit_price = Math.round((ingredient.cost_per_unit ?? 0) * 100) / 100;
+};
+
+const normalizeUnitPrice = (index: number) => {
+  const item = orderItems.value[index];
+  if (!item) return;
+  const v = Number(item.unit_price) || 0;
+  item.unit_price = Math.round(v * 100) / 100;
 };
 
 const getSelectedIngredient = (itemIndex: number) => {
@@ -223,14 +230,53 @@ const formatCurrency = (amount: number) => {
 // Ingredients lookup scrolling
 const ingredientsListRef = ref<HTMLElement | null>(null);
 
-const scrollIngredients = (amount: number) => {
+// Search for available ingredients in the right-hand lookup
+const ingredientsSearch = ref('');
+
+const filteredAvailableIngredients = computed(() => {
+  const q = ingredientsSearch.value?.toLowerCase().trim() || '';
+  if (!q) return props.ingredients;
+  return props.ingredients.filter(i => i.ingredient_name.toLowerCase().includes(q));
+});
+
+// Pagination for available ingredients (10 per page)
+const ingredientsPage = ref(1);
+const ingredientsPerPage = 10;
+
+const ingredientsPageCount = computed(() => {
+  return Math.max(1, Math.ceil(filteredAvailableIngredients.value.length / ingredientsPerPage));
+});
+
+const paginatedAvailableIngredients = computed(() => {
+  const start = (ingredientsPage.value - 1) * ingredientsPerPage;
+  return filteredAvailableIngredients.value.slice(start, start + ingredientsPerPage);
+});
+
+// Reset to first page when search changes
+watch(ingredientsSearch, () => {
+  ingredientsPage.value = 1;
+  resetIngredientsScroll();
+});
+
+const resetIngredientsScroll = () => {
   const el = ingredientsListRef.value;
   if (!el) return;
-  el.scrollBy({ top: amount, behavior: 'smooth' });
+  el.scrollTop = 0;
 };
 
-const scrollUpIngredients = () => scrollIngredients(-120);
-const scrollDownIngredients = () => scrollIngredients(120);
+const prevIngredientsPage = () => {
+  if (ingredientsPage.value > 1) {
+    ingredientsPage.value -= 1;
+    resetIngredientsScroll();
+  }
+};
+
+const nextIngredientsPage = () => {
+  if (ingredientsPage.value < ingredientsPageCount.value) {
+    ingredientsPage.value += 1;
+    resetIngredientsScroll();
+  }
+};
 
 const initiateNewSupplier = () => {
   newSupplierData.value.supplier_name = form.supplier_name;
@@ -526,11 +572,12 @@ const closeSupplierDropdown = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead class="min-w-[280px]">Ingredient</TableHead>
+                        <TableHead class="min-w-[220px]">Ingredient</TableHead>
                         <TableHead class="min-w-[100px]">Quantity</TableHead>
+                        <TableHead class="min-w-[120px]">Unit Price</TableHead>
                         <TableHead class="min-w-[100px]">Base Unit</TableHead>
                         <TableHead class="w-12"></TableHead>
-                      </TableRow>
+                        </TableRow>
                     </TableHeader>
                   <TableBody>
                     <TableRow v-for="(item, index) in orderItems" :key="index">
@@ -573,6 +620,18 @@ const closeSupplierDropdown = () => {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <div class="space-y-1">
+                          <Input
+                            v-model.number="item.unit_price"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            class="min-w-[100px]"
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <span v-if="getSelectedIngredient(index)" class="text-sm text-muted-foreground">
                           {{ getSelectedIngredient(index)?.base_unit || '-' }}
                         </span>
@@ -607,19 +666,47 @@ const closeSupplierDropdown = () => {
             <CardHeader>
                 <div class="flex items-center justify-between w-full">
                   <CardTitle class="text-base">Available Ingredients</CardTitle>
-                  <div class="flex items-center space-x-2">
-                    <Button type="button" size="sm" variant="outline" @click="scrollUpIngredients" aria-label="Scroll up">
-                      ▲
-                    </Button>
-                    <Button type="button" size="sm" variant="outline" @click="scrollDownIngredients" aria-label="Scroll down">
-                      ▼
-                    </Button>
+                  <div class="flex flex-col items-center space-y-1">
+                    <div class="flex items-center space-x-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        @click="prevIngredientsPage"
+                        :disabled="ingredientsPage === 1"
+                        aria-label="Previous page">
+                        ▲
+                      </Button>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        @click="nextIngredientsPage"
+                        :disabled="ingredientsPage === ingredientsPageCount"
+                        aria-label="Next page">
+                        ▼
+                      </Button>
+                    </div>
+
+                    <div class="text-sm text-muted-foreground">
+                      Page {{ ingredientsPage }} / {{ ingredientsPageCount }}
+                    </div>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div ref="ingredientsListRef" class="overflow-auto max-h-96">
-                <Table class="text-xs">
+                    <div class="mb-3">
+                      <Input
+                        v-model="ingredientsSearch"
+                        placeholder="Search available ingredients..."
+                        class="w-full"
+                        @input="resetIngredientsScroll"
+                      />
+                    </div>
+
+                    <div ref="ingredientsListRef" class="overflow-auto max-h-96">
+                    <Table class="text-xs">
                   <TableHeader>
                     <TableRow>
                       <TableHead class="text-xs">Ingredient</TableHead>
@@ -627,7 +714,7 @@ const closeSupplierDropdown = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow v-for="ingredient in props.ingredients" :key="ingredient.ingredient_id">
+                        <TableRow v-for="ingredient in paginatedAvailableIngredients" :key="ingredient.ingredient_id">
                       <TableCell class="text-xs py-2">
                         <button
                           type="button"
@@ -644,6 +731,16 @@ const closeSupplierDropdown = () => {
                         </span>
                       </TableCell>
                     </TableRow>
+                        <TableRow v-if="filteredAvailableIngredients.length === 0">
+                          <TableCell colspan="2" class="text-center py-4 text-sm text-muted-foreground">
+                            No ingredients found.
+                          </TableCell>
+                        </TableRow>
+                        <TableRow v-if="filteredAvailableIngredients.length > 0 && paginatedAvailableIngredients.length === 0">
+                          <TableCell colspan="2" class="text-center py-4 text-sm text-muted-foreground">
+                            No ingredients on this page.
+                          </TableCell>
+                        </TableRow>
                   </TableBody>
                 </Table>
               </div>
