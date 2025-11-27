@@ -15,6 +15,7 @@ class DamageSpoilageLog extends Model
         'unit',
         'reason',
         'notes',
+        'dish_name',
         'incident_date',
         'estimated_cost',
     ];
@@ -28,12 +29,14 @@ class DamageSpoilageLog extends Model
     // Type constants
     public const TYPE_DAMAGE = 'damage';
     public const TYPE_SPOILAGE = 'spoilage';
+    public const TYPE_WASTE = 'waste';
 
     public static function getTypes(): array
     {
         return [
             self::TYPE_DAMAGE => 'Damage',
             self::TYPE_SPOILAGE => 'Spoilage',
+            self::TYPE_WASTE => 'Waste',
         ];
     }
 

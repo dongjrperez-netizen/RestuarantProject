@@ -68,7 +68,7 @@ const filteredOrders = computed(() => {
     });
 });
 
-// Void order state
+// Void order state (for pending orders - partial item void)
 const isVoidModalOpen = ref(false);
 const voidTargetOrder = ref<any | null>(null);
 const managerAccessCode = ref('');
@@ -76,6 +76,15 @@ const voidReason = ref('');
 const voidProcessing = ref(false);
 // Map of item_id -> number (quantity to void)
 const voidItemSelections = ref<Record<number, number>>({});
+
+// Void ready order state (for ready/completed orders - full order spoilage void)
+const isVoidReadyModalOpen = ref(false);
+const voidReadyTargetOrder = ref<any | null>(null);
+const voidReadyManagerCode = ref('');
+const voidReadyReason = ref('');
+const voidReadyProcessing = ref(false);
+// Map of item_id -> boolean (whether to void this item)
+const voidReadyItemSelections = ref<Record<number, boolean>>({});
 
 // Payment handling
 // Define a type for the order object
@@ -137,6 +146,14 @@ const canVoidOrder = (order: any) => {
     return ['pending', 'in_progress'].includes(status);
 };
 
+// Determine if an order can be voided as spoilage (ready/completed)
+const canVoidAsSpilage = (order: any) => {
+    if (!order || !order.status) return false;
+    const status = String(order.status).toLowerCase();
+    // Allow voiding ready or completed orders as spoilage
+    return ['ready', 'completed'].includes(status);
+};
+
 // Human-friendly reason why void is not allowed
 const getVoidRestrictionReason = (order: any) => {
     if (!order || !order.status) return 'This order cannot be voided.';
@@ -157,7 +174,6 @@ const getVoidRestrictionReason = (order: any) => {
 
 const openVoidModal = (order: any) => {
     voidTargetOrder.value = order;
-    managerAccessCode.value = '';
     voidReason.value = '';
     voidProcessing.value = false;
 
@@ -183,8 +199,36 @@ const closeVoidModal = () => {
     voidItemSelections.value = {};
 };
 
+const openVoidReadyModal = (order: any) => {
+    voidReadyTargetOrder.value = order;
+    voidReadyManagerCode.value = '';
+    voidReadyReason.value = '';
+    voidReadyProcessing.value = false;
+    
+    // Initialize item selections: default all items to checked (void all)
+    const selections: Record<number, boolean> = {};
+    const items = order?.order_items || [];
+    (items as any[]).forEach((item: any) => {
+        if (item?.item_id != null) {
+            selections[item.item_id] = true;
+        }
+    });
+    voidReadyItemSelections.value = selections;
+    
+    isVoidReadyModalOpen.value = true;
+};
+
+const closeVoidReadyModal = () => {
+    isVoidReadyModalOpen.value = false;
+    voidReadyTargetOrder.value = null;
+    voidReadyManagerCode.value = '';
+    voidReadyReason.value = '';
+    voidReadyProcessing.value = false;
+    voidReadyItemSelections.value = {};
+};
+
 const submitVoidOrder = async () => {
-    if (!voidTargetOrder.value || !managerAccessCode.value) return;
+    if (!voidTargetOrder.value) return;
 
     // Collect items with quantity > 0
     const selectedItems = Object.entries(voidItemSelections.value)
@@ -210,7 +254,6 @@ const submitVoidOrder = async () => {
             },
             credentials: 'same-origin',
             body: JSON.stringify({
-                manager_access_code: managerAccessCode.value,
                 void_reason: voidReason.value || null,
                 items: selectedItems,
             }),
@@ -226,6 +269,7 @@ const submitVoidOrder = async () => {
             isVoidModalOpen.value = false;
             voidTargetOrder.value = null;
             voidItemSelections.value = {};
+            voidReason.value = '';
             // Reload only orders list via Inertia so UI reflects updated items/void status
             router.reload({ only: ['orders'] });
         } else {
@@ -248,6 +292,76 @@ const submitVoidOrder = async () => {
         alert('An unexpected error occurred while voiding the order. Please try again.');
     } finally {
         voidProcessing.value = false;
+    }
+};
+
+const submitVoidReadyOrder = async () => {
+    if (!voidReadyTargetOrder.value || !voidReadyManagerCode.value) return;
+
+    // Collect items that are checked (selected to void)
+    const selectedItems = Object.entries(voidReadyItemSelections.value)
+        .filter(([_, isSelected]) => isSelected)
+        .map(([id]) => ({ item_id: Number(id) }));
+
+    if (!selectedItems.length) {
+        alert('Please select at least one item to void.');
+        return;
+    }
+
+    try {
+        voidReadyProcessing.value = true;
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const response = await fetch(`/cashier/bills/${voidReadyTargetOrder.value.order_id}/void-ready`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                manager_access_code: voidReadyManagerCode.value,
+                void_reason: voidReadyReason.value || null,
+                items: selectedItems,
+            }),
+        });
+
+        // Handle 419 CSRF / session expiry
+        if (response.status === 419) {
+            alert('Your session has expired. Please refresh the page and try again.');
+            return;
+        }
+
+        if (response.ok) {
+            isVoidReadyModalOpen.value = false;
+            voidReadyTargetOrder.value = null;
+            voidReadyManagerCode.value = '';
+            voidReadyReason.value = '';
+            voidReadyItemSelections.value = {};
+            // Reload orders list via Inertia
+            router.reload({ only: ['orders'] });
+        } else {
+            const raw = await response.text();
+            let message = 'Failed to void order.';
+            try {
+                const data = JSON.parse(raw);
+                message = data.message || data.error || message;
+            } catch (e) {
+                if (raw.includes('<!DOCTYPE') || raw.includes('<html')) {
+                    message = 'An error occurred (HTML error response). Please refresh the page and try again.';
+                } else if (raw.trim()) {
+                    message = raw.trim();
+                }
+            }
+            alert(message);
+        }
+    } catch (error) {
+        console.error('Error voiding ready order:', error);
+        alert('An unexpected error occurred while voiding the order. Please try again.');
+    } finally {
+        voidReadyProcessing.value = false;
     }
 };
 
@@ -422,6 +536,18 @@ onUnmounted(() => {
                                                 Cancel
                                             </Button>
 
+                                            <!-- Void Button (for ready/completed orders as spoilage) -->
+                                            <Button
+                                                v-if="canVoidAsSpilage(order)"
+                                                variant="outline"
+                                                size="sm"
+                                                class="text-orange-600 hover:text-orange-700 border-orange-200 hover:border-orange-400"
+                                                @click="openVoidReadyModal(order)"
+                                            >
+                                                <Ban class="w-4 h-4 mr-1" />
+                                                Void
+                                            </Button>
+
                                             <!-- Cannot-void indicator for restricted statuses -->
                                             <div
                                                 v-else-if="['ready', 'completed', 'paid', 'voided'].includes(order.status?.toLowerCase?.() || '')"
@@ -566,22 +692,6 @@ onUnmounted(() => {
                     </div>
 
                     <div class="space-y-2">
-                        <label for="manager-access-code" class="text-sm font-medium">Manager Access Code</label>
-                        <Input
-                            id="manager-access-code"
-                            v-model="managerAccessCode"
-                            type="password"
-                            inputmode="numeric"
-                            maxlength="6"
-                            minlength="6"
-                            placeholder="Enter 6-digit manager code"
-                        />
-                        <p class="text-[11px] text-muted-foreground">
-                            The manager or restaurant owner must provide this code to authorize the cancellation.
-                        </p>
-                    </div>
-
-                    <div class="space-y-2">
                         <label for="void-reason" class="text-sm font-medium">Reason for Cancellation (optional)</label>
                         <textarea
                             id="void-reason"
@@ -603,10 +713,150 @@ onUnmounted(() => {
                         <Button
                             class="flex-1 bg-red-600 hover:bg-red-700"
                             @click="submitVoidOrder"
-                            :disabled="!managerAccessCode || managerAccessCode.length !== 6 || voidProcessing"
+                            :disabled="voidProcessing"
                         >
                             <span v-if="voidProcessing">Cancelling...</span>
                             <span v-else>Confirm Cancellation</span>
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        <!-- Void Ready Order Modal (Spoilage/Damage) -->
+        <Dialog v-model:open="isVoidReadyModalOpen">
+            <DialogContent class="max-w-md max-h-[90vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2">
+                        <Ban class="w-5 h-5 text-orange-600" />
+                        <span>Void Ready Order</span>
+                    </DialogTitle>
+                    <DialogDescription v-if="voidReadyTargetOrder">
+                        You are about to void order
+                        <span class="font-semibold">{{ voidReadyTargetOrder.order_number }}</span>
+                        and log it as spoilage/damage. This action requires a valid manager access code.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div v-if="voidReadyTargetOrder" class="space-y-4 py-2 overflow-y-auto flex-1">
+                    <div class="bg-muted p-3 rounded-md text-sm space-y-1">
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Order #:</span>
+                            <span class="font-medium">{{ voidReadyTargetOrder.order_number }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Customer:</span>
+                            <span class="font-medium">{{ voidReadyTargetOrder.customer_name || 'Walk-in' }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Items:</span>
+                            <span class="font-medium">{{ voidReadyTargetOrder.order_items?.length || 0 }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Total:</span>
+                            <span class="font-medium">{{ formatCurrency(voidReadyTargetOrder.total_amount) }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Status:</span>
+                            <span class="font-medium">{{ voidReadyTargetOrder.status }}</span>
+                        </div>
+                    </div>
+
+                    <p class="text-sm text-orange-700 bg-orange-50 p-3 rounded-md">
+                        ⚠️ Selected items will be marked as voided and logged as spoilage/damage in the system.
+                    </p>
+
+                    <!-- Item selection -->
+                    <div class="space-y-2">
+                        <p class="text-sm font-medium">Select items to void</p>
+                        <div
+                            v-if="voidReadyTargetOrder.order_items && voidReadyTargetOrder.order_items.length"
+                            class="max-h-48 overflow-auto border rounded-md divide-y bg-background"
+                        >
+                            <label
+                                v-for="item in voidReadyTargetOrder.order_items"
+                                :key="item.item_id"
+                                class="flex items-center justify-between px-3 py-2 text-sm gap-3 hover:bg-muted"
+                            >
+                                <div class="flex items-center gap-3 flex-1">
+                                    <input
+                                        type="checkbox"
+                                        v-model="voidReadyItemSelections[item.item_id]"
+                                        class="w-4 h-4"
+                                    />
+                                    <div class="flex flex-col gap-1 flex-1">
+                                        <p class="font-medium">
+                                            {{ item.dish?.dish_name || 'Dish' }}
+                                            <span
+                                                v-if="item.variant"
+                                                class="text-xs text-blue-600 font-semibold"
+                                            >
+                                                ({{ item.variant.size_name }})
+                                            </span>
+                                        </p>
+                                        <p class="text-xs text-muted-foreground">
+                                            Qty: {{ item.quantity }} · {{ formatCurrency(item.unit_price) }} each
+                                        </p>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-medium">
+                                    {{ formatCurrency(item.quantity * item.unit_price) }}
+                                </span>
+                            </label>
+                        </div>
+                        <p
+                            v-else
+                            class="text-xs text-muted-foreground border rounded-md px-3 py-2 bg-muted"
+                        >
+                            No items found for this order.
+                        </p>
+                        <p class="text-[11px] text-muted-foreground">
+                            Tip: Uncheck items to keep them in the order, only selected items will be voided.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label for="void-ready-manager-code" class="text-sm font-medium">Manager Access Code</label>
+                        <Input
+                            id="void-ready-manager-code"
+                            v-model="voidReadyManagerCode"
+                            type="password"
+                            inputmode="numeric"
+                            maxlength="6"
+                            minlength="6"
+                            placeholder="Enter 6-digit manager code"
+                        />
+                        <p class="text-[11px] text-muted-foreground">
+                            The manager or restaurant owner must provide this code to authorize the void.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label for="void-ready-reason" class="text-sm font-medium">Reason for Void (optional)</label>
+                        <textarea
+                            id="void-ready-reason"
+                            v-model="voidReadyReason"
+                            class="w-full text-sm border rounded-md p-2 min-h-[70px] resize-y"
+                            placeholder="Describe why this order is being voided (e.g., Customer changed mind, Kitchen error, Spoilage)..."
+                        />
+                    </div>
+
+                    <div class="flex gap-3 pt-2">
+                        <Button
+                            variant="outline"
+                            class="flex-1"
+                            @click="closeVoidReadyModal"
+                            :disabled="voidReadyProcessing"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            class="flex-1 bg-orange-600 hover:bg-orange-700"
+                            @click="submitVoidReadyOrder"
+                            :disabled="!voidReadyManagerCode || voidReadyManagerCode.length !== 6 || voidReadyProcessing || !Object.values(voidReadyItemSelections).some(v => v)"
+                        >
+                            <span v-if="voidReadyProcessing">Voiding...</span>
+                            <span v-else>Confirm Void Selected Items</span>
                         </Button>
                     </div>
                 </div>

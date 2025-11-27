@@ -267,6 +267,7 @@ Route::middleware(['auth:cashier', 'role:cashier'])->prefix('cashier')->name('ca
     Route::delete('/bills/{orderId}/discount', [CashierController::class, 'removeDiscount'])->name('bills.discount.remove');
     Route::post('/bills/{orderId}/void', [CashierController::class, 'voidOrder'])->name('bills.void');
     Route::post('/bills/{orderId}/items/void', [CashierController::class, 'voidOrderItems'])->name('bills.items.void');
+    Route::post('/bills/{orderId}/void-ready', [CashierController::class, 'voidReadyOrder'])->name('bills.void-ready');
     // PayPal routes must come before generic {orderId} routes
     Route::post('/payment/paypal', [CashierController::class, 'payWithPaypal'])->name('payment.paypal');
     Route::get('/payment/paypal/success', [CashierController::class, 'paypalSuccess'])->name('payment.paypal.success');

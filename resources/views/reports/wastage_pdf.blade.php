@@ -150,17 +150,36 @@
         <div class="report-period">Report Period: {{ date('M d, Y', strtotime($dateFrom)) }} - {{ date('M d, Y', strtotime($dateTo)) }}</div>
         <div class="generated-date">Generated on: {{ date('M d, Y \a\t g:i A') }}</div>
     </div>
+    @php
+        $voidCount = 0;
+        $voidCost = 0.0;
+        if (!empty($data['waste_by_dish'])) {
+            $voidCollection = collect($data['waste_by_dish']);
+            $voidCount = $voidCollection->sum('total_quantity');
+            $voidCost = $voidCollection->sum('total_cost');
+        }
+        $combinedIncidents = ($data['summary']['total_incidents'] ?? 0) + $voidCount;
+        $combinedCost = ($data['summary']['total_cost'] ?? 0) + $voidCost;
+    @endphp
 
     <!-- Summary Section -->
     <div class="section-title">Summary</div>
     <div class="summary-grid">
         <div class="summary-row">
             <div class="summary-label">Total Incidents</div>
-            <div class="summary-value danger">{{ number_format($data['summary']['total_incidents']) }}</div>
+            <div class="summary-value danger">{{ number_format($combinedIncidents) }}</div>
         </div>
         <div class="summary-row">
             <div class="summary-label">Total Cost</div>
-            <div class="summary-value danger">₱{{ number_format($data['summary']['total_cost'], 2) }}</div>
+            <div class="summary-value danger">{{ number_format($combinedCost, 2) }}</div>
+        </div>
+        <div class="summary-row">
+            <div class="summary-label">Void Incidents</div>
+            <div class="summary-value">{{ number_format($voidCount) }}</div>
+        </div>
+        <div class="summary-row">
+            <div class="summary-label">Void Cost</div>
+            <div class="summary-value">{{ number_format($voidCost, 2) }}</div>
         </div>
         <div class="summary-row">
             <div class="summary-label">Damage Incidents</div>
@@ -172,11 +191,11 @@
         </div>
     </div>
 
-    @if($data['summary']['total_cost'] > 1000)
+    @if($combinedCost > 1000)
     <!-- High Wastage Alert -->
     <div class="alert-box">
         <div class="alert-title">⚠️ High Wastage Alert</div>
-        <p style="margin: 0; font-size: 10px;">The total wastage cost of <strong>₱{{ number_format($data['summary']['total_cost'], 2) }}</strong> exceeds the recommended threshold. Consider reviewing inventory management and storage practices.</p>
+        <p style="margin: 0; font-size: 10px;">The total wastage cost of <strong>{{ number_format($combinedCost, 2) }}</strong> exceeds the recommended threshold. Consider reviewing inventory management and storage practices.</p>
     </div>
     @endif
 
@@ -197,7 +216,7 @@
                 <td>{{ $ingredient }}</td>
                 <td class="text-right">{{ $stats['count'] }}</td>
                 <td class="text-right">{{ number_format($stats['total_quantity'], 2) }}</td>
-                <td class="text-right cost-highlight">₱{{ number_format($stats['total_cost'], 2) }}</td>
+                <td class="text-right cost-highlight">{{ number_format($stats['total_cost'], 2) }}</td>
             </tr>
             @endforeach
         </tbody>
@@ -221,7 +240,7 @@
                     <span class="badge badge-{{ $type }}">{{ ucfirst($type) }}</span>
                 </td>
                 <td class="text-right">{{ $stats['count'] }}</td>
-                <td class="text-right cost-highlight">₱{{ number_format($stats['total_cost'], 2) }}</td>
+                <td class="text-right cost-highlight">{{ number_format($stats['total_cost'], 2) }}</td>
                 <td class="text-right">
                     {{ $data['summary']['total_cost'] > 0 ? number_format(($stats['total_cost'] / $data['summary']['total_cost']) * 100, 1) : 0 }}%
                 </td>
@@ -246,7 +265,7 @@
         <tbody>
             @foreach($data['logs']->take(20) as $log)
             <tr>
-                <td>{{ date('M d, Y', strtotime($log->incident_date)) }}</td>
+                <td>{{ date('M d, Y \a\t g:i A', strtotime($log->created_at ?? $log->incident_date)) }}</td>
                 <td>
                     <span class="badge badge-{{ $log->type }}">{{ ucfirst($log->type) }}</span>
                 </td>
@@ -254,7 +273,7 @@
                 <td class="text-right">
                     {{ number_format($log->quantity, 2) }} {{ $log->ingredient->base_unit ?? '' }}
                 </td>
-                <td class="text-right cost-highlight">₱{{ number_format($log->estimated_cost, 2) }}</td>
+                <td class="text-right cost-highlight">{{ number_format($log->estimated_cost, 2) }}</td>
                 <td>{{ $log->reason }}</td>
             </tr>
             @endforeach
@@ -264,6 +283,33 @@
     <p style="text-align: center; color: #9ca3af; font-style: italic; margin: 0; font-size: 10px;">
         Showing first 20 incidents of {{ $data['logs']->count() }} total incidents
     </p>
+    @endif
+
+    <!-- Dish-level Waste (Void) -->
+    @if(!empty($data['waste_by_dish']) && count($data['waste_by_dish']) > 0)
+    <div class="section-title">Void / Waste (By Dish)</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Item</th>
+                <th class="text-right">Quantity</th>
+                <th class="text-right">Cost</th>
+                <th>Reported By</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($data['waste_by_dish'] as $w)
+            <tr>
+                <td>{{ isset($w['last_reported_at']) && $w['last_reported_at'] ? date('M d, Y \a\t g:i A', strtotime($w['last_reported_at'])) : 'N/A' }}</td>
+                <td>{{ $w['dish_name'] ?? '—' }}</td>
+                <td class="text-right">{{ number_format($w['total_quantity'], 2) }}</td>
+                <td class="text-right cost-highlight">{{ number_format($w['total_cost'], 2) }}</td>
+                <td>{{ $w['reported_by'] ?? '—' }}</td>
+            </tr>
+            @endforeach
+        </tbody>
+    </table>
     @endif
 
     <div class="footer">

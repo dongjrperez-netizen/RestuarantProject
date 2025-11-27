@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CustomerOrder;
 use App\Models\CustomerPayment;
 use App\Models\Employee;
+use App\Models\WasteLog;
 use App\Events\OrderStatusUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -1009,7 +1010,6 @@ class CashierController extends Controller
 
             // Validate request
             $validated = $request->validate([
-                'manager_access_code' => 'required|string|min:6|max:6',
                 'void_reason' => 'nullable|string|max:500',
                 'items' => 'required|array|min:1',
                 'items.*.item_id' => 'required|integer|distinct',
@@ -1044,39 +1044,6 @@ class CashierController extends Controller
                     'success' => false,
                     'message' => 'This order cannot be partially voided at its current status: ' . $order->status,
                 ], 400);
-            }
-
-            // Validate manager access code (same logic as full void)
-            $authorizer = null;
-            $authorizerType = null;
-
-            $owner = \App\Models\User::where('id', $cashier->user_id)
-                ->where('manager_access_code', $validated['manager_access_code'])
-                ->first();
-
-            if ($owner) {
-                $authorizer = $owner;
-                $authorizerType = 'owner';
-            } else {
-                $manager = Employee::where('user_id', $cashier->user_id)
-                    ->where('manager_access_code', $validated['manager_access_code'])
-                    ->whereHas('role', function ($query) {
-                        $query->where('role_name', 'Manager');
-                    })
-                    ->where('status', 'active')
-                    ->first();
-
-                if ($manager) {
-                    $authorizer = $manager;
-                    $authorizerType = 'manager';
-                }
-            }
-
-            if (!$authorizer) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid manager access code.',
-                ], 401);
             }
 
             // Build a map of requested items with quantities
@@ -1201,6 +1168,222 @@ class CashierController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while voiding order items: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Void a ready/completed order and log it as spoilage/damage
+     * Called when a cooked order is no longer needed and must be discarded
+     */
+    public function voidReadyOrder(Request $request, $orderId)
+    {
+        try {
+            // Get the authenticated cashier
+            $cashier = Auth::guard('cashier')->user();
+
+            if (!$cashier || strtolower($cashier->role->role_name) !== 'cashier') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Cashiers only.',
+                ], 403);
+            }
+
+            // Validate request
+            $validated = $request->validate([
+                'manager_access_code' => 'required|string|min:6|max:6',
+                'void_reason' => 'nullable|string|max:500',
+                'items' => 'required|array|min:1',
+                'items.*.item_id' => 'required|integer|distinct',
+            ]);
+
+            // Find the order with its items
+            $order = CustomerOrder::with(['orderItems.dish.ingredients', 'table', 'employee'])
+                ->where('restaurant_id', $cashier->user_id)
+                ->where('order_id', $orderId)
+                ->firstOrFail();
+
+            // Only allow voiding ready or completed orders (dishes already cooked)
+            $allowedStatuses = ['ready', 'completed'];
+            if (!in_array($order->status, $allowedStatuses)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only ready or completed orders can be voided as spoilage. Current status: ' . $order->status,
+                ], 400);
+            }
+
+            // Reject if order already voided or paid
+            if ($order->status === 'voided') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This order has already been voided.',
+                ], 400);
+            }
+
+            if ($order->status === 'paid') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot void a paid order. Please process a refund instead.',
+                ], 400);
+            }
+
+            // Validate manager access code
+            $authorizer = null;
+            $authorizerType = null;
+
+            $owner = \App\Models\User::where('id', $cashier->user_id)
+                ->where('manager_access_code', $validated['manager_access_code'])
+                ->first();
+
+            if ($owner) {
+                $authorizer = $owner;
+                $authorizerType = 'owner';
+            } else {
+                $manager = Employee::where('user_id', $cashier->user_id)
+                    ->where('manager_access_code', $validated['manager_access_code'])
+                    ->whereHas('role', function ($query) {
+                        $query->where('role_name', 'Manager');
+                    })
+                    ->where('status', 'active')
+                    ->first();
+
+                if ($manager) {
+                    $authorizer = $manager;
+                    $authorizerType = 'manager';
+                }
+            }
+
+            if (!$authorizer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid manager access code.',
+                ], 401);
+            }
+
+            // Build a map of requested items to void
+            $requestedItemIds = collect($validated['items'])
+                ->pluck('item_id')
+                ->toArray();
+
+            // Get the targeted order items
+            $itemsToVoid = $order->orderItems
+                ->whereIn('item_id', $requestedItemIds)
+                ->values();
+
+            if ($itemsToVoid->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No matching order items found to void.',
+                ], 404);
+            }
+
+            $previousStatus = $order->status;
+
+            // Process void in a transaction
+            DB::transaction(function () use ($order, $itemsToVoid, $cashier, $validated, $previousStatus, $authorizer) {
+                // For each selected item, log its ingredients as spoilage
+                // NOTE: Do NOT restore inventory - ingredients were already consumed when dish was prepared
+                foreach ($itemsToVoid as $item) {
+                    // Get dish with ingredients
+                    $dish = $item->dish;
+
+                    if ($dish && $dish->ingredients) {
+                        // Create a dish-level waste log for reporting (aggregated by dish)
+                        try {
+                            $dishUnitPrice = $item->unit_price ?? ($dish->price ?? 0);
+                            $dishQty = $item->quantity ?? 1;
+                            $dishTotal = ($dishUnitPrice * $dishQty);
+
+                            WasteLog::create([
+                                'restaurant_id' => $order->restaurant_id,
+                                'order_id' => $order->order_id,
+                                'dish_id' => $dish->dish_id ?? null,
+                                'dish_name' => $dish->dish_name ?? null,
+                                'quantity' => $dishQty,
+                                'unit' => $dish->serving_unit ?? null,
+                                'unit_price' => $dishUnitPrice,
+                                'total_cost' => $dishTotal,
+                                'reason' => $validated['void_reason'] ?? null,
+                                'reported_by' => $cashier->employee_id,
+                                'reported_at' => now(),
+                                'notes' => 'Order #' . $order->order_number,
+                            ]);
+                        } catch (\Exception $e) {
+                            \Log::error('Failed to create waste log entry for dish', [
+                                'order' => $order->order_id,
+                                'dish' => $dish->dish_name ?? null,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    }
+
+                    // Delete the voided item from the order
+                    $item->delete();
+                }
+
+                // Refresh order to see remaining items
+                $order->refresh();
+
+                // If no items remain after partial void, mark order as fully voided
+                if ($order->orderItems->isEmpty()) {
+                    $order->update([
+                        'status' => 'voided',
+                        'voided_by' => $cashier->employee_id,
+                        'voided_at' => now(),
+                        'void_reason' => $validated['void_reason'] ?? 'Spoilage - Order voided as ready/completed',
+                    ]);
+                }
+            });
+
+            // Reload to get final state
+            $order->refresh();
+            $order->load(['orderItems.dish', 'table', 'employee']);
+
+            // Broadcast status update if order became fully voided
+            if ($order->status === 'voided') {
+                Log::info('Broadcasting order void event (ready order marked as spoilage)', [
+                    'order_id' => $order->order_id,
+                    'order_number' => $order->order_number,
+                    'restaurant_id' => $order->restaurant_id,
+                    'previous_status' => $previousStatus,
+                    'new_status' => $order->status,
+                    'authorizer_type' => $authorizerType,
+                    'void_reason' => $validated['void_reason'] ?? null,
+                ]);
+
+                broadcast(new OrderStatusUpdated($order, $previousStatus))->toOthers();
+            }
+
+            Log::info('Ready order items voided as spoilage', [
+                'order_id' => $order->order_id,
+                'order_number' => $order->order_number,
+                'voided_by_cashier' => $cashier->employee_id,
+                'void_reason' => $validated['void_reason'],
+                'items_voided' => count($itemsToVoid),
+                'items_remaining' => $order->orderItems->count(),
+                'order_status_after' => $order->status,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => $order->status === 'voided'
+                    ? 'All selected items were voided and the order is now fully voided.'
+                    : count($itemsToVoid) . ' item(s) voided successfully.',
+                'order' => $order,
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Error voiding ready order', [
+                'order_id' => $orderId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while voiding the order: ' . $e->getMessage(),
             ], 500);
         }
     }

@@ -39,6 +39,7 @@ interface WastageLog {
     firstname: string;
     lastname: string;
   };
+  dish_name?: string | null;
 }
 
 interface IngredientSummary {
@@ -64,6 +65,7 @@ interface WastageData {
   by_ingredient: Record<string, IngredientSummary>;
   by_type: Record<string, TypeSummary>;
   summary: Summary;
+  waste_by_dish?: Array<any>;
 }
 
 interface Filters {
@@ -104,11 +106,15 @@ const formatNumber = (num: number) => {
 };
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
+  // Accept ISO date or datetime strings. If time exists, include it.
+  const dt = new Date(dateString);
+  if (isNaN(dt.getTime())) return dateString;
+  const hasTime = dateString.includes('T') || dateString.match(/\d{2}:\d{2}/);
+  return dt.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
-  });
+  }) + (hasTime ? ' at ' + dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '');
 };
 
 const applyFilters = () => {
@@ -133,12 +139,21 @@ const exportReport = (format: string) => {
   window.open(`/reports/wastage?${params.toString()}`);
 };
 
+// Handler for Select export value — accept unknown value and coerce to string
+const onExportSelect = (format: unknown) => {
+  // format may be null or other acceptable value from component; coerce safely
+  const fmt = format == null ? '' : String(format);
+  if (!fmt) return; // ignore empty selection
+  exportReport(fmt);
+};
+
 
 
 const typeOptions = [
   { value: 'all', label: 'All Types' },
   { value: 'damage', label: 'Damage' },
   { value: 'spoilage', label: 'Spoilage' },
+  { value: 'waste', label: 'Waste' },
 ];
 
 const getTypeVariant = (type: string) => {
@@ -165,6 +180,40 @@ const avgCostPerIncident = computed(() => {
     ? props.wastageData.summary.total_cost / props.wastageData.summary.total_incidents
     : 0;
 });
+
+// Ensure logs are sorted by most recent datetime (created_at) so time ordering is respected
+const sortedLogs = computed(() => {
+  const logs = (props.wastageData.logs || []).slice();
+  logs.sort((a: any, b: any) => {
+    const aTime = new Date(a.created_at || a.incident_date).getTime();
+    const bTime = new Date(b.created_at || b.incident_date).getTime();
+    return bTime - aTime;
+  });
+  return logs;
+});
+
+// Dish-level void/waste cost (sum of waste_by_dish.total_cost)
+const totalVoidCost = computed(() => {
+  const list = props.wastageData.waste_by_dish || [];
+  return list.reduce((sum: number, w: any) => sum + (Number(w.total_cost || 0)), 0);
+});
+
+// Combined total = ingredient-level estimated_cost + dish-level void cost
+const combinedTotalCost = computed(() => {
+  const base = Number(props.wastageData.summary.total_cost || 0);
+  return base + totalVoidCost.value;
+});
+
+// Void incidents: sum of voided dish quantities
+const totalVoidIncidents = computed(() => {
+  const list = props.wastageData.waste_by_dish || [];
+  return list.reduce((sum: number, w: any) => sum + (Number(w.total_quantity || 0)), 0);
+});
+
+const combinedTotalIncidents = computed(() => {
+  const baseIncidents = Number(props.wastageData.summary.total_incidents || 0);
+  return baseIncidents + totalVoidIncidents.value;
+});
 </script>
 
 <template>
@@ -189,7 +238,7 @@ const avgCostPerIncident = computed(() => {
             <Filter class="w-4 h-4 mr-2" />
             Filters
           </Button>
-          <Select @update:model-value="(format) => exportReport(format)">
+          <Select @update:model-value="onExportSelect">
             <SelectTrigger class="w-32">
               <SelectValue placeholder="Export" />
             </SelectTrigger>
@@ -260,8 +309,8 @@ const avgCostPerIncident = computed(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium text-muted-foreground">Total Incidents</p>
-                <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ formatNumber(wastageData.summary.total_incidents) }}</p>
-                <p class="text-xs text-muted-foreground mt-1">Wastage events</p>
+                <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ formatNumber(combinedTotalIncidents) }}</p>
+                <p class="text-xs text-muted-foreground mt-1">Includes void: {{ formatNumber(totalVoidIncidents) }}</p>
               </div>
               <div class="h-8 w-8 bg-red-100 dark:bg-red-950/30 rounded-full flex items-center justify-center">
                 <AlertTriangle class="h-4 w-4 text-red-600 dark:text-red-400" />
@@ -275,8 +324,8 @@ const avgCostPerIncident = computed(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium text-muted-foreground">Total Cost</p>
-                <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ formatCurrency(wastageData.summary.total_cost) }}</p>
-                <p class="text-xs text-muted-foreground mt-1">Financial impact</p>
+                  <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ formatCurrency(combinedTotalCost) }}</p>
+                  <p class="text-xs text-muted-foreground mt-1">Includes void: {{ formatCurrency(totalVoidCost) }}</p>
               </div>
               <div class="h-8 w-8 bg-red-100 dark:bg-red-950/30 rounded-full flex items-center justify-center">
                 <Banknote class="h-4 w-4 text-red-600 dark:text-red-400" />
@@ -462,8 +511,8 @@ const avgCostPerIncident = computed(() => {
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="log in wastageData.logs"
+                  <tr
+                    v-for="log in sortedLogs"
                   :key="log.id"
                   class="border-b hover:bg-muted/50"
                 >
@@ -475,7 +524,10 @@ const avgCostPerIncident = computed(() => {
                   </td>
                   <td class="p-4">
                     <div>
-                      <p class="font-medium">{{ log.ingredient.ingredient_name }}</p>
+                      <p class="font-medium">
+                        <span v-if="log.type === 'waste'">—</span>
+                        <span v-else>{{ log.ingredient.ingredient_name }}</span>
+                      </p>
                     </div>
                   </td>
                   <td class="p-4">{{ formatNumber(log.quantity) }} {{ log.unit }}</td>
@@ -491,6 +543,38 @@ const avgCostPerIncident = computed(() => {
                       <span class="text-sm">{{ log.user.firstname }} {{ log.user.lastname }}</span>
                     </div>
                   </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Dish-level Waste Table -->
+      <Card v-if="wastageData.waste_by_dish && wastageData.waste_by_dish.length">
+        <CardHeader>
+          <CardTitle>Void / Waste (By Dish)</CardTitle>
+          <CardDescription>Aggregated dish-level voids (shows quantity and dish price totals)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b">
+                  <th class="text-left p-4 font-semibold">Date</th>
+                  <th class="text-left p-4 font-semibold">Item</th>
+                  <th class="text-left p-4 font-semibold">Quantity</th>
+                  <th class="text-left p-4 font-semibold">Cost</th>
+                  <th class="text-left p-4 font-semibold">Reported By</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="w in wastageData.waste_by_dish" :key="w.dish_name" class="border-b hover:bg-muted/50">
+                  <td class="p-4">{{ formatDate(w.last_reported_at || '') }}</td>
+                  <td class="p-4 font-medium">{{ w.dish_name || '—' }}</td>
+                  <td class="p-4">{{ formatNumber(w.total_quantity) }}</td>
+                  <td class="p-4">{{ formatCurrency(w.total_cost) }}</td>
+                  <td class="p-4">{{ w.reported_by || '—' }}</td>
                 </tr>
               </tbody>
             </table>

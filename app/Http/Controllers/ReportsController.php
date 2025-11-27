@@ -611,11 +611,35 @@ class ReportsController extends Controller
             'spoilage_incidents' => $logs->where('type', 'spoilage')->count(),
         ];
 
+        // Build dish-level waste aggregation from waste_logs table
+        $wasteByDish = [];
+        try {
+            $wasteRecords = \App\Models\WasteLog::where('restaurant_id', $restaurantId)
+                ->whereBetween('reported_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+                ->get();
+
+            $wasteByDish = $wasteRecords->groupBy('dish_name')->map(function ($items, $dishName) {
+                $last = $items->sortByDesc('reported_at')->first();
+                return [
+                    'dish_name' => $dishName,
+                    'dish_id' => $items->first()->dish_id ?? null,
+                    'total_quantity' => $items->sum('quantity'),
+                    'total_cost' => $items->sum('total_cost'),
+                    'last_reported_at' => $last ? $last->reported_at : null,
+                    'reported_by' => $last && $last->reporter ? $last->reporter->full_name : null,
+                ];
+            })->values();
+        } catch (\Exception $e) {
+            \Log::error('Error building wasteByDish aggregation', ['error' => $e->getMessage()]);
+            $wasteByDish = collect();
+        }
+
         return [
             'logs' => $logs,
             'by_ingredient' => $byIngredient,
             'by_type' => $byType,
             'summary' => $summary,
+            'waste_by_dish' => $wasteByDish,
         ];
     }
 
