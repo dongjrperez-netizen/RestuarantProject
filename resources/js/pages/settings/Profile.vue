@@ -63,6 +63,8 @@ const submit = () => {
 // Restaurant settings (only for owners)
 const restaurant = page.props.auth?.restaurant || null;
 const restaurantForm = useForm({
+    restaurant_name: restaurant?.restaurant_name || '',
+    address: restaurant?.address || '',
     logo: null as File | null,
 });
 
@@ -88,13 +90,11 @@ const handleLogoChange = (event: Event) => {
 };
 
 const submitRestaurantSettings = () => {
-    console.log('Submitting form with logo:', restaurantForm.logo); // Debug log
-
-    if (!restaurantForm.logo) {
-        console.error('No logo file selected');
-        restaurantForm.setError('logo' as any, 'Please select a logo to upload.');
-        return;
-    }
+    console.log('Submitting form with data:', {
+        restaurant_name: restaurantForm.restaurant_name,
+        address: restaurantForm.address,
+        logo: restaurantForm.logo
+    });
 
     restaurantForm.clearErrors();
 
@@ -102,15 +102,15 @@ const submitRestaurantSettings = () => {
         forceFormData: true,
         preserveScroll: true,
         onSuccess: () => {
-            console.log('Upload successful via Inertia form.');
+            console.log('Restaurant settings updated successfully.');
             logoPreview.value = null;
             restaurantForm.reset('logo');
 
-            // Reload only the auth props so the new logo is available
+            // Reload only the auth props so the new data is available
             router.reload({ only: ['auth'] });
         },
         onError: (errors) => {
-            console.error('Upload failed with validation errors:', errors);
+            console.error('Update failed with validation errors:', errors);
         },
     });
 };
@@ -257,28 +257,51 @@ const submitRestaurantSettings = () => {
                     description="Customize your restaurant information and branding"
                 />
 
-                <!-- Toggle button to expand/collapse logo upload section -->
-                <div>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        class="flex items-center gap-2"
-                        @click="showLogoSettings = !showLogoSettings"
-                    >
-                        <Plus class="h-4 w-4" />
-                        <span>
-                            {{ restaurant.logo ? 'Update restaurant logo' : 'Add restaurant logo' }}
-                        </span>
-                    </Button>
-                </div>
-
                 <form
-                    v-if="showLogoSettings"
                     @submit.prevent="submitRestaurantSettings"
                     class="space-y-6"
                 >
+                    <!-- Restaurant Name -->
+                    <div class="grid gap-2">
+                        <Label for="restaurant_name">Restaurant Name</Label>
+                        <Input
+                            id="restaurant_name"
+                            class="mt-1 block w-full"
+                            v-model="restaurantForm.restaurant_name"
+                            placeholder="Enter restaurant name"
+                        />
+                        <InputError class="mt-2" :message="restaurantForm.errors.restaurant_name" />
+                    </div>
+
+                    <!-- Restaurant Address -->
+                    <div class="grid gap-2">
+                        <Label for="address">Restaurant Address</Label>
+                        <Input
+                            id="address"
+                            class="mt-1 block w-full"
+                            v-model="restaurantForm.address"
+                            placeholder="Enter restaurant address"
+                        />
+                        <InputError class="mt-2" :message="restaurantForm.errors.address" />
+                    </div>
+
+                    <!-- Toggle button to expand/collapse logo upload section -->
+                    <div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            class="flex items-center gap-2"
+                            @click="showLogoSettings = !showLogoSettings"
+                        >
+                            <Plus class="h-4 w-4" />
+                            <span>
+                                {{ restaurant.logo ? 'Update restaurant logo' : 'Add restaurant logo' }}
+                            </span>
+                        </Button>
+                    </div>
+
                     <!-- Restaurant Logo -->
-                    <div class="grid gap-2 mt-4">
+                    <div v-if="showLogoSettings" class="grid gap-2">
                         <Label for="logo">Restaurant Logo</Label>
                         <div class="flex items-start gap-4">
                             <!-- Current/Preview Logo -->

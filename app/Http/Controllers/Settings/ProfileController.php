@@ -144,6 +144,8 @@ class ProfileController extends Controller
 
         // Validate the request - accept common image formats including webp
         $request->validate([
+            'restaurant_name' => ['nullable', 'string', 'max:255'],
+            'address' => ['nullable', 'string', 'max:500'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'], // Max 5MB
         ]);
 
@@ -152,6 +154,15 @@ class ProfileController extends Controller
 
         if (!$restaurantData) {
             return redirect()->back()->withErrors(['error' => 'Restaurant data not found']);
+        }
+
+        // Update restaurant name and address if provided
+        if ($request->filled('restaurant_name')) {
+            $restaurantData->restaurant_name = $request->input('restaurant_name');
+        }
+
+        if ($request->filled('address')) {
+            $restaurantData->address = $request->input('address');
         }
 
         // Handle logo upload
@@ -188,6 +199,9 @@ class ProfileController extends Controller
                 return redirect()->back()->withErrors(['logo' => 'Failed to upload logo: ' . $e->getMessage()]);
             }
         }
+
+        // Save any changes made to restaurant data (name, address, logo)
+        $restaurantData->save();
 
         return redirect()->back()->with('success', 'Settings updated successfully!');
     }
